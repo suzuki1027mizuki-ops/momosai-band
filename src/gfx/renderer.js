@@ -27,6 +27,9 @@
       this.specSlowBytes = new Uint8Array(64);
       this.waveBytes = new Uint8Array(512);
       this.feedbackScene = null;
+      this.output = { rotate: 0, flipH: false, flipV: false, size: 1, x: 0, y: 0 };
+      this.logo = null; // { tex, aspect }
+      this.logoUrl = '';
       canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); this.lost = true; this.lostCount = (this.lostCount || 0) + 1; }, false);
       canvas.addEventListener('webglcontextrestored', () => {
         try { this._initGL(); this.lost = false; } catch (e) { this.initError = e.message; }
@@ -59,6 +62,8 @@
       this.texWave = r8(512);
       this.texBlank = G.texture(gl, 1, 1, { data: new Uint8Array(4) });
       if (this.text) this.text.reset(gl); else this.text = new G.TextLayer(gl);
+      this.logo = null;
+      if (this.logoUrl) { const u = this.logoUrl; this.logoUrl = ''; this.setLogo(u); }
       this.targets = null;
       this.tw = 0; this.th = 0;
       this.feedbackScene = null;
@@ -107,15 +112,32 @@
 
     available(id) { return !!this.programs[id]; }
 
-    /** キャンバスと描画先のサイズを合わせる */
+    /** 表示の調整（位置・サイズ・回転・反転） */
+    setOutput(o) {
+      const d = { rotate: 0, flipH: false, flipV: false, size: 1, x: 0, y: 0 };
+      const v = Object.assign({}, d, o || {});
+      v.rotate = [0, 90, 180, 270].includes(+v.rotate) ? +v.rotate : 0;
+      v.size = Math.max(0.3, Math.min(1, +v.size || 1));
+      v.x = Math.max(-0.5, Math.min(0.5, +v.x || 0));
+      v.y = Math.max(-0.5, Math.min(0.5, +v.y || 0));
+      this.output = v;
+    }
+
+    /** キャンバスと描画先のサイズを合わせる。論理サイズ = 表示エリア（回転後） */
     _resize() {
       const c = this.canvas;
       const pr = this.opts.pixelRatio || Math.min(globalThis.devicePixelRatio || 1, 1);
       const w = Math.max(16, Math.round((c.clientWidth || c.width) * pr));
       const h = Math.max(16, Math.round((c.clientHeight || c.height) * pr));
       if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+      const o = this.output;
+      const aw = w * o.size, ah = h * o.size;
+      this.area = [w / 2 + o.x * w, h / 2 + o.y * h, aw, ah];
+      const rot90 = o.rotate === 90 || o.rotate === 270;
+      this.lw = rot90 ? ah : aw;
+      this.lh = rot90 ? aw : ah;
       const s = this.scale;
-      const tw = Math.max(16, Math.round(w * s)), th = Math.max(16, Math.round(h * s));
+      const tw = Math.max(16, Math.round(this.lw * s)), th = Math.max(16, Math.round(this.lh * s));
       if (!this.targets || tw !== this.tw || th !== this.th) {
         const gl = this.gl;
         if (this.targets) for (const t of this.targets) G.disposeTarget(gl, t);
@@ -123,6 +145,31 @@
         this.tw = tw; this.th = th;
         this.ping = 0;
       }
+    }
+
+    /** ロゴ画像（data URL）。空なら消す */
+    setLogo(url) {
+      if (url === this.logoUrl) return;
+      this.logoUrl = url || '';
+      const gl = this.gl;
+      if (this.logo) { gl.deleteTexture(this.logo.tex); this.logo = null; }
+      if (!url) return;
+      const img = new Image();
+      img.onload = () => {
+        if (this.logoUrl !== url || this.lost) return;
+        const tex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, img);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+        gl.generateMipmap(gl.TEXTURE_2D);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        this.logo = { tex, aspect: img.naturalWidth / Math.max(1, img.naturalHeight) };
+      };
+      img.src = url;
     }
 
     /** フレーム間隔から描画解像度を自動調整 */
@@ -186,13 +233,14 @@
       gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 512, 1, gl.RED, gl.UNSIGNED_BYTE, this.waveBytes);
     }
 
-    /** テキスト枠（uv 0..1）：テクスチャの縦横比 4:1 を保って中央に */
-    textRect(widthFrac, cy) {
-      const A = this.canvas.width / this.canvas.height;
-      let w = widthFrac, h = (w * A) / G.TextLayer.ASPECT;
-      if (h > 0.45) { h = 0.45; w = (h * G.TextLayer.ASPECT) / A; }
-      return [0.5 - w / 2, cy - h / 2, w, h];
+    /** テクスチャ（縦横比 texAspect）を論理画面の中央付近に置く枠（uv 0..1）。maxW・maxH は画面に対する割合 */
+    fitRect(texAspect, maxW, maxH, cx, cy) {
+      const A = this.lw / this.lh;
+      let w = maxW, h = (w * A) / texAspect;
+      if (h > maxH) { h = maxH; w = (h * texAspect) / A; }
+      return [cx - w / 2, cy - h / 2, w, h];
     }
+    textRect(widthFrac, cy) { return this.fitRect(G.TextLayer.ASPECT, widthFrac, 0.45, 0.5, cy); }
 
     /**
      * 1 フレーム描画。
@@ -237,13 +285,22 @@
       p.set('u_kickN', f.kickN % 4096); p.set('u_snareN', f.snareN % 4096); p.set('u_hatN', f.hatN % 4096); p.set('u_accentN', f.accentN % 4096);
       p.set('u_kickEv', f.kickEv); p.set('u_snareEv', f.snareEv); p.set('u_accentEv', f.accentEv);
       p.set('u_travel', fr.travel % 1000);
+      p.set('u_beat', f.bpm ? Math.exp(-f.beatPhase * 6) * Math.min(1, f.beatConf * 1.5) : 0);
+      p.set('u_beatPhase', f.beatPhase || 0);
+      p.set('u_bar', f.barPhase || 0);
+      p.set('u_bpm', f.bpm || 0);
       p.set('u_pal', fr.pal);
       p.tex('u_spec', this.texSpec);
       p.tex('u_specSlow', this.texSpecSlow);
       p.tex('u_wave', this.texWave);
       p.tex('u_prev', src.tex);
-      p.tex('u_title', fr.titleTex || this.texBlank);
-      if (p.has('u_titleRect')) p.set('u_titleRect', this.textRect(0.78, 0.52));
+      if (fr.titleLogo && this.logo) {
+        p.tex('u_title', this.logo.tex);
+        if (p.has('u_titleRect')) p.set('u_titleRect', this.fitRect(this.logo.aspect, 0.7, 0.6, 0.5, 0.5));
+      } else {
+        p.tex('u_title', fr.titleTex || this.texBlank);
+        if (p.has('u_titleRect')) p.set('u_titleRect', this.textRect(0.78, 0.52));
+      }
       if (fr.uniforms) for (const k in fr.uniforms) p.set(k, fr.uniforms[k]);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       this.ping = 1 - this.ping;
@@ -252,13 +309,31 @@
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.viewport(0, 0, this.canvas.width, this.canvas.height);
       const q = this.post.use();
+      const o = this.output;
       q.set('u_res', [this.canvas.width, this.canvas.height]);
+      q.set('u_area', this.area);
+      q.set('u_rot', o.rotate / 90);
+      q.set('u_flip', [o.flipH ? 1 : 0, o.flipV ? 1 : 0]);
+      q.set('u_lres', [this.lw, this.lh]);
       q.set('u_time', fr.time);
       q.tex('u_scene', dst.tex);
-      const text = fr.text;
+      const text = fr.text, text2 = fr.text2;
       q.tex('u_text', text && text.tex ? text.tex : this.texBlank);
       q.set('u_textAlpha', text ? text.alpha : 0);
       q.set('u_textRect', this.textRect(0.62, 0.5));
+      q.tex('u_text2', text2 && text2.tex ? text2.tex : this.texBlank);
+      q.set('u_text2Alpha', text2 ? text2.alpha : 0);
+      q.set('u_text2Rect', this.textRect(0.7, 0.2));
+      const corner = fr.logoCorner && this.logo ? fr.logoCorner : '';
+      q.tex('u_logo', corner ? this.logo.tex : this.texBlank);
+      q.set('u_logoAlpha', corner ? 0.85 : 0);
+      if (corner) {
+        const r = this.fitRect(this.logo.aspect, 0.22, 0.16, 0.5, 0.5);
+        const m = 0.03;
+        r[0] = corner[1] === 'l' ? m * (this.lh / this.lw) : 1 - r[2] - m * (this.lh / this.lw);
+        r[1] = corner[0] === 'b' ? m : 1 - r[3] - m;
+        q.set('u_logoRect', r);
+      }
       q.set('u_flash', fr.flash || 0);
       q.set('u_flashColor', fr.flashColor || [1, 1, 1]);
       q.set('u_black', fr.black || 0);
@@ -316,7 +391,7 @@
     info() {
       return {
         gpu: this.gpu, software: this.software, hdr: this.hdr, scale: this.scale, fps: this.fps,
-        size: [this.canvas.width, this.canvas.height], sceneSize: [this.tw, this.th],
+        size: [this.canvas.width, this.canvas.height], sceneSize: [this.tw, this.th], logical: [Math.round(this.lw), Math.round(this.lh)],
         failed: Object.keys(this.failed), lost: this.lost, lostCount: this.lostCount || 0,
       };
     }

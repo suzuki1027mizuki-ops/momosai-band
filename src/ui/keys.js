@@ -3,16 +3,20 @@
 (function (VJ) {
   'use strict';
 
-  const SCENE_KEYS = { Digit0: 'title', Digit1: 'ripple', Digit2: 'tunnel', Digit3: 'horizon', Digit4: 'aurora', Digit5: 'kaleido', Digit6: 'glitch' };
+  const SCENE_KEYS = {
+    Digit0: 'title', Digit1: 'ripple', Digit2: 'tunnel', Digit3: 'horizon', Digit4: 'aurora', Digit5: 'kaleido',
+    Digit6: 'glitch', Digit7: 'eq', Digit8: 'stars', Digit9: 'scope',
+  };
   for (const k of Object.keys(SCENE_KEYS)) SCENE_KEYS[k.replace('Digit', 'Numpad')] = SCENE_KEYS[k];
 
   const HOLD = { KeyL: 1500, KeyR: 2000 };
 
   const KEY_HELP = [
-    ['1〜6', 'シーン切替（次のビートで）'], ['Shift+数字', 'すぐ切替'], ['0', 'タイトル（バンド名）'],
+    ['1〜9', 'シーン切替（次のビートで）'], ['Shift+数字', 'すぐ切替'], ['0', 'タイトル（バンド名）'],
     ['→ / ←', '次の曲 / 前の曲（曲名を表示）'], ['Space', 'フラッシュ'], ['S（押している間）', 'ストロボ'],
     ['B', '暗転 ON/OFF'], ['C / Shift+C', 'パレット 次 / 前'], ['↑ / ↓', '感度'], ['Shift+↑ / ↓', '全体の明るさ'],
-    ['A', 'オート ON/OFF'], ['T', '曲名をもう一度表示'], ['F', '全画面にする'], ['D', '診断表示'],
+    ['A', 'オート ON/OFF'], ['Enter', 'タップテンポ（拍に合わせて 3 回以上）'], ['Q / W / E', 'テロップ 1〜3 を表示・消す'],
+    ['T', '曲名をもう一度表示'], ['G', 'テストパターン（位置合わせ）'], ['F', '全画面にする'], ['D', '診断表示'],
     ['H', 'このヘルプ'], ['M', '設定パネル'], ['L', 'ロック（長押しで解除）'], ['R（2 秒長押し）', 'ソフトリセット'],
     ['Esc', 'パネルを閉じる（全画面中は長押しで解除）'],
   ];
@@ -67,6 +71,11 @@
       else if (code === 'ArrowDown') (shift ? show.nudgeMaster(-1) : show.nudgeSensitivity(-1));
       else if (code === 'KeyA') show.toggleAuto();
       else if (code === 'KeyT') show.showSongTitle();
+      else if (code === 'Enter' || code === 'NumpadEnter') show.tap();
+      else if (code === 'KeyQ') show.toggleMessage(0);
+      else if (code === 'KeyW') show.toggleMessage(1);
+      else if (code === 'KeyE') show.toggleMessage(2);
+      else if (code === 'KeyG') show.toggleTestPattern();
       else if (code === 'KeyF') ui.enterFullscreen();
       else if (code === 'KeyD') ui.toggleHud();
       else if (code === 'KeyH') ui.toggleHelp();

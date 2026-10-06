@@ -17,6 +17,7 @@ uniform vec2 u_kickEv[8];
 uniform vec2 u_snareEv[8];
 uniform vec2 u_accentEv[8];
 uniform float u_travel;
+uniform float u_beat, u_beatPhase, u_bar, u_bpm; // 拍のパルス（拍で 1 → 減衰）・拍の位相・小節の位相
 uniform vec3 u_pal[4];
 uniform sampler2D u_spec;
 uniform sampler2D u_specSlow;

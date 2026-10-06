@@ -5,7 +5,7 @@ import { launch, openApp, DIST, saveDataUrl } from '../helpers/browser.mjs';
 import { regionFlashes } from '../helpers/flash.mjs';
 
 let browser, page, errors;
-const SCENES = ['title', 'ripple', 'tunnel', 'horizon', 'aurora', 'kaleido', 'glitch'];
+const SCENES = ['title', 'ripple', 'tunnel', 'horizon', 'aurora', 'kaleido', 'glitch', 'eq', 'stars', 'scope'];
 const BAND = { bpm: 140, seed: 5, sections: [{ bars: 4, drums: '8beat', bass: true, guitar: 'chug' }, { bars: 1, drums: 'none', gain: 0 }, { bars: 8, drums: 'four', bass: true, guitar: 'chord', crash: true }, { bars: 4, drums: 'roll' }] };
 
 before(async () => {
@@ -21,7 +21,7 @@ test('起動：エラーなし・全シーンのシェーダが通る・版数�
   const info = await page.evaluate(() => ({ r: VJ.app.renderer.info(), v: VJ.version, scenes: VJ.scenes.list.map((s) => s.id), panel: !document.getElementById('panel').hidden }));
   assert.deepEqual(info.r.failed, []);
   assert.match(info.v, /^\d+\.\d+\.\d+$/);
-  assert.deepEqual(info.scenes.sort(), [...SCENES].sort());
+  assert.deepEqual(info.scenes.sort(), [...SCENES, 'test'].sort());
   assert.ok(info.panel);
   assert.deepEqual(errors, []);
 });

@@ -31,7 +31,7 @@ body.nocursor #panel, body.nocursor #panel * { cursor: auto !important; }
   position: fixed; top: 0; right: 0; bottom: 0; width: min(440px, 100vw);
   background: var(--panel); border-left: 1px solid var(--line);
   overflow-y: auto; padding: 14px 16px 40px; font-size: 14px; line-height: 1.5;
-  scrollbar-width: thin;
+  scrollbar-width: thin; z-index: 20;
 }
 #panel header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 #panel header h1 { font-size: 18px; margin: 0; letter-spacing: 0.08em; font-weight: 900;
@@ -77,16 +77,28 @@ table.setlist th { color: var(--muted); font-weight: normal; }
 .warnbox { background: #2a1a00; border: 1px solid var(--warn); color: #ffd99a; border-radius: 6px; padding: 8px; margin: 8px 0; font-size: 13px; }
 
 /* トースト・HUD・ヘルプ */
-#toast { position: fixed; left: 12px; bottom: 10px; font-size: 13px; color: rgba(255,255,255,0.85);
+#toast { position: fixed; z-index: 30; left: 12px; bottom: 10px; font-size: 13px; color: rgba(255,255,255,0.85);
   background: rgba(0,0,0,0.55); padding: 3px 10px; border-radius: 4px; pointer-events: none; opacity: 0; transition: opacity 0.25s; }
 #toast.show { opacity: 1; transition: none; }
 #toast.warn { color: #ffd99a; }
-#hud { position: fixed; left: 10px; top: 10px; margin: 0; padding: 8px 10px; font: 12px/1.45 var(--mono);
+#hud { position: fixed; z-index: 25; left: 10px; top: 10px; margin: 0; padding: 8px 10px; font: 12px/1.45 var(--mono);
   background: rgba(0,0,0,0.72); color: #cfe; white-space: pre; border-radius: 6px; pointer-events: none; max-width: calc(100vw - 20px); overflow: hidden; }
-#help { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.6); }
+#help { position: fixed; z-index: 35; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.6); }
 #help .box { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 24px; max-width: 640px; width: calc(100vw - 32px); }
 #help h3 { margin: 0 0 10px; color: var(--accent); }
-#fatal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #000; color: #fff; padding: 24px; text-align: center; font-size: 16px; line-height: 1.7; }
+details { margin: 8px 0; border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.bpm { font-family: var(--mono); min-width: 80px; }
+.row.msg input[type=text] { flex: 1; width: auto; }
+#logo-preview { max-height: 60px; max-width: 200px; background: #222; border-radius: 4px; }
+#auto-scenes label { font-size: 13px; }
+.warnbox.resume { background: #0d2a1a; border-color: var(--ok); color: #c8ffd8; }
+#remote { position: fixed; left: 16px; top: 16px; max-width: max(260px, calc(100vw - min(440px, 100vw) - 40px)); display: flex; z-index: 10; }
+#remote .box { background: var(--panel); border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; max-width: 640px; }
+#remote h3 { margin: 0 0 6px; color: var(--accent); }
+#remote pre { font: 12px/1.45 var(--mono); white-space: pre-wrap; color: #cfe; margin: 8px 0; }
+#out-hint { position: fixed; z-index: 30; left: 50%; top: 16px; transform: translateX(-50%); background: rgba(0,0,0,0.7); color: #fff; padding: 6px 14px; border-radius: 6px; font-size: 14px; pointer-events: none; }
+#fatal { position: fixed; z-index: 40; inset: 0; display: flex; align-items: center; justify-content: center; background: #000; color: #fff; padding: 24px; text-align: center; font-size: 16px; line-height: 1.7; }
 </style>
 </head>
 <body>
@@ -99,10 +111,14 @@ table.setlist th { color: var(--muted); font-weight: normal; }
     <button class="close" id="panel-close" title="閉じる（M で開く）">×</button>
   </header>
   <div id="warnings"></div>
+  <div id="resume-box" hidden>
+    <div class="warnbox resume"><span id="resume-text"></span> <button id="btn-resume">前回の続きから再開</button> <button id="btn-resume-no">いいえ</button></div>
+  </div>
 
   <h2>① 音声入力</h2>
   <div class="row">
     <label><input type="radio" name="src" value="mic" checked> マイク / ライン</label>
+    <label><input type="radio" name="src" value="display"> PC で再生中の音</label>
     <label><input type="radio" name="src" value="demo"> デモ音源</label>
     <label><input type="radio" name="src" value="file"> 音声ファイル</label>
   </div>
@@ -110,8 +126,10 @@ table.setlist th { color: var(--muted); font-weight: normal; }
     <select id="device"><option value="">（既定のデバイス）</option></select>
     <button id="btn-refresh" title="デバイス一覧を更新">↻</button>
   </div>
+  <div class="hint" id="display-opts" hidden>YouTube・音楽アプリ・DJ ソフトなど PC で流している音に反応します。開始すると共有する画面を聞かれるので、<b>「システム音声を共有」</b>（タブなら「タブの音声も共有」）をオンにして選んでください。Mac は Chrome のタブの音だけ使えます。</div>
   <div class="row" id="file-opts" hidden>
-    <input type="file" id="file" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac">
+    <input type="file" id="file" multiple accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac">
+    <button id="btn-skip" title="次の曲（複数選んだとき）" hidden>次の曲 ▶▶</button>
   </div>
   <div class="row">
     <span>解析するチャンネル</span>
@@ -128,50 +146,130 @@ table.setlist th { color: var(--muted); font-weight: normal; }
   <div class="status" id="audio-status">まだ開始していません</div>
   <div class="meter"><span>L</span><div class="track"><div class="fill" id="ml"></div><div class="peak" id="mlp"></div></div><span id="mlv">—</span></div>
   <div class="meter"><span>R</span><div class="track"><div class="fill" id="mr"></div><div class="peak" id="mrp"></div></div><span id="mrv">—</span></div>
-  <div class="lamps"><span class="lamp" id="lk">KICK</span><span class="lamp" id="ls">SNARE</span><span class="lamp" id="lh">HAT</span><span class="lamp" id="la">ACCENT</span></div>
-  <div class="hint">メーターが緑〜黄色の範囲で動けば OK。片方しか動かないときは「解析するチャンネル」はミックスのままで大丈夫です。</div>
+  <div class="lamps"><span class="lamp" id="lk">KICK</span><span class="lamp" id="ls">SNARE</span><span class="lamp" id="lh">HAT</span><span class="lamp" id="la">ACCENT</span><span class="lamp" id="lb">BEAT</span></div>
+  <div class="hint">メーターが緑〜黄色の範囲で動けば OK。片方しか動かないときも「解析するチャンネル」はミックスのままで大丈夫です。</div>
 
-  <h2>② バンド名・セットリスト</h2>
+  <h2>② 音楽のタイプ・テンポ</h2>
+  <div class="row"><select id="opt-profile"></select></div>
+  <div class="hint" id="profile-desc"></div>
+  <div class="row">
+    <span>テンポ</span><b id="bpm-view" class="bpm">— BPM</b><span class="hint" id="mode-view"></span>
+    <button id="btn-tap" title="拍に合わせて 3 回以上（Enter キーでも）">タップ</button>
+  </div>
+
+  <h2>③ バンド名・セットリスト・文字</h2>
   <div class="row"><input type="text" id="band" placeholder="バンド名"></div>
   <textarea id="setlist" spellcheck="false"></textarea>
-  <div class="hint">1 行 1 曲：<code>曲名 | シーン | パレット</code>。シーンは 1〜6（カンマで複数→オートで順番に）。<code>@end</code> で終演の文字。→ キーで次の曲。</div>
+  <div class="hint">1 行 1 曲：<code>曲名 | シーン | パレット</code>。シーンは 1〜9（カンマで複数→オートで順番に）。<code>@end</code> で終演の文字。→ キーで次の曲。</div>
   <div id="setlist-preview"></div>
+  <details>
+    <summary>ロゴ画像・テロップ・開演カウントダウン</summary>
+    <div class="row">
+      <span>ロゴ画像</span><input type="file" id="logo-file" accept="image/*">
+      <button id="btn-logo-clear">消す</button>
+    </div>
+    <div class="row">
+      <select id="opt-logomode">
+        <option value="title">タイトルでバンド名の代わりに表示</option>
+        <option value="corner">すべてのシーンの隅に小さく表示</option>
+        <option value="both">両方</option>
+        <option value="off">使わない</option>
+      </select>
+      <select id="opt-logocorner">
+        <option value="br">右下</option><option value="bl">左下</option><option value="tr">右上</option><option value="tl">左上</option>
+      </select>
+    </div>
+    <div class="row"><img id="logo-preview" alt="" hidden></div>
+    <div class="row"><span>テロップ</span></div>
+    <div class="row msg"><kbd>Q</kbd><input type="text" id="msg-0" placeholder="例：次は〇〇です"><button data-msg="0">表示</button></div>
+    <div class="row msg"><kbd>W</kbd><input type="text" id="msg-1" placeholder="例：手拍子お願いします！"><button data-msg="1">表示</button></div>
+    <div class="row msg"><kbd>E</kbd><input type="text" id="msg-2" placeholder="例：アンコールありがとう！"><button data-msg="2">表示</button></div>
+    <div class="hint">キー（Q / W / E）かボタンで表示、もう一度押すと消えます。</div>
+    <div class="row"><span>開演時刻</span><input type="time" id="opt-countdown"><span class="hint">タイトルに「開演まで 05:00」を表示（1 曲目に進むと消えます）</span></div>
+  </details>
 
-  <h2>③ オプション</h2>
+  <h2>④ 表示（スクリーンに合わせる）</h2>
+  <div class="row">
+    <span>回転</span>
+    <select id="out-rotate"><option value="0">なし</option><option value="90">90°（縦置き）</option><option value="180">180°（逆さ吊り）</option><option value="270">270°</option></select>
+    <label><input type="checkbox" id="out-fliph"> 左右反転（スクリーン裏から投影）</label>
+    <label><input type="checkbox" id="out-flipv"> 上下反転</label>
+  </div>
+  <div class="row"><span>サイズ</span><input type="range" id="out-size" min="0.3" max="1" step="0.01"><span id="out-size-v"></span></div>
+  <div class="row"><span>左右の位置</span><input type="range" id="out-x" min="-0.5" max="0.5" step="0.005"><span id="out-x-v"></span></div>
+  <div class="row"><span>上下の位置</span><input type="range" id="out-y" min="-0.5" max="0.5" step="0.005"><span id="out-y-v"></span></div>
+  <div class="row">
+    <button id="btn-test">テストパターン（G）</button>
+    <button id="btn-out-reset">表示を元に戻す</button>
+  </div>
+  <div class="row">
+    <button id="btn-output" class="primary">出力ウィンドウを開く（2 画面）</button>
+  </div>
+  <div class="hint" id="output-hint">プロジェクターを「拡張」でつないだときに使います。映像だけのウィンドウを開いてプロジェクター側で全画面にし、このウィンドウは操作・確認用になります（観客に操作画面が見えません）。</div>
+
+  <h2>⑤ オプション</h2>
   <div class="row">
     <label><input type="checkbox" id="opt-auto"> オート（自動でシーン切替）</label>
     <label><input type="checkbox" id="opt-autoflash"> キメで自動フラッシュ</label>
   </div>
   <div class="row">
-    <label><input type="checkbox" id="opt-toast"> キー操作を画面に小さく表示</label>
-    <label><input type="checkbox" id="opt-latsq"> 遅延計測用の四角（右下）</label>
+    <label><input type="checkbox" id="opt-noflash"> フラッシュを一切使わない（光に配慮が必要な会場）</label>
   </div>
   <div class="row"><span>感度</span><input type="range" id="opt-sens" min="-5" max="5" step="1"><span id="opt-sens-v"></span></div>
+  <div class="row"><span>動きの大きさ</span><input type="range" id="opt-react" min="0.3" max="1.5" step="0.05"><span id="opt-react-v"></span></div>
   <div class="row"><span>明るさ</span><input type="range" id="opt-master" min="0.2" max="1" step="0.1"><span id="opt-master-v"></span></div>
-  <div class="row"><span>画質上限</span><input type="range" id="opt-scale" min="0.4" max="1" step="0.05"><span id="opt-scale-v"></span></div>
   <div class="row">
     <span>パレット</span><select id="opt-palette"></select>
     <span id="custom-colors"></span>
   </div>
-  <div class="row">
-    <button id="btn-midi">MIDI コントローラを使う</button>
-    <span class="hint" id="midi-status">パッドのノート 36〜41＝シーン1〜6、43＝フラッシュ、44＝暗転</span>
-  </div>
-  <div class="row">
-    <label><input type="checkbox" id="opt-desync"> 低遅延描画（desynchronized・要再読み込み）</label>
-  </div>
-  <div class="row">
-    <button id="btn-export">設定を書き出し</button>
-    <button id="btn-import">設定を読み込み</button>
-    <input type="file" id="import-file" accept=".json,application/json" hidden>
-    <button id="btn-reset">初期設定に戻す</button>
-  </div>
+  <details>
+    <summary>詳しい設定</summary>
+    <div class="row"><span>オートで使うシーン</span></div>
+    <div class="row" id="auto-scenes"></div>
+    <div class="row"><span>無音とみなす音量</span><input type="range" id="opt-gate" min="-80" max="-30" step="1"><span id="opt-gate-v"></span></div>
+    <div class="hint">会場のざわざわで反応してしまうときは右へ（大きく）。小さい音に反応しないときは左へ。</div>
+    <div class="row"><span>画質上限</span><input type="range" id="opt-scale" min="0.4" max="1" step="0.05"><span id="opt-scale-v"></span></div>
+    <div class="row">
+      <span>フレームレート</span>
+      <select id="opt-fps"><option value="0">制限なし（推奨）</option><option value="30">30fps（非力な PC 向け）</option></select>
+    </div>
+    <div class="row">
+      <label><input type="checkbox" id="opt-toast"> キー操作を画面に小さく表示</label>
+      <label><input type="checkbox" id="opt-latsq"> 遅延計測用の四角（右下）</label>
+    </div>
+    <div class="row">
+      <label><input type="checkbox" id="opt-autostart"> 起動したら前回の入力で自動的に開始（展示・BGM 用）</label>
+    </div>
+    <div class="row">
+      <label><input type="checkbox" id="opt-desync"> 低遅延描画（desynchronized・要再読み込み）</label>
+    </div>
+    <div class="row">
+      <button id="btn-midi">MIDI コントローラを使う</button>
+      <span class="hint" id="midi-status">パッドのノート 36〜41＝シーン1〜6、43＝フラッシュ、44＝暗転</span>
+    </div>
+    <div class="row">
+      <button id="btn-export">設定を書き出し</button>
+      <button id="btn-import">設定を読み込み</button>
+      <input type="file" id="import-file" accept=".json,application/json" hidden>
+      <button id="btn-reset">初期設定に戻す</button>
+    </div>
+  </details>
 
-  <h2>④ 本番</h2>
+  <h2>⑥ 本番</h2>
   <button class="big" id="btn-show">ショー開始（全画面）</button>
   <div class="hint">全画面・スリープ防止・Esc 長押しでのみ解除、がまとめて有効になります。<b>H</b> でキー一覧、<b>M</b> でこのパネル。</div>
   <div class="keys" id="keys-mini"></div>
 </div>
+
+<div id="remote" hidden>
+  <div class="box">
+    <h3>出力ウィンドウで表示中</h3>
+    <p class="hint">映像は出力ウィンドウに出ています。キー操作とこのパネルはそのまま使えます。出力ウィンドウはプロジェクター側へ移動して<b>ダブルクリック</b>（または F）で全画面に。閉じるとこの画面に戻ります。</p>
+    <pre id="remote-status"></pre>
+    <button id="btn-output-close">出力ウィンドウを閉じる</button>
+  </div>
+</div>
+<div id="out-hint" hidden>ダブルクリック（または F キー）で全画面 ／ 操作は元のウィンドウで</div>
 
 <div id="toast"></div>
 <pre id="hud" hidden></pre>
@@ -186,7 +284,7 @@ table.setlist th { color: var(--muted); font-weight: normal; }
   'use strict';
 
   VJ.version = '1.0.0';
-  VJ.buildTime = '2026-10-06 #a1ddf89';
+  VJ.buildTime = '2026-10-06 #be9e995';
 
   const LN10_20 = Math.LN10 / 20;
 
@@ -304,6 +402,20 @@ table.setlist th { color: var(--muted); font-weight: normal; }
     latencySquare: false, // 遅延計測用の白い四角
     monitor: true, // デモ/ファイル再生時にスピーカーから鳴らす（マイクは絶対に出力しない）
     maxScale: 1.0, // 描画解像度の上限倍率
+    profile: 'auto', // 音楽のタイプ（profiles.js）
+    gateDb: -70, // これより小さい音は無音とみなす（dBFS）。ざわざわした会場では上げる
+    noFlash: false, // フラッシュ類を一切使わない（光に配慮が必要な会場）
+    react: 1.0, // 動きの大きさ 0.3〜1.5
+    autoScenes: {}, // オートで使うシーン（false のものは使わない）
+    fpsCap: 0, // 0 = 制限なし / 30 = 30fps（非力な PC 向け）
+    messages: ['', '', ''], // テロップ（Q / W / E）
+    countdownTo: '', // 開演時刻 'HH:MM'（タイトルにカウントダウン）
+    logo: '', // ロゴ画像（data URL）
+    logoMode: 'title', // title: バンド名の代わり / corner: 隅に透かし / both / off
+    logoCorner: 'br', // tl / tr / bl / br
+    output: { rotate: 0, flipH: false, flipV: false, size: 1, x: 0, y: 0 }, // 表示の調整
+    autoStart: false, // 起動したら前回の入力で自動的に開始
+    lastSource: 'mic', // 前回の音声入力の種類
   };
 
   /** 解析パラメータ（調整はテストで行う。UI には出さない） */
@@ -326,6 +438,12 @@ table.setlist th { color: var(--muted); font-weight: normal; }
       b1: { band: 1, W: 3, L: 3, R: 3, K: 2.2, minRise: 3, refractory: 0.08 },
       b2: { band: 2, W: 2, L: 3, R: 3, K: 2.2, minRise: 3, refractory: 0.08 },
     },
+    // ドラムが無い曲用：中域（150Hz〜5kHz）の立ち上がり（ピアノ・ギター・歌の発音）
+    melodic: { W: 2, L: 4, R: 6, K: 1.5, minRise: 2.5, refractory: 0.12, relDb: 16, peakFall: 3 },
+    melodicMode: 'auto', // auto: ドラムが無ければ自動で切替 / on: 常に / off: 使わない
+    drumRatioDb: -2, // キック時に 低域 ÷ 中域 がこれより大きければドラムとみなす
+    // テンポ推定に使う帯域ごとの重み（立ち上がりの強さの和）
+    tempoWeights: [1.0, 0.5, 0.5, 0.8, 0.4],
     kickSnareHops: 5, // スネア検出からこのホップ数以内のキック候補は…
     kickSnareRelDb: 7, // …キック帯域のピークよりこれ以上小さければ捨てる
     statTau: 1.0, // flux の平均・分散の時定数
@@ -417,6 +535,93 @@ table.setlist th { color: var(--muted); font-weight: normal; }
   };
 
   VJ.storage = storage;
+})(globalThis.VJ = globalThis.VJ || {});
+</script>
+<script>/* src/core/profiles.js */
+/* 音楽のタイプ（プロファイル）。解析パラメータ（dsp）と演出（show）の既定値を切り替える。
+ *   dsp  : VJ.dspConfig への上書き（配列は添字ごと・オブジェクトは再帰的に）
+ *   show : switchSec（オートの切替間隔）/ kickFallbackSec / autoFlash（自動のフラッシュを使うか）
+ *          / react（動きの大きさの基準）/ tiers（盛り上がり 3 段階で使うシーン） */
+(function (VJ) {
+  'use strict';
+
+  const DEFAULT_TIERS = {
+    low: ['aurora', 'horizon', 'stars', 'ripple'],
+    mid: ['ripple', 'tunnel', 'horizon', 'kaleido', 'eq'],
+    high: ['tunnel', 'kaleido', 'glitch', 'eq'],
+  };
+
+  VJ.profiles = [
+    {
+      id: 'auto', name: 'おまかせ（バンド・ポップス全般）',
+      desc: 'ドラムがあればドラムに、無ければピアノ・ギター・歌の発音に反応します。迷ったらこれ。',
+      dsp: {}, show: { tiers: DEFAULT_TIERS },
+    },
+    {
+      id: 'dance', name: 'EDM・ダンス・アイドル',
+      desc: '4 つ打ちのキックと低音に強く反応。シーンの切替は速め。',
+      dsp: { melodicMode: 'off', onset: { kick: { K: 1.8, relDb: 7 } }, env: { low: 0.12 } },
+      show: { switchSec: 16, kickFallbackSec: 24, tiers: { low: ['stars', 'horizon', 'scope'], mid: ['eq', 'tunnel', 'kaleido', 'ripple'], high: ['glitch', 'tunnel', 'eq', 'kaleido'] } },
+    },
+    {
+      id: 'hiphop', name: 'ヒップホップ・R&B',
+      desc: '太い低音（808）と手拍子・スネアに合わせます。',
+      dsp: { melodicMode: 'off', bands: [{ lo: 28 }], onset: { kick: { relDb: 7 } }, env: { low: 0.2 } },
+      show: { switchSec: 24, tiers: { low: ['horizon', 'aurora', 'scope'], mid: ['eq', 'ripple', 'horizon'], high: ['glitch', 'eq', 'tunnel'] } },
+    },
+    {
+      id: 'acoustic', name: 'アコースティック・弾き語り・ピアノ',
+      desc: 'ドラムが無くても音の立ち上がりに反応。自動のフラッシュは使いません。',
+      dsp: { melodicMode: 'on', env: { level: 0.2, low: 0.25, mid: 0.18, high: 0.1 }, peak: { kick: 0.25, snare: 0.2 } },
+      show: { switchSec: 36, kickFallbackSec: 50, autoFlash: false, react: 0.85, tiers: { low: ['aurora', 'stars', 'scope'], mid: ['ripple', 'scope', 'horizon', 'stars'], high: ['kaleido', 'ripple', 'horizon'] } },
+    },
+    {
+      id: 'calm', name: 'しっとり（合唱・クラシック・バラード）',
+      desc: 'ゆっくり大きく動きます。自動のフラッシュは使いません。',
+      dsp: {
+        melodicMode: 'on', melodic: { K: 1.8, minRise: 3, refractory: 0.2 },
+        env: { level: 0.4, low: 0.45, mid: 0.35, high: 0.2 }, peak: { kick: 0.45, snare: 0.35, hat: 0.15, accent: 0.5 },
+        accent: { loudDb: 4 },
+      },
+      show: { switchSec: 45, kickFallbackSec: 60, autoFlash: false, react: 0.7, tiers: { low: ['aurora', 'stars'], mid: ['aurora', 'stars', 'scope'], high: ['horizon', 'scope', 'kaleido'] } },
+    },
+  ];
+  VJ.profiles.DEFAULT_TIERS = DEFAULT_TIERS;
+
+  VJ.profileById = function (id) {
+    return VJ.profiles.find((p) => p.id === id) || VJ.profiles[0];
+  };
+
+  function deepMerge(base, over) {
+    if (Array.isArray(base)) {
+      const out = base.map((v) => (v && typeof v === 'object' ? deepMerge(v, {}) : v));
+      if (Array.isArray(over)) over.forEach((v, i) => { if (v !== undefined && v !== null) out[i] = i < out.length && out[i] && typeof out[i] === 'object' ? deepMerge(out[i], v) : v; });
+      return out;
+    }
+    const out = {};
+    for (const k of Object.keys(base)) out[k] = base[k] && typeof base[k] === 'object' ? deepMerge(base[k], {}) : base[k];
+    if (over && typeof over === 'object') {
+      for (const k of Object.keys(over)) {
+        const v = over[k];
+        out[k] = v && typeof v === 'object' && out[k] && typeof out[k] === 'object' ? deepMerge(out[k], v) : v;
+      }
+    }
+    return out;
+  }
+  VJ.deepMerge = deepMerge;
+
+  /** 設定（音楽のタイプ・無音とみなす音量）から解析パラメータを作る */
+  VJ.makeDspConfig = function (settings) {
+    const prof = VJ.profileById(settings && settings.profile);
+    const cfg = deepMerge(VJ.dspConfig, prof.dsp);
+    if (settings && typeof settings.gateDb === 'number') cfg.silenceAbsDb = settings.gateDb;
+    return cfg;
+  };
+
+  /** 解析パラメータが変わる設定の組（変わったら FeatureExtractor を作り直す） */
+  VJ.dspKey = function (settings) {
+    return (settings.profile || 'auto') + '|' + settings.gateDb;
+  };
 })(globalThis.VJ = globalThis.VJ || {});
 </script>
 <script>/* src/dsp/biquad.js */
@@ -839,6 +1044,222 @@ table.setlist th { color: var(--muted); font-weight: normal; }
   VJ.dsp.OnsetDetector = OnsetDetector;
 })(globalThis.VJ = globalThis.VJ || {});
 </script>
+<script>/* src/dsp/tempo.js */
+/* テンポ（BPM）と拍の位置の推定 + タップテンポ。
+ *  - 立ち上がりの強さ（帯域ごとの dB 上昇量の重み付き和）を約 10ms ごとに 8 秒分ためる
+ *  - 0.5 秒ごとに自己相関で周期を求める（60〜200BPM、120BPM 付近を優先、倍・半分の誤りを抑える）
+ *  - 周期が分かったら、櫛形の和が最大になる位置を「拍」とする
+ *  - 4 拍のうちキックが最も強い位置を小節の頭（ダウンビート）とみなす
+ * タップテンポ（3 回以上）はしばらく自動推定より優先する。
+ * 拍の予測で先回りして光らせることはしない（人間のドラムの揺れで外れが目立つため）。用途は
+ * オートの切替タイミング・拍に合わせたゆるい動き・表示。 */
+(function (VJ) {
+  'use strict';
+
+  class TempoTracker {
+    constructor(sr, hop, opts) {
+      this.sr = sr;
+      this.hop = hop;
+      this.opts = Object.assign({ hopsPerFrame: 4, seconds: 8, minBpm: 60, maxBpm: 200, prefBpm: 120, prefOct: 0.9, every: 0.5, manualSec: 120 }, opts || {});
+      this.fpf = this.opts.hopsPerFrame;
+      this.frameSamples = hop * this.fpf;
+      this.frameSec = this.frameSamples / sr;
+      this.n = Math.ceil(this.opts.seconds / this.frameSec);
+      this.ring = new Float32Array(this.n);
+      this.idx = 0;
+      this.filled = 0;
+      this.acc = 0;
+      this.hopIn = 0;
+      this.frameCount = 0; // 追加した OSF フレーム数
+      this.lin = new Float32Array(this.n);
+      this.lastEst = 0;
+      this.reset();
+    }
+
+    reset() {
+      this.period = 0; // サンプル数
+      this.beat0 = 0; // 拍の基準（サンプル位置。最近の拍に置き直す）
+      this.indexBase = 0; // beat0 を置き直しても拍番号が連続するように足す数
+      this.conf = 0;
+      this.bpm = 0;
+      this.cand = 0;
+      this.candCount = 0;
+      this.downOffset = 0; // 0..3
+      this.posStrength = new Float32Array(4);
+      this.manual = null;
+      this.taps = [];
+    }
+
+    /** 1 ホップごとに立ち上がりの強さを入れる */
+    push(strength, sampleCount) {
+      this.acc += strength;
+      if (++this.hopIn < this.fpf) return;
+      this.ring[this.idx] = this.acc;
+      this.idx = (this.idx + 1) % this.n;
+      if (this.filled < this.n) this.filled++;
+      this.acc = 0;
+      this.hopIn = 0;
+      this.frameCount++;
+      if ((sampleCount - this.lastEst) / this.sr >= this.opts.every) {
+        this.lastEst = sampleCount;
+        this._estimate(sampleCount);
+      }
+    }
+
+    /** キックの強さを拍の位置（4 拍のどこか）ごとに積算 → ダウンビートの推定 */
+    noteKick(strength, sample) {
+      if (!this.period) return;
+      const b = Math.round((sample - this.beat0) / this.period);
+      const off = Math.abs(sample - (this.beat0 + b * this.period));
+      if (off > this.period * 0.15) return;
+      const pos = (((b + this.indexBase) % 4) + 4) % 4;
+      for (let i = 0; i < 4; i++) this.posStrength[i] *= 0.97;
+      this.posStrength[pos] += strength;
+      let best = 0;
+      for (let i = 1; i < 4; i++) if (this.posStrength[i] > this.posStrength[best]) best = i;
+      // 今の小節頭より 3 割以上強い位置が出たときだけ入れ替える（全拍が同じ強さでも安定させる）
+      if (this.posStrength[best] > 1.3 * this.posStrength[this.downOffset]) this.downOffset = best;
+    }
+
+    _estimate(sampleCount) {
+      if (this.manual && sampleCount < this.manual.until) return;
+      if (this.manual) this.manual = null;
+      const n = this.filled;
+      if (n < this.n * 0.5) return;
+      // 時系列を古い順に並べ、平均を引く
+      const x = this.lin;
+      let mean = 0;
+      for (let i = 0; i < n; i++) { const v = this.ring[(this.idx - n + i + this.n) % this.n]; x[i] = v; mean += v; }
+      mean /= n;
+      let energy = 0;
+      for (let i = 0; i < n; i++) { x[i] -= mean; energy += x[i] * x[i]; }
+      if (energy < 1e-6) { this.conf *= 0.8; return; }
+      const fs = this.frameSec, o = this.opts;
+      const lmin = Math.floor(60 / o.maxBpm / fs), lmax = Math.ceil(60 / o.minBpm / fs);
+      const ac = (L) => {
+        if (L >= n) return 0;
+        let s = 0;
+        for (let i = L; i < n; i++) s += x[i] * x[i - L];
+        return s / (n - L);
+      };
+      const r = this._r && this._r.length >= lmax + 2 ? this._r : (this._r = new Float32Array(lmax + 2));
+      for (let L = lmin - 1; L <= lmax + 1; L++) r[L] = ac(L);
+      let best = -1, bestS = -Infinity, sum = 0, sum2 = 0, cnt = 0;
+      for (let L = lmin; L <= lmax; L++) {
+        // 倍の周期の相関も足して基本周期を優先、さらに 120BPM 付近を優先
+        const s = r[L] + 0.5 * ac(2 * L) + 0.25 * ac(3 * L);
+        const bpm = 60 / (L * fs);
+        const w = Math.exp(-0.5 * Math.pow(Math.log2(bpm / o.prefBpm) / o.prefOct, 2));
+        const sw = s * w;
+        sum += r[L]; sum2 += r[L] * r[L]; cnt++;
+        if (sw > bestS) { bestS = sw; best = L; }
+      }
+      if (best < 0) return;
+      // 放物線補間で周期を細かく
+      const a = r[best - 1], b = r[best], c = r[best + 1];
+      const den = a - 2 * b + c;
+      const d = Math.abs(den) > 1e-12 ? Math.max(-0.5, Math.min(0.5, (0.5 * (a - c)) / den)) : 0;
+      const L = best + d;
+      const mu = sum / cnt, sd = Math.sqrt(Math.max(1e-12, sum2 / cnt - mu * mu));
+      const conf = Math.max(0, Math.min(1, (r[best] - mu) / sd / 4));
+      let bpm = 60 / (L * fs);
+      // 倍・半分の取り違えを補正：90〜180BPM に入るように、相関が十分あれば倍・半分を採用
+      const half = Math.round(L / 2), dbl = Math.round(L * 2);
+      if (bpm < 90 && half >= lmin - 1 && r[half] >= 0.5 * r[best]) bpm *= 2;
+      else if (bpm >= 180 && ac(dbl) >= 0.5 * r[best]) bpm /= 2;
+
+      // 推定の安定化：近ければなめらかに追従、大きく違えば 2 回続いたら切り替え
+      if (!this.bpm || Math.abs(bpm - this.bpm) / this.bpm < 0.04) {
+        this.bpm = this.bpm ? this.bpm * 0.7 + bpm * 0.3 : bpm;
+        this.candCount = 0;
+      } else if (this.cand && Math.abs(bpm - this.cand) / this.cand < 0.04 && ++this.candCount >= 2) {
+        this.bpm = bpm;
+        this.candCount = 0;
+        this.posStrength.fill(0);
+      } else {
+        this.cand = bpm;
+        if (!this.candCount) this.candCount = 1;
+      }
+      this.conf = this.conf * 0.6 + conf * 0.4;
+      this.period = (60 / this.bpm) * this.sr;
+
+      // 拍の位置：直近 4 秒で櫛形の和が最大になるずれ
+      const P = this.period / this.frameSamples;
+      const K = Math.max(2, Math.floor(4 / (60 / this.bpm)));
+      let bestPhi = 0, bestSc = -Infinity;
+      const steps = Math.max(8, Math.round(P));
+      for (let k = 0; k < steps; k++) {
+        const phi = (k * P) / steps;
+        let sc = 0;
+        for (let j = 0; j < K; j++) {
+          const pos = n - 1 - phi - j * P;
+          if (pos < 1) break;
+          const i0 = Math.floor(pos), t = pos - i0;
+          sc += x[i0] * (1 - t) + x[i0 + 1 < n ? i0 + 1 : i0] * t;
+        }
+        if (sc > bestSc) { bestSc = sc; bestPhi = phi; }
+      }
+      // 最新フレームの終わり = sampleCount。そこから phi フレーム前が拍
+      const newBeat0 = sampleCount - (bestPhi + 0.5) * this.frameSamples;
+      // 基準の拍を最近の拍に置き直す。拍番号は indexBase で連続させ、位相はなめらかに寄せる
+      if (this.beat0) {
+        const k = Math.round((newBeat0 - this.beat0) / this.period);
+        const target = this.beat0 + k * this.period;
+        this.beat0 = target + (newBeat0 - target) * 0.5;
+        this.indexBase += k;
+      } else {
+        this.beat0 = newBeat0;
+      }
+    }
+
+    /** タップテンポ（sample = 押した時点のサンプル位置） */
+    tap(sample) {
+      const t = this.taps;
+      if (t.length && (sample - t[t.length - 1]) / this.sr > 2.0) t.length = 0;
+      t.push(sample);
+      if (t.length > 8) t.shift();
+      if (t.length < 3) return 0;
+      const iv = [];
+      for (let i = 1; i < t.length; i++) iv.push(t[i] - t[i - 1]);
+      iv.sort((a, b) => a - b);
+      const per = iv[Math.floor(iv.length / 2)];
+      const bpm = (60 * this.sr) / per;
+      if (bpm < 40 || bpm > 240) return 0;
+      this.manual = { until: sample + this.opts.manualSec * this.sr };
+      this.period = per;
+      this.bpm = bpm;
+      this.beat0 = sample;
+      this.indexBase = 0;
+      this.conf = 1;
+      // 最初のタップを小節の頭とみなす
+      this.downOffset = (((-(t.length - 1)) % 4) + 4) % 4;
+      this.posStrength.fill(0);
+      return bpm;
+    }
+
+    clearManual() { this.manual = null; this.taps.length = 0; }
+
+    /** 現在（sample）の拍の状態 */
+    state(sample, out) {
+      out = out || {};
+      if (!this.period) { out.bpm = 0; out.phase = 0; out.conf = 0; out.beatIndex = 0; out.bar = 0; out.manual = false; return out; }
+      const pos = (sample - this.beat0) / this.period;
+      const fl = Math.floor(pos);
+      const bi = fl + this.indexBase;
+      out.bpm = this.bpm;
+      out.phase = pos - fl;
+      out.conf = this.conf;
+      out.beatIndex = bi;
+      out.bar = ((((bi - this.downOffset) % 4) + 4) % 4 + out.phase) / 4; // 0..1（小節内）
+      out.manual = !!this.manual;
+      return out;
+    }
+  }
+
+  VJ.dsp = VJ.dsp || {};
+  VJ.dsp.TempoTracker = TempoTracker;
+})(globalThis.VJ = globalThis.VJ || {});
+</script>
 <script>/* src/dsp/features.js */
 /* FeatureExtractor：音声サンプル → 映像用の特徴量（AudioFeatures）。
  *
@@ -853,7 +1274,7 @@ table.setlist th { color: var(--muted); font-weight: normal; }
   const { clamp01, powToDb, dbToLin, decay } = VJ.util;
 
   const TYPES = ['kick', 'snare', 'hat', 'accent', 'impact'];
-  const FLAG = { kick: 1, snare: 2, hat: 4, accent: 8, impact: 16 };
+  const FLAG = { kick: 1, snare: 2, hat: 4, accent: 8, impact: 16, beat: 32, downbeat: 64 };
 
   function makeFeatures(cfg) {
     const H = cfg.historyLen;
@@ -870,7 +1291,8 @@ table.setlist th { color: var(--muted); font-weight: normal; }
       spectrum: new Float32Array(cfg.specBands),
       spectrumSlow: new Float32Array(cfg.specBands),
       waveform: new Float32Array(cfg.waveLen),
-      bpm: 0, beatPhase: 0, beatConf: 0,
+      bpm: 0, beatPhase: 0, beatConf: 0, barPhase: 0, beatN: 0, tempoManual: false,
+      melodic: false, // ドラムの無い曲として扱っているか
     };
   }
 
@@ -895,6 +1317,21 @@ table.setlist th { color: var(--muted); font-weight: normal; }
         this.detType[p.band] = key;
       }
       this.bandGroup = [0, 0, 1, 1, 2]; // low / mid / high
+
+      // ドラムが無い曲用のメロディ立ち上がり検出
+      this.melDet = new D.OnsetDetector(cfg.melodic, hopSec, cfg.statTau);
+      this.melFloor = new D.NoiseFloor(cfg.noiseFloor, hopSec);
+      this.melMode = cfg.melodicMode === 'on';
+      this.kickRing = new Float64Array(32).fill(-1e12);
+      this.kickRingIdx = 0;
+      this.melRing = new Float64Array(32).fill(-1e12);
+      this.melRingIdx = 0;
+      this.activeSec = 0;
+
+      // テンポ
+      this.tempo = new D.TempoTracker(sr, hop);
+      this.tempoState = {};
+      this.lastBeatIndex = null;
 
       // 自動正規化：full, low, mid, high
       this.agc = [0, 1, 2, 3].map(() => new D.AutoGain(cfg.agc, hopSec));
@@ -1027,6 +1464,7 @@ table.setlist th { color: var(--muted); font-weight: normal; }
       const active = actDb > Math.max(fl[0].db + 6, cfg.silenceAbsDb);
       this.active = active;
       if (active) this.silenceSec = 0; else this.silenceSec = (this.silenceSec || 0) + this.hopSec;
+      if (active) this.activeSec += this.hopSec; else if (this.silenceSec > 2) this.activeSec = 0;
 
       // 自動正規化と包絡線
       for (let g = 0; g < 4; g++) this.agc[g].update(groupDb[g], active && groupDb[g] > fl[g].db + cfg.gateDb, fl[g].db);
@@ -1051,9 +1489,42 @@ table.setlist th { color: var(--muted); font-weight: normal; }
           // スネアの胴鳴りがキック帯域に漏れた分は、キック帯域のピークより明らかに小さければ捨てる
           if (s > 0 && type === 'kick' && this.hopCount - this.lastSnareHop <= cfg.kickSnareHops && det.rel < -cfg.kickSnareRelDb) continue;
           if (s > 0 && type === 'snare') this.lastSnareHop = this.hopCount;
+          if (s > 0 && type === 'kick') {
+            // 低域が中域より十分強い立ち上がりだけを「ドラムがある」証拠として数える
+            // （ピアノやギターの低い音がキック帯域に漏れたものは中域の方が強い）
+            if (powToDb(this.bandE[0]) - powToDb(this.bandE[1] + this.bandE[2]) > cfg.drumRatioDb) {
+              this.kickRing[this.kickRingIdx] = sampleEnd;
+              this.kickRingIdx = (this.kickRingIdx + 1) % this.kickRing.length;
+            }
+            this.tempo.noteKick(s, sampleEnd);
+            if (this.melMode) continue; // ドラムの無い曲モードではメロディの立ち上がりをキックとして使う
+          }
           if (s > 0) this._onset(type, sampleEnd, s);
-          else if (det.strengthUpdate > 0 && this.boost[type] < det.strengthUpdate) this.boost[type] = det.strengthUpdate;
+          else if (det.strengthUpdate > 0 && !(type === 'kick' && this.melMode) && this.boost[type] < det.strengthUpdate) this.boost[type] = det.strengthUpdate;
         }
+      }
+
+      // メロディ（150Hz〜5kHz）の立ち上がり
+      const eMel = this.bandE[1] + this.bandE[2] + 0.5 * this.bandE[3];
+      const melFl = this.melFloor.update(powToDb(eMel), this.agc[2].ref);
+      const ms = this.melDet.step(eMel, active ? Math.max(melFl + cfg.gateDb, cfg.silenceAbsDb) : Infinity, this.sens);
+      if (ms > 0) {
+        this.melRing[this.melRingIdx] = sampleEnd;
+        this.melRingIdx = (this.melRingIdx + 1) % this.melRing.length;
+        if (this.melMode) this._onset('kick', sampleEnd, ms);
+      } else if (this.melMode && this.melDet.strengthUpdate > 0 && this.boost.kick < this.melDet.strengthUpdate) {
+        this.boost.kick = this.melDet.strengthUpdate;
+      }
+      if ((this.hopCount & 63) === 0) this._updateMode();
+
+      // テンポ推定用の立ち上がりの強さ
+      if (active) {
+        const w = cfg.tempoWeights;
+        let osf = 0;
+        for (let b = 0; b < nb; b++) osf += w[b] * this.det[b].flux;
+        this.tempo.push(osf, sampleEnd);
+      } else {
+        this.tempo.push(0, sampleEnd);
       }
 
       // アクセント（キメ）：3 帯域以上が同時に立ち上がり、かつ全帯域の短時間音量が
@@ -1092,6 +1563,21 @@ table.setlist th { color: var(--muted); font-weight: normal; }
       this.l3s.update(dbFull > -120 ? Math.max(dbFull, -90) : -90);
       this.peak60.update(this.l3s.v);
     }
+
+    /** ドラムの有無でモードを切り替える（auto のとき） */
+    _updateMode() {
+      const mode = this.cfg.melodicMode;
+      if (mode === 'on') { this.melMode = true; return; }
+      if (mode === 'off') { this.melMode = false; return; }
+      const since = this.sampleCount - 6 * this.sr;
+      let kicks = 0, mels = 0;
+      for (let i = 0; i < 32; i++) { if (this.kickRing[i] > since) kicks++; if (this.melRing[i] > since) mels++; }
+      if (!this.melMode && this.activeSec > 4 && kicks <= 1 && mels >= 4) this.melMode = true;
+      else if (this.melMode && kicks >= 5) this.melMode = false;
+    }
+
+    /** タップテンポ（今の音声位置を拍として登録）。BPM（3 回目以降）を返す */
+    tap() { return this.tempo.tap(this.sampleCount); }
 
     _onset(type, sample, strength) {
       if (this.onsetLog) this.onsetLog.push({ type, sample, strength });
@@ -1142,6 +1628,17 @@ table.setlist th { color: var(--muted); font-weight: normal; }
         f[t] = v > this.boost[t] ? v : this.boost[t];
         this.boost[t] = 0;
       }
+      // テンポ・拍
+      const ts = this.tempo.state(this.sampleCount, this.tempoState);
+      f.bpm = ts.bpm; f.beatPhase = ts.phase; f.beatConf = ts.conf; f.barPhase = ts.bar; f.tempoManual = ts.manual;
+      if (ts.bpm && this.lastBeatIndex !== null && ts.beatIndex > this.lastBeatIndex && ts.conf >= 0.25 && this.active) {
+        this.flagsAcc |= FLAG.beat;
+        f.beatN++;
+        if (ts.bar < 0.25) this.flagsAcc |= FLAG.downbeat;
+      }
+      this.lastBeatIndex = ts.bpm ? ts.beatIndex : null;
+      f.melodic = this.melMode;
+
       f.onsetFlags = this.flagsAcc;
       this.flagsAcc = 0;
 
@@ -1253,7 +1750,7 @@ table.setlist th { color: var(--muted); font-weight: normal; }
     constructor(sr, seconds) {
       this.sr = sr;
       this.buf = new Float32Array(Math.ceil(sr * seconds));
-      this.onsets = { kick: [], snare: [], hat: [], crash: [] };
+      this.onsets = { kick: [], snare: [], hat: [], crash: [], note: [] };
     }
 
     add(start, fn, dur) {
@@ -1341,6 +1838,39 @@ table.setlist th { color: var(--muted); font-weight: normal; }
       }, dur);
     }
 
+    /** ピアノ/ギターの単音・和音（倍音が速く減衰する撥弦・打鍵の音）。freqs は配列 */
+    pluck(t, freqs, vel, dur) {
+      this.onsets.note.push(t);
+      const sr = this.sr, n = freqs.length;
+      const ph = new Float64Array(n * 4);
+      this.add(t, (x) => {
+        let s = 0;
+        for (let k = 0; k < n; k++) {
+          for (let h = 0; h < 4; h++) {
+            const i = k * 4 + h;
+            ph[i] += (freqs[k] * (h + 1)) / sr;
+            if (ph[i] > 1) ph[i] -= 1;
+            s += Math.sin(2 * Math.PI * ph[i]) * Math.exp(-x * (2.2 + h * 2.5)) / (h + 1);
+          }
+        }
+        const atk = Math.min(1, x / 0.003);
+        return (s / Math.sqrt(n)) * atk * 0.32 * vel;
+      }, dur || 1.6);
+    }
+
+    /** 歌・ストリングスのような持続音（立ち上がりがゆっくり。オンセットの正解には含めない） */
+    pad(t, freq, vel, dur) {
+      const sr = this.sr;
+      let ph = 0;
+      this.add(t, (x) => {
+        const vib = 1 + 0.004 * Math.sin(2 * Math.PI * 5.5 * x);
+        ph += (freq * vib) / sr;
+        if (ph > 1) ph -= 1;
+        const env = Math.min(1, x / 0.25) * Math.min(1, Math.max(0, (dur - x) / 0.3));
+        return (Math.sin(2 * Math.PI * ph) + 0.3 * Math.sin(4 * Math.PI * ph)) * env * 0.18 * vel;
+      }, dur);
+    }
+
     normalize(peak) {
       let m = 0;
       for (const v of this.buf) m = Math.max(m, Math.abs(v));
@@ -1419,6 +1949,19 @@ table.setlist th { color: var(--muted); font-weight: normal; }
         }
         if (sec.guitar === 'chord') m.guitar(tb, bar * 0.98, root, g, false);
         else if (sec.guitar === 'chug') for (let k = 0; k < 8; k++) m.guitar(tb + k * e8, e8 * 0.9, root, g, true);
+        // 鍵盤・アコースティック系（ドラムなしの曲のテスト用）
+        const r4 = root * 4, maj = [1, 1.26, 1.5, 2];
+        if (sec.keys === 'arp') {
+          const seq = [0, 2, 1, 3, 2, 1, 3, 2];
+          for (let k = 0; k < 8; k++) m.pluck(tb + k * e8 + jit(), [r4 * maj[seq[k]]], v() * (k % 2 ? 0.8 : 1), 1.2);
+        } else if (sec.keys === 'chords') {
+          m.pluck(tb + jit(), maj.map((x) => r4 * x), v(), 2.0);
+          m.pluck(tb + 2 * beat + jit(), maj.map((x) => r4 * x), v() * 0.85, 2.0);
+        } else if (sec.keys === 'ballad') {
+          m.pluck(tb + jit(), maj.slice(0, 3).map((x) => r4 * x), v() * 0.9, 2.4);
+          for (let k = 1; k < 4; k++) m.pluck(tb + k * beat + jit(), [r4 * 2 * maj[(b + k) % 4]], v() * 0.7, 1.4);
+        }
+        if (sec.vocal) m.pad(tb, r4 * 2 * maj[b % 4], g, bar);
       }
       t0 += sec.bars * bar;
     }
@@ -1575,6 +2118,8 @@ table.setlist th { color: var(--muted); font-weight: normal; }
     async start(opts) {
       Object.assign(this.opts, opts || {});
       this._set('starting');
+      this._playToken = (this._playToken || 0) + 1;
+      this._nextDecoded = null;
       this._stopSource();
       const ctx = this._ensureContext();
       try { await ctx.resume(); } catch (e) { /* noop */ }
@@ -1587,8 +2132,14 @@ table.setlist th { color: var(--muted); font-weight: normal; }
           ab.copyToChannel(s.samples, 0);
           this._startBuffer(ab, true);
         } else if (this.opts.source === 'file') {
-          const ab = await ctx.decodeAudioData(this.opts.fileData.slice(0));
-          this._startBuffer(ab, true);
+          const files = this.opts.files && this.opts.files.length ? this.opts.files
+            : this.opts.fileData ? [{ name: '音声ファイル', data: this.opts.fileData }] : [];
+          if (!files.length) throw new Error('音声ファイルを選んでください');
+          this.playlist = files;
+          await this._playFile(0);
+          return 0;
+        } else if (this.opts.source === 'display') {
+          await this._startDisplay();
         } else if (this.opts.source === 'buffer') {
           return this._startBuffer(this.opts.audioBuffer, !!this.opts.loop, this.opts.when);
         }
@@ -1633,6 +2184,70 @@ table.setlist th { color: var(--muted); font-weight: normal; }
         navigator.mediaDevices.removeEventListener('devicechange', this._onDeviceChange);
         navigator.mediaDevices.addEventListener('devicechange', this._onDeviceChange);
       }
+    }
+
+    /** プレイリストの i 曲目を再生（1 曲ならループ。複数なら終わったら次へ、最後の次は最初へ） */
+    async _playFile(i) {
+      const list = this.playlist, ctx = this.ctx;
+      const token = (this._playToken = (this._playToken || 0) + 1);
+      const item = list[i % list.length];
+      const ab = this._nextDecoded && this._nextDecoded.i === i ? await this._nextDecoded.p : await ctx.decodeAudioData(item.data.slice(0));
+      if (token !== this._playToken) return;
+      this._stopSource();
+      this._startBuffer(ab, list.length === 1);
+      this.nowPlaying = item.name;
+      this.playIdx = i % list.length;
+      this._set('running', list.length > 1 ? `▶ ${i % list.length + 1}/${list.length} ${item.name}` : '');
+      if (list.length > 1) {
+        const src = this.bufferSrc;
+        const next = (i + 1) % list.length;
+        // 次の曲を先にデコードしておく（曲間を短く）
+        const p = ctx.decodeAudioData(list[next].data.slice(0));
+        p.catch(() => {});
+        this._nextDecoded = { i: next, p };
+        src.onended = () => { if (this.bufferSrc === src && this.status === 'running') this._playFile(next).catch((e) => this._set('error', describeError(e))); };
+      }
+    }
+
+    /** 次の曲へ（プレイリスト） */
+    skipFile(d) {
+      if (!this.playlist || this.opts.source !== 'file' || !this.bufferSrc) return false;
+      const n = this.playlist.length;
+      this._playFile((((this.playIdx || 0) + (d || 1)) % n + n) % n).catch((e) => this._set('error', describeError(e)));
+      return true;
+    }
+
+    /** PC で再生中の音（画面共有の音声）。映像は使わないが、止めると共有自体が終わる環境があるので最小設定で残す */
+    async _startDisplay() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        throw new Error('この環境では「PC で再生中の音」を使えません（Chrome / Edge で開いてください）');
+      }
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: 1, width: { max: 320 }, height: { max: 240 } },
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+        systemAudio: 'include', selfBrowserSurface: 'exclude', surfaceSwitching: 'include',
+      });
+      const track = stream.getAudioTracks()[0];
+      if (!track) {
+        for (const t of stream.getTracks()) t.stop();
+        const e = new Error('音声が共有されていません。共有の画面で「システム音声を共有」（タブの場合は「タブの音声も共有」）をオンにしてから選び直してください。');
+        e.name = 'NoAudioShared';
+        throw e;
+      }
+      for (const v of stream.getVideoTracks()) v.onended = () => this._displayEnded();
+      this.stream = stream;
+      const st = track.getSettings ? track.getSettings() : {};
+      this.trackSettings = st;
+      this.opts.deviceLabel = track.label || '画面共有の音声';
+      track.onended = () => this._displayEnded();
+      this.srcNode = this.ctx.createMediaStreamSource(stream);
+      this.channels = st.channelCount || 2;
+      this._route(this.srcNode, false);
+    }
+
+    _displayEnded() {
+      if (this.opts.source !== 'display' || this.status === 'idle') return;
+      this._set('lost', '画面共有が終了しました。もう一度「▶ 開始」を押して共有し直してください。');
     }
 
     _startBuffer(audioBuffer, loop, when) {
@@ -1699,6 +2314,7 @@ table.setlist th { color: var(--muted); font-weight: normal; }
     }
 
     stop() {
+      this._playToken = (this._playToken || 0) + 1;
       this._stopSource();
       this._set('idle');
     }
@@ -1868,7 +2484,8 @@ table.setlist th { color: var(--muted); font-weight: normal; }
         outputLatency: ctx && ctx.outputLatency !== undefined ? ctx.outputLatency : null,
         trackLatency: this.trackSettings && this.trackSettings.latency !== undefined ? this.trackSettings.latency : null,
         channels: this.channels,
-        device: this.opts.deviceLabel || (this.opts.source === 'mic' ? '既定のデバイス' : this.opts.source),
+        device: this.opts.source === 'file' ? (this.nowPlaying || '音声ファイル') : this.opts.source === 'demo' ? 'デモ音源'
+          : this.opts.deviceLabel || (this.opts.source === 'mic' ? '既定のデバイス' : this.opts.source),
         chunk: this.diag.chunk,
         chunkMax: this.diag.chunkMax,
         align: this.diag.align,
@@ -1882,6 +2499,8 @@ table.setlist th { color: var(--muted); font-weight: normal; }
 
   function describeError(e) {
     const name = (e && e.name) || '';
+    if (name === 'NoAudioShared') return e.message;
+    if ((name === 'NotAllowedError' || name === 'AbortError') && e && /display|screen|share/i.test(String(e.message))) return '画面共有がキャンセルされました。もう一度「▶ 開始」を押して、共有する画面（またはタブ）と音声を選んでください。';
     if (name === 'NotAllowedError' || name === 'SecurityError') {
       return 'マイクの使用が許可されていません。アドレスバー左のアイコン →「マイク」を「許可」にしてから、もう一度お試しください。'
         + '（Mac: システム設定 > プライバシーとセキュリティ > マイク で Chrome を許可 / Windows: 設定 > プライバシー > マイク でデスクトップアプリのアクセスを許可）';
@@ -2175,6 +2794,9 @@ void main() {
       this.specSlowBytes = new Uint8Array(64);
       this.waveBytes = new Uint8Array(512);
       this.feedbackScene = null;
+      this.output = { rotate: 0, flipH: false, flipV: false, size: 1, x: 0, y: 0 };
+      this.logo = null; // { tex, aspect }
+      this.logoUrl = '';
       canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); this.lost = true; this.lostCount = (this.lostCount || 0) + 1; }, false);
       canvas.addEventListener('webglcontextrestored', () => {
         try { this._initGL(); this.lost = false; } catch (e) { this.initError = e.message; }
@@ -2207,6 +2829,8 @@ void main() {
       this.texWave = r8(512);
       this.texBlank = G.texture(gl, 1, 1, { data: new Uint8Array(4) });
       if (this.text) this.text.reset(gl); else this.text = new G.TextLayer(gl);
+      this.logo = null;
+      if (this.logoUrl) { const u = this.logoUrl; this.logoUrl = ''; this.setLogo(u); }
       this.targets = null;
       this.tw = 0; this.th = 0;
       this.feedbackScene = null;
@@ -2255,15 +2879,32 @@ void main() {
 
     available(id) { return !!this.programs[id]; }
 
-    /** キャンバスと描画先のサイズを合わせる */
+    /** 表示の調整（位置・サイズ・回転・反転） */
+    setOutput(o) {
+      const d = { rotate: 0, flipH: false, flipV: false, size: 1, x: 0, y: 0 };
+      const v = Object.assign({}, d, o || {});
+      v.rotate = [0, 90, 180, 270].includes(+v.rotate) ? +v.rotate : 0;
+      v.size = Math.max(0.3, Math.min(1, +v.size || 1));
+      v.x = Math.max(-0.5, Math.min(0.5, +v.x || 0));
+      v.y = Math.max(-0.5, Math.min(0.5, +v.y || 0));
+      this.output = v;
+    }
+
+    /** キャンバスと描画先のサイズを合わせる。論理サイズ = 表示エリア（回転後） */
     _resize() {
       const c = this.canvas;
       const pr = this.opts.pixelRatio || Math.min(globalThis.devicePixelRatio || 1, 1);
       const w = Math.max(16, Math.round((c.clientWidth || c.width) * pr));
       const h = Math.max(16, Math.round((c.clientHeight || c.height) * pr));
       if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+      const o = this.output;
+      const aw = w * o.size, ah = h * o.size;
+      this.area = [w / 2 + o.x * w, h / 2 + o.y * h, aw, ah];
+      const rot90 = o.rotate === 90 || o.rotate === 270;
+      this.lw = rot90 ? ah : aw;
+      this.lh = rot90 ? aw : ah;
       const s = this.scale;
-      const tw = Math.max(16, Math.round(w * s)), th = Math.max(16, Math.round(h * s));
+      const tw = Math.max(16, Math.round(this.lw * s)), th = Math.max(16, Math.round(this.lh * s));
       if (!this.targets || tw !== this.tw || th !== this.th) {
         const gl = this.gl;
         if (this.targets) for (const t of this.targets) G.disposeTarget(gl, t);
@@ -2271,6 +2912,31 @@ void main() {
         this.tw = tw; this.th = th;
         this.ping = 0;
       }
+    }
+
+    /** ロゴ画像（data URL）。空なら消す */
+    setLogo(url) {
+      if (url === this.logoUrl) return;
+      this.logoUrl = url || '';
+      const gl = this.gl;
+      if (this.logo) { gl.deleteTexture(this.logo.tex); this.logo = null; }
+      if (!url) return;
+      const img = new Image();
+      img.onload = () => {
+        if (this.logoUrl !== url || this.lost) return;
+        const tex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, img);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+        gl.generateMipmap(gl.TEXTURE_2D);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        this.logo = { tex, aspect: img.naturalWidth / Math.max(1, img.naturalHeight) };
+      };
+      img.src = url;
     }
 
     /** フレーム間隔から描画解像度を自動調整 */
@@ -2334,13 +3000,14 @@ void main() {
       gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 512, 1, gl.RED, gl.UNSIGNED_BYTE, this.waveBytes);
     }
 
-    /** テキスト枠（uv 0..1）：テクスチャの縦横比 4:1 を保って中央に */
-    textRect(widthFrac, cy) {
-      const A = this.canvas.width / this.canvas.height;
-      let w = widthFrac, h = (w * A) / G.TextLayer.ASPECT;
-      if (h > 0.45) { h = 0.45; w = (h * G.TextLayer.ASPECT) / A; }
-      return [0.5 - w / 2, cy - h / 2, w, h];
+    /** テクスチャ（縦横比 texAspect）を論理画面の中央付近に置く枠（uv 0..1）。maxW・maxH は画面に対する割合 */
+    fitRect(texAspect, maxW, maxH, cx, cy) {
+      const A = this.lw / this.lh;
+      let w = maxW, h = (w * A) / texAspect;
+      if (h > maxH) { h = maxH; w = (h * texAspect) / A; }
+      return [cx - w / 2, cy - h / 2, w, h];
     }
+    textRect(widthFrac, cy) { return this.fitRect(G.TextLayer.ASPECT, widthFrac, 0.45, 0.5, cy); }
 
     /**
      * 1 フレーム描画。
@@ -2385,13 +3052,22 @@ void main() {
       p.set('u_kickN', f.kickN % 4096); p.set('u_snareN', f.snareN % 4096); p.set('u_hatN', f.hatN % 4096); p.set('u_accentN', f.accentN % 4096);
       p.set('u_kickEv', f.kickEv); p.set('u_snareEv', f.snareEv); p.set('u_accentEv', f.accentEv);
       p.set('u_travel', fr.travel % 1000);
+      p.set('u_beat', f.bpm ? Math.exp(-f.beatPhase * 6) * Math.min(1, f.beatConf * 1.5) : 0);
+      p.set('u_beatPhase', f.beatPhase || 0);
+      p.set('u_bar', f.barPhase || 0);
+      p.set('u_bpm', f.bpm || 0);
       p.set('u_pal', fr.pal);
       p.tex('u_spec', this.texSpec);
       p.tex('u_specSlow', this.texSpecSlow);
       p.tex('u_wave', this.texWave);
       p.tex('u_prev', src.tex);
-      p.tex('u_title', fr.titleTex || this.texBlank);
-      if (p.has('u_titleRect')) p.set('u_titleRect', this.textRect(0.78, 0.52));
+      if (fr.titleLogo && this.logo) {
+        p.tex('u_title', this.logo.tex);
+        if (p.has('u_titleRect')) p.set('u_titleRect', this.fitRect(this.logo.aspect, 0.7, 0.6, 0.5, 0.5));
+      } else {
+        p.tex('u_title', fr.titleTex || this.texBlank);
+        if (p.has('u_titleRect')) p.set('u_titleRect', this.textRect(0.78, 0.52));
+      }
       if (fr.uniforms) for (const k in fr.uniforms) p.set(k, fr.uniforms[k]);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       this.ping = 1 - this.ping;
@@ -2400,13 +3076,31 @@ void main() {
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.viewport(0, 0, this.canvas.width, this.canvas.height);
       const q = this.post.use();
+      const o = this.output;
       q.set('u_res', [this.canvas.width, this.canvas.height]);
+      q.set('u_area', this.area);
+      q.set('u_rot', o.rotate / 90);
+      q.set('u_flip', [o.flipH ? 1 : 0, o.flipV ? 1 : 0]);
+      q.set('u_lres', [this.lw, this.lh]);
       q.set('u_time', fr.time);
       q.tex('u_scene', dst.tex);
-      const text = fr.text;
+      const text = fr.text, text2 = fr.text2;
       q.tex('u_text', text && text.tex ? text.tex : this.texBlank);
       q.set('u_textAlpha', text ? text.alpha : 0);
       q.set('u_textRect', this.textRect(0.62, 0.5));
+      q.tex('u_text2', text2 && text2.tex ? text2.tex : this.texBlank);
+      q.set('u_text2Alpha', text2 ? text2.alpha : 0);
+      q.set('u_text2Rect', this.textRect(0.7, 0.2));
+      const corner = fr.logoCorner && this.logo ? fr.logoCorner : '';
+      q.tex('u_logo', corner ? this.logo.tex : this.texBlank);
+      q.set('u_logoAlpha', corner ? 0.85 : 0);
+      if (corner) {
+        const r = this.fitRect(this.logo.aspect, 0.22, 0.16, 0.5, 0.5);
+        const m = 0.03;
+        r[0] = corner[1] === 'l' ? m * (this.lh / this.lw) : 1 - r[2] - m * (this.lh / this.lw);
+        r[1] = corner[0] === 'b' ? m : 1 - r[3] - m;
+        q.set('u_logoRect', r);
+      }
       q.set('u_flash', fr.flash || 0);
       q.set('u_flashColor', fr.flashColor || [1, 1, 1]);
       q.set('u_black', fr.black || 0);
@@ -2464,7 +3158,7 @@ void main() {
     info() {
       return {
         gpu: this.gpu, software: this.software, hdr: this.hdr, scale: this.scale, fps: this.fps,
-        size: [this.canvas.width, this.canvas.height], sceneSize: [this.tw, this.th],
+        size: [this.canvas.width, this.canvas.height], sceneSize: [this.tw, this.th], logical: [Math.round(this.lw), Math.round(this.lh)],
         failed: Object.keys(this.failed), lost: this.lost, lostCount: this.lostCount || 0,
       };
     }
@@ -2493,6 +3187,7 @@ uniform vec2 u_kickEv[8];
 uniform vec2 u_snareEv[8];
 uniform vec2 u_accentEv[8];
 uniform float u_travel;
+uniform float u_beat, u_beatPhase, u_bar, u_bpm; // 拍のパルス（拍で 1 → 減衰）・拍の位相・小節の位相
 uniform vec3 u_pal[4];
 uniform sampler2D u_spec;
 uniform sampler2D u_specSlow;
@@ -2996,9 +3691,184 @@ void main() {
   });
 })(globalThis.VJ = globalThis.VJ || {});
 </script>
+<script>/* src/scenes/eq.js */
+/* 7: イコライザー — 中央から左右対称に伸びる LED 風のスペクトラムバー（上下にも鏡映）。
+ * 低音が中央、高音が外側。本体はゆっくり下がる値（ちらつき防止）、細いキャップは速い値。
+ * キックでバー全体がわずかに弾む。拍で中央線が光る。EDM・ダンス・DJ・何にでも。 */
+(function (VJ) {
+  'use strict';
+  VJ.scenes.register({
+    id: 'eq', key: '7', name: 'Equalizer', nameJa: 'イコライザー', aliases: ['イコライザー', 'スペクトラム', 'eq'], cost: 1,
+    frag: `
+void main() {
+  vec2 uv = gl_FragCoord.xy / u_res;
+  float A = u_res.x / u_res.y;
+  float nb = floor(clamp(A * 18.0, 16.0, 40.0));   // 片側のバーの本数（画面の縦横比に合わせる）
+  float x = abs(uv.x - 0.5) * 2.0;                  // 0 = 中央（低音）→ 1 = 端（高音）
+  float bi = floor(x * nb);
+  float fx = fract(x * nb);
+  float t = (bi + 0.5) / nb;
+  float y = abs(uv.y - 0.5) * 2.0;                  // 中央線からの距離 0..1
+  float body = specS(t * 0.92) * (0.88 + 0.08 * u_kick);
+  float cap = spec(t * 0.92);
+  float H = body * 0.86 + 0.02;
+  float gap = step(0.14, fx) * step(fx, 0.86);
+  float seg = step(0.3, fract(y * 26.0));            // LED のすき間
+  vec3 c = pal(t * 0.75 + 0.1);
+  vec3 col = vec3(0.004, 0.004, 0.012) + u_pal[2] * 0.04 * (1.0 - y);
+  float on = gap * seg * step(y, H);
+  col += c * on * (0.35 + 0.55 * (y / max(H, 0.05)));
+  // キャップ（速い値の位置に細い線）
+  float capY = cap * 0.86 + 0.03;
+  float capLine = gap * smoothstep(0.012, 0.0, abs(y - capY));
+  col += mix(c, vec3(1.0), 0.5) * capLine * 0.8;
+  // 中央線（拍で少し光る）
+  col += c * smoothstep(0.012, 0.0, y) * (0.25 + 0.35 * u_beat + 0.1 * idle());
+  outColor = vec4(col, 1.0);
+}`,
+  });
+})(globalThis.VJ = globalThis.VJ || {});
+</script>
+<script>/* src/scenes/stars.js */
+/* 8: 星空 — 宇宙を進む星（ワープ）。音量で進む速さ、キックで少しズーム、ハイハットで瞬き、
+ * 盛り上がりで星が増える、拍で星雲がゆっくり呼吸する。静かな曲・合唱・BGM にも合う。 */
+(function (VJ) {
+  'use strict';
+  VJ.scenes.register({
+    id: 'stars', key: '8', name: 'Stars', nameJa: '星空', aliases: ['星空', 'スター', 'ワープ'], cost: 1.5,
+    init(st) { st.fly = 0; },
+    update(st, f, dt) {
+      st.fly += (0.05 + 0.45 * f.level + 0.1 * f.intensity) * dt;
+      return { u_fly: st.fly };
+    },
+    frag: `
+uniform float u_fly;
+
+vec3 layer(vec2 p, float seed, float density) {
+  vec2 id = floor(p), gv = fract(p) - 0.5;
+  float h = hash12(id + seed);
+  if (h > density) return vec3(0.0);
+  vec2 off = (hash22(id + seed * 1.7) - 0.5) * 0.7;
+  float d = length(gv - off);
+  float tw = 0.7 + 0.3 * sin(u_time * (3.0 + h * 7.0) + h * 40.0);
+  tw = mix(1.0, tw, 0.3 + 0.7 * u_hat);
+  float size = 0.035 + 0.05 * fract(h * 13.7);
+  float core = smoothstep(size, 0.0, d);
+  float glow = smoothstep(size * 4.0, 0.0, d) * 0.25;
+  vec3 c = mix(vec3(1.0), pal(h * 3.0), 0.45);
+  return c * (core + glow) * tw;
+}
+
+void main() {
+  vec2 p = uvc() * (1.0 - 0.04 * u_kick);
+  float r = length(p);
+  // 星雲（暗め）
+  float n = vnoise(p * 2.2 + vec2(u_fly * 0.05, 0.0)) * vnoise(p * 4.0 - u_time * 0.02);
+  vec3 col = (u_pal[2] * 0.12 + u_pal[1] * 0.05) * n * (0.7 + 0.25 * u_beat + 0.15 * u_intensity);
+  float density = 0.25 + 0.35 * u_intensity;
+  for (int i = 0; i < 4; i++) {
+    float fi = float(i);
+    float depth = fract(fi / 4.0 + u_fly * 0.25);
+    float scale = mix(16.0, 0.8, depth);
+    float fade = smoothstep(0.0, 0.25, depth) * smoothstep(1.0, 0.85, depth);
+    col += layer(p * scale + fi * 37.1, fi * 11.3, density) * fade;
+  }
+  col *= 0.85 + 0.1 * idle();
+  outColor = vec4(col, 1.0);
+}`,
+  });
+})(globalThis.VJ = globalThis.VJ || {});
+</script>
+<script>/* src/scenes/scope.js */
+/* 9: オシロ — 音の波形そのものを光る線で描き、残像が上下に流れる（前フレーム再利用）。
+ * 歌・ピアノ・ギターの形がそのまま見えるので、アコースティックや合唱にも合う。
+ * キックで線が太く、音量で振れ幅、スネアで色が変わる。 */
+(function (VJ) {
+  'use strict';
+  VJ.scenes.register({
+    id: 'scope', key: '9', name: 'Scope', nameJa: 'オシロ', aliases: ['オシロ', '波形', 'オシロスコープ'], cost: 1.5, feedback: true,
+    init(st) { st.lvl = 0; },
+    update(st, f, dt) {
+      const k = dt * 60;
+      // 光過敏対策：振れ幅はゆっくり追従させた音量で（ドラムのたびに画面の明るさが跳ねないように）
+      st.lvl += (f.level - st.lvl) * Math.min(1, dt / 0.3);
+      return { u_decayS: Math.pow(0.86 + 0.04 * f.intensity, k), u_drift: 0.0015 * k, u_lvlS: st.lvl };
+    },
+    frag: `
+uniform float u_decayS, u_drift, u_lvlS;
+
+float lineAt(vec2 uv, float amp, float off) {
+  float e = 1.5 / u_res.x;
+  float w = wave(uv.x);
+  float y = 0.5 + off + amp * w;
+  float slope = amp * (wave(uv.x + e) - wave(uv.x - e)) / (2.0 * e) * (u_res.y / u_res.x);
+  float d = abs(uv.y - y) * u_res.y / sqrt(1.0 + slope * slope);
+  float th = 1.5 + 1.5 * u_kick + 0.8 * u_lvlS;
+  return smoothstep(th + 1.0, th * 0.4, d);
+}
+
+void main() {
+  vec2 uv = gl_FragCoord.xy / u_res;
+  // 残像：中央から上下へ少しずつ流れて消える
+  vec2 c = uv - 0.5;
+  vec2 puv = vec2(0.5 + c.x * 0.997, 0.5 + c.y * (1.0 - u_drift * 6.0));
+  vec3 prev = texture(u_prev, puv).rgb * u_decayS;
+  float amp = (0.15 + 0.12 * u_lvlS) * (1.0 - 0.3 * abs(c.x * 2.0));
+  vec3 lc = pal(uv.x * 0.4 + u_snareN * 0.21 + u_time * 0.03);
+  float l1 = lineAt(uv, amp, 0.0);
+  float l2 = lineAt(uv, -amp * 0.6, 0.0) * 0.35;
+  vec3 line = lc * (l1 * (0.5 + 0.25 * u_lvlS + 0.2 * idle()) + l2);
+  // 新しい線は前フレームと半分ずつ混ぜる（毎フレーム形が変わる波形のちらつきを抑える）
+  vec3 col = mix(prev, max(prev, line), 0.55);
+  col += lc * smoothstep(0.004, 0.0, abs(uv.y - 0.5)) * 0.08;
+  outColor = vec4(min(col, vec3(1.0)), 1.0);
+}`,
+  });
+})(globalThis.VJ = globalThis.VJ || {});
+</script>
+<script>/* src/scenes/testpattern.js */
+/* テストパターン（G キー）— プロジェクターの位置・台形・明るさを合わせるための図形。
+ * 格子・中心の十字・正円（縦横比の確認）・外枠・四隅の印・明るさの段階。音には反応しない。
+ * オートやセットリストでは使わない（hidden）。 */
+(function (VJ) {
+  'use strict';
+  VJ.scenes.register({
+    id: 'test', key: 'g', name: 'Test pattern', nameJa: 'テストパターン', aliases: ['テストパターン', 'test'], cost: 1, hidden: true,
+    frag: `
+float lineAA(float d, float w) { return 1.0 - smoothstep(w, w + 1.0, d); }
+void main() {
+  vec2 px = gl_FragCoord.xy;
+  vec2 uv = px / u_res;
+  vec2 p = uvc();
+  vec3 col = vec3(0.02);
+  // 格子（高さの 1/8 ごと）
+  float cell = u_res.y / 8.0;
+  vec2 g = abs(mod(px - u_res * 0.5 + cell * 0.5, cell) - cell * 0.5);
+  col = mix(col, vec3(0.35), lineAA(min(g.x, g.y), 0.5));
+  // 外枠と中心の十字
+  vec2 e = min(px, u_res - px);
+  col = mix(col, u_pal[0], lineAA(min(e.x, e.y), 2.0));
+  vec2 cc = abs(px - u_res * 0.5);
+  col = mix(col, vec3(1.0), lineAA(min(cc.x, cc.y), 1.0) * step(max(cc.x, cc.y), u_res.y * 0.08));
+  // 正円（つぶれて見えたら縦横比がずれている）
+  col = mix(col, u_pal[1], lineAA(abs(length(p) - 0.4) * u_res.y, 1.5));
+  // 四隅の L 字
+  vec2 k = min(px, u_res - px);
+  float corner = step(k.x, u_res.y * 0.08) * step(k.y, u_res.y * 0.08) * step(min(k.x, k.y), 6.0);
+  col = mix(col, vec3(1.0, 0.85, 0.2), corner);
+  // 明るさの段階（下部）：10 段
+  if (uv.y > 0.08 && uv.y < 0.14 && uv.x > 0.2 && uv.x < 0.8) col = vec3(floor((uv.x - 0.2) / 0.6 * 10.0) / 9.0);
+  // パレット（上部）
+  if (uv.y > 0.86 && uv.y < 0.92 && uv.x > 0.3 && uv.x < 0.7) col = u_pal[int(clamp(floor((uv.x - 0.3) / 0.1), 0.0, 3.0))];
+  outColor = vec4(col, 1.0);
+}`,
+  });
+})(globalThis.VJ = globalThis.VJ || {});
+</script>
 <script>/* src/scenes/post.js */
-/* 仕上げパス：シーンの拡大 + インパクト（色収差＋ズーム）+ 曲名 + フラッシュ + 明るさ + 暗転
- * + 周辺減光 + ディザ + 遅延計測用の四角。 */
+/* 仕上げパス：表示の調整（位置・サイズ・回転・反転）→ シーンの拡大 + インパクト（色収差＋ズーム）
+ * + 曲名 + テロップ + ロゴの透かし + フラッシュ + 明るさ + 暗転 + 周辺減光 + ディザ + 遅延計測用の四角。
+ * 「論理座標」はシーン・文字の座標（回転後の画面）、「物理座標」は実際のキャンバスの画素。 */
 (function (VJ) {
   'use strict';
   VJ.scenes.POST = `#version 300 es
@@ -3006,48 +3876,69 @@ precision highp float;
 out vec4 outColor;
 uniform sampler2D u_scene;
 uniform sampler2D u_text;
-uniform vec2 u_res;
-uniform float u_time, u_flash, u_black, u_master, u_impact, u_textAlpha, u_latSq, u_vignette;
+uniform sampler2D u_text2;
+uniform sampler2D u_logo;
+uniform vec2 u_res;          // 物理（キャンバス）サイズ
+uniform vec4 u_area;         // 表示エリア（物理 px）：中心 x, y, 幅, 高さ
+uniform float u_rot;         // 0..3（90° 単位、時計回り）
+uniform vec2 u_flip;         // 左右・上下反転（物理）
+uniform vec2 u_lres;         // 論理サイズ（回転後）
+uniform float u_time, u_flash, u_black, u_master, u_impact, u_textAlpha, u_text2Alpha, u_logoAlpha, u_latSq, u_vignette;
 uniform vec3 u_flashColor;
-uniform vec4 u_textRect;
+uniform vec4 u_textRect, u_text2Rect, u_logoRect;
 
 float hash12(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 
-void main() {
-  vec2 uv = gl_FragCoord.xy / u_res;
-  vec2 c = uv - 0.5;
-  // インパクト：明るさを変えずに色収差とズーム（フラッシュ制限の対象外で安全）
-  vec2 uz = 0.5 + c * (1.0 - 0.03 * u_impact);
-  float ca = 0.008 * u_impact;
-  vec3 col;
-  col.r = texture(u_scene, uz + c * ca).r;
-  col.g = texture(u_scene, uz).g;
-  col.b = texture(u_scene, uz - c * ca).b;
+// 枠の外は 0（分岐させずに掛け算で消す：ミップマップの微分が乱れないように）
+vec4 sampleRect(sampler2D t, vec4 rect, vec2 uv) {
+  vec2 q = (uv - rect.xy) / rect.zw;
+  float inside = step(0.0, q.x) * step(q.x, 1.0) * step(0.0, q.y) * step(q.y, 1.0);
+  return texture(t, clamp(q, 0.0, 1.0)) * inside;
+}
 
-  // 曲名
-  if (u_textAlpha > 0.001) {
-    vec2 t = (uv - u_textRect.xy) / u_textRect.zw;
-    if (t.x >= 0.0 && t.x <= 1.0 && t.y >= 0.0 && t.y <= 1.0) {
-      vec4 tx = texture(u_text, t);
-      col = mix(col, tx.rgb, tx.a * u_textAlpha);
-    }
+void main() {
+  vec2 px = gl_FragCoord.xy;
+  // 物理 → 表示エリア内の 0..1
+  vec2 q = (px - (u_area.xy - u_area.zw * 0.5)) / u_area.zw;
+  vec3 col = vec3(0.0);
+  if (q.x >= 0.0 && q.x <= 1.0 && q.y >= 0.0 && q.y <= 1.0) {
+    if (u_flip.x > 0.5) q.x = 1.0 - q.x;
+    if (u_flip.y > 0.5) q.y = 1.0 - q.y;
+    // 回転（論理 uv を求める）
+    vec2 uv = q;
+    if (u_rot > 0.5 && u_rot < 1.5) uv = vec2(1.0 - q.y, q.x);
+    else if (u_rot > 1.5 && u_rot < 2.5) uv = vec2(1.0 - q.x, 1.0 - q.y);
+    else if (u_rot > 2.5) uv = vec2(q.y, 1.0 - q.x);
+
+    vec2 c = uv - 0.5;
+    // インパクト：明るさを変えずに色収差とズーム（フラッシュ制限の対象外で安全）
+    vec2 uz = 0.5 + c * (1.0 - 0.03 * u_impact);
+    float ca = 0.008 * u_impact;
+    col.r = texture(u_scene, uz + c * ca).r;
+    col.g = texture(u_scene, uz).g;
+    col.b = texture(u_scene, uz - c * ca).b;
+
+    // 周辺減光はシーンにだけ（文字やロゴは隅でも暗くしない）
+    float aspect = u_lres.x / u_lres.y;
+    float v = smoothstep(1.25, 0.35, length(c * vec2(aspect, 1.0)) * 1.1);
+    col *= mix(1.0, v, u_vignette);
+
+    if (u_logoAlpha > 0.001) { vec4 t = sampleRect(u_logo, u_logoRect, uv); col = mix(col, t.rgb, t.a * u_logoAlpha); }
+    if (u_textAlpha > 0.001) { vec4 t = sampleRect(u_text, u_textRect, uv); col = mix(col, t.rgb, t.a * u_textAlpha); }
+    if (u_text2Alpha > 0.001) { vec4 t = sampleRect(u_text2, u_text2Rect, uv); col = mix(col, t.rgb, t.a * u_text2Alpha); }
+
+    col += u_flashColor * u_flash;
+    col *= u_master;
+    col *= 1.0 - u_black;
   }
 
-  col += u_flashColor * u_flash;
-  col *= u_master;
-  float aspect = u_res.x / u_res.y;
-  float v = smoothstep(1.25, 0.35, length(c * vec2(aspect, 1.0)) * 1.1);
-  col *= mix(1.0, v, u_vignette);
-  col *= 1.0 - u_black;
-
-  // 遅延計測用：右下の小さな四角
+  // 遅延計測用：右下（物理）の小さな四角
   if (u_latSq >= 0.0) {
-    vec2 px = gl_FragCoord.xy;
     float sz = max(24.0, u_res.y * 0.05);
     if (px.x > u_res.x - sz - 8.0 && px.x < u_res.x - 8.0 && px.y > 8.0 && px.y < sz + 8.0) col = vec3(u_latSq);
   }
   // ディザ（グラデーションの段差を防ぐ）
-  col += (hash12(gl_FragCoord.xy + fract(u_time) * 97.0) - 0.5) / 255.0;
+  col += (hash12(px + fract(u_time) * 97.0) - 0.5) / 255.0;
   outColor = vec4(clamp(col, 0.0, 1.0), 1.0);
 }`;
 })(globalThis.VJ = globalThis.VJ || {});
@@ -3197,9 +4088,9 @@ void main() {
   'use strict';
 
   const TIERS = {
-    low: ['aurora', 'horizon', 'ripple'],
-    mid: ['ripple', 'tunnel', 'horizon', 'kaleido'],
-    high: ['tunnel', 'kaleido', 'glitch'],
+    low: ['aurora', 'horizon', 'stars', 'ripple'],
+    mid: ['ripple', 'tunnel', 'horizon', 'kaleido', 'eq'],
+    high: ['tunnel', 'kaleido', 'glitch', 'eq'],
   };
 
   class AutoDirector {
@@ -3235,9 +4126,15 @@ void main() {
       if (!f.active) return null;
       // タイトル（開演前・MC・終演）は操作者が離れるまで維持する
       if (st.sceneId === 'title') return null;
+      const prof = (show.profile && show.profile.show) || {};
+      const S = prof.switchSec || this.opts.switchSec;
+      const KF = prof.kickFallbackSec || this.opts.kickFallbackSec;
       const since = now - this.lastSwitch;
-      const trigger = (since >= this.opts.switchSec && (f.onsetFlags & (8 | 16)))
-        || (since >= this.opts.kickFallbackSec && (f.onsetFlags & 1) && f.kick >= 0.5);
+      const fl = f.onsetFlags;
+      // 1) キメ・ブレイク明け  2) 少し待っても無ければ小節の頭（テンポが取れているとき）  3) それも無ければキック
+      const trigger = (since >= S && (fl & (8 | 16)))
+        || (since >= S + 6 && (fl & 64) && f.beatConf >= 0.35)
+        || (since >= KF && (fl & 1));
       if (!trigger) return null;
       const song = show.currentSong();
       if (song && song.scenes.length === 1) return null; // 1 シーン指定の曲は固定
@@ -3253,15 +4150,18 @@ void main() {
     _pick(show, f) {
       const song = show.currentSong();
       const cur = show.state.sceneId;
-      const ok = (id) => show.sceneAvailable(id);
       if (song && song.scenes.length > 1) {
-        const list = song.scenes.filter(ok);
+        const list = song.scenes.filter((id) => show.sceneAvailable(id));
         if (!list.length) return null;
         const i = list.indexOf(cur);
         return list[(i + 1) % list.length];
       }
-      const tier = f.intensity > 0.66 ? TIERS.high : f.intensity > 0.33 ? TIERS.mid : TIERS.low;
-      const cands = tier.filter((id) => id !== cur && ok(id));
+      const tiers = (show.profile && show.profile.show.tiers) || TIERS;
+      const ok = (id) => (show.autoAllowed ? show.autoAllowed(id) : show.sceneAvailable(id));
+      const tier = f.intensity > 0.66 ? tiers.high : f.intensity > 0.33 ? tiers.mid : tiers.low;
+      let cands = tier.filter((id) => id !== cur && ok(id));
+      // 選べるものが無ければ（オートで使うシーンを絞った場合など）許可されたシーン全体から
+      if (!cands.length) cands = VJ.scenes.list.map((d) => d.id).filter((id) => id !== cur && ok(id));
       if (!cands.length) return null;
       return cands[Math.floor(this.rng() * cands.length)];
     }
@@ -3303,8 +4203,12 @@ void main() {
         songIdx: -1, endState: false,
         flash: 0, flashColor: [1, 1, 1], impact: 0, strobe: false,
         text: null, travel: 0, idle: 1, latSq: 0,
+        msg: null, // テロップ { text, t0, off }
+        beforeTest: null, // テストパターンの前のシーン
         uniforms: null,
       };
+      this.onTap = null; // () => BPM（タップテンポ。FeatureExtractor へつなぐ）
+      this.onSession = null; // 状態が変わったら呼ばれる（前回の続きから再開するため）
       this.fx = { requestFlash: (s, src) => this.flash(s, src) };
       this.applySettings(settings);
       this._applyScene('title');
@@ -3321,9 +4225,19 @@ void main() {
       this.state.master = clamp(+s.master || 1, 0.2, 1);
       this.state.sens = clamp(s.sensitivity | 0, -5, 5);
       this.state.paletteIdx = s.paletteIdx | 0;
+      this.profile = VJ.profileById(s.profile);
       this._palette();
       if (this.onSensitivity) this.onSensitivity(this.state.sens);
     }
+    /** 自動のフラッシュ（キメ・ブレイク明け・シーンの反転など）を使うか */
+    autoFlashOn() { return !!this.settings.autoFlash && this.profile.show.autoFlash !== false && !this.settings.noFlash; }
+    /** オートで使ってよいシーンか */
+    autoAllowed(id) {
+      const def = VJ.scenes.byId[id];
+      return !!def && !def.hidden && id !== 'title' && this.sceneAvailable(id) && !(this.settings.autoScenes && this.settings.autoScenes[id] === false);
+    }
+    /** 動きの大きさ（設定 × 音楽タイプの基準） */
+    react() { return VJ.util.clamp((+this.settings.react || 1) * (this.profile.show.react || 1), 0.2, 1.6); }
     get auto() { return this.state.auto; }
     bandName() { return (this.setlist && this.setlist.band) || this.settings.bandName || ''; }
     endText() { return (this.setlist && this.setlist.end) || this.settings.endText || 'Thank you!'; }
@@ -3348,6 +4262,26 @@ void main() {
       this.state.sceneStart = this.now;
       this.state.pending = null;
       this.director.noteSwitch(this.now);
+      this._session();
+    }
+
+    _session() { if (this.onSession) this.onSession(this.session()); }
+    /** 再開用の状態 */
+    session() {
+      const s = this.state;
+      return { songIdx: s.songIdx, endState: s.endState, sceneId: s.sceneId === 'test' ? (s.beforeTest || 'title') : s.sceneId, paletteIdx: s.paletteIdx, t: Date.now() };
+    }
+    /** 前回の続きから再開 */
+    restoreSession(x) {
+      if (!x) return false;
+      const songs = this.setlist.songs;
+      this.state.songIdx = Math.max(-1, Math.min(songs.length, x.songIdx | 0));
+      this.state.endState = !!x.endState || this.state.songIdx >= songs.length;
+      if (typeof x.paletteIdx === 'number') { this.state.paletteIdx = x.paletteIdx; this._palette(); }
+      this._applyScene(VJ.scenes.byId[x.sceneId] && this.sceneAvailable(x.sceneId) ? x.sceneId : 'title');
+      const song = this.currentSong();
+      this._toast(song ? `M${this.state.songIdx + 1} ${song.title} から再開` : '再開しました');
+      return true;
     }
 
     selectScene(id, opts) {
@@ -3356,6 +4290,7 @@ void main() {
       if (!this.sceneAvailable(id)) { this._toast(`「${VJ.scenes.byId[id].nameJa}」は使えません（シェーダエラー）`, 'warn'); return false; }
       this.director.noteSwitch(this.now);
       this.director.silentFrom = null;
+      this.state.beforeTest = null;
       const name = VJ.scenes.byId[id].nameJa;
       if (opts.immediate || !this.lastActive) {
         this._applyScene(id);
@@ -3409,8 +4344,10 @@ void main() {
       if (song.palette !== null) { this.state.paletteIdx = song.palette; this._palette(); }
       this.director.noteSwitch(this.now);
       this.director.silentFrom = null;
+      if (this.onSongStart) this.onSongStart(i);
       if (!song.notitle) this.showSongTitle();
       this._toast(`M${i + 1} ${song.title}`);
+      this._session();
     }
 
     showSongTitle() {
@@ -3430,6 +4367,8 @@ void main() {
     // ---- 光・色・明るさ --------------------------------------------------
     /** フラッシュ（制限器を通る）。strength 0 は「枠だけ消費」（反転・残像リセット用） */
     flash(strength, src) {
+      if (this.settings.noFlash) return false;
+      if ((src === 'auto' || src === 'kaleido-reset' || src === 'glitch-invert') && !this.autoFlashOn()) return false;
       if (!this.limiter.allow(this.now)) return false;
       if (strength > 0) this.state.flash = Math.max(this.state.flash, strength);
       return true;
@@ -3458,6 +4397,16 @@ void main() {
       this.settings.master = this.state.master;
       this._toast(`明るさ: ${Math.round(this.state.master * 100)}%`);
     }
+    /** 明るさを直接（MIDI のつまみなど）。0.2〜1 */
+    setMaster(v) {
+      this.state.master = clamp(+v || 0.2, 0.2, 1);
+      this.settings.master = Math.round(this.state.master * 100) / 100;
+    }
+    /** 感度を直接（-5〜+5） */
+    setSensitivity(step) {
+      const v = clamp(Math.round(step), -5, 5);
+      if (v !== this.state.sens) this.nudgeSensitivity(v - this.state.sens);
+    }
     toggleAuto() {
       this.state.auto = !this.state.auto;
       this.settings.auto = this.state.auto;
@@ -3466,6 +4415,62 @@ void main() {
     }
     lock() { this.state.locked = true; this._toast('ロック（L 長押しで解除）'); }
     unlock() { this.state.locked = false; this._toast('ロック解除'); }
+
+    /** タップテンポ */
+    tap() {
+      const bpm = this.onTap ? this.onTap() : 0;
+      this._toast(bpm ? `テンポ: ${Math.round(bpm)} BPM（タップ）` : 'タップ（3 回以上たたくとテンポが決まります）');
+      return bpm;
+    }
+
+    /** テロップ：i 番目のメッセージを表示・もう一度で消す */
+    toggleMessage(i) {
+      const text = (this.settings.messages && this.settings.messages[i]) || '';
+      if (!text) { this._toast(`テロップ ${i + 1} が空です（設定 M で入力）`, 'warn'); return; }
+      this.showMessage(text);
+    }
+    /** テロップを表示（同じ文字なら消す）。空文字で消す */
+    showMessage(text) {
+      const m = this.state.msg;
+      if (!text || (m && !m.off && m.text === text)) {
+        if (m && !m.off) m.off = this.now;
+        return;
+      }
+      this.state.msg = { text, t0: this.now, off: 0 };
+    }
+    msgAlpha() {
+      const m = this.state.msg;
+      if (!m) return 0;
+      const a = Math.min(1, (this.now - m.t0) / 0.3);
+      if (!m.off) return a;
+      const b = 1 - (this.now - m.off) / 0.5;
+      if (b <= 0) { this.state.msg = null; return 0; }
+      return Math.min(a, b);
+    }
+
+    /** テストパターンの表示・解除 */
+    toggleTestPattern() {
+      const s = this.state;
+      if (s.sceneId === 'test') { const back = s.beforeTest || 'title'; s.beforeTest = null; this._applyScene(back); this._toast('テストパターン解除'); return; }
+      s.beforeTest = s.sceneId;
+      this._applyScene('test');
+      this._toast('テストパターン（G で戻る）');
+    }
+
+    /** 開演までのカウントダウン文字（無ければ ''） */
+    countdownText(nowDate) {
+      const t = String(this.settings.countdownTo || '').trim();
+      const m = /^(\d{1,2})[:：](\d{2})$/.exec(t);
+      if (!m || this.state.songIdx >= 0 || this.state.endState) return '';
+      const d = nowDate || new Date();
+      const target = new Date(d.getFullYear(), d.getMonth(), d.getDate(), +m[1], +m[2], 0);
+      let sec = Math.ceil((target - d) / 1000);
+      if (sec <= 0 || sec > 6 * 3600) return '';
+      const h = Math.floor(sec / 3600); sec -= h * 3600;
+      const mm = Math.floor(sec / 60), ss = sec % 60;
+      const pad = (x) => String(x).padStart(2, '0');
+      return '開演まで ' + (h ? `${h}:${pad(mm)}:${pad(ss)}` : `${pad(mm)}:${pad(ss)}`);
+    }
 
     // ---- 毎フレーム ------------------------------------------------------
     update(f, dt, now) {
@@ -3483,19 +4488,19 @@ void main() {
 
       // 予約された切替：次のビート（キック/スネア/アクセント）で
       if (s.pending) {
-        const hit = ((fl & 1) && f.kick >= 0.5) || ((fl & 2) && f.snare >= 0.5) || (fl & 8);
+        const hit = ((fl & 1) && f.kick >= 0.5) || ((fl & 2) && f.snare >= 0.5) || (fl & 8) || ((fl & 32) && f.beatConf >= 0.4);
         if (hit || now >= s.pending.deadline || !f.active) this._applyScene(s.pending.id);
       }
 
       // オート
-      const a = this.director.update(this, f, now);
+      const a = s.sceneId === 'test' ? null : this.director.update(this, f, now);
       if (a) {
         if (a.scene && a.scene !== s.sceneId && this.sceneAvailable(a.scene)) this._applyScene(a.scene);
         if (a.palette) this.cyclePalette(1, true);
       }
 
       // 自動フラッシュ・ストロボ・インパクト
-      if (this.settings.autoFlash && (fl & (8 | 16))) this.flash(fl & 16 ? 0.7 : 0.45, 'auto');
+      if (fl & (8 | 16)) this.flash(fl & 16 ? 0.7 : 0.45, 'auto');
       if (s.strobe && (fl & 3)) this.flash(0.65, 'strobe');
       if (fl & 16) s.impact = 1;
       else if (fl & 8) s.impact = Math.max(s.impact, 0.6);
@@ -3536,12 +4541,31 @@ void main() {
 
     titleText() { return this.state.endState ? this.endText() : this.bandName(); }
 
+    /** 動きの大きさを掛けた特徴量（オブジェクトは使い回す） */
+    _scaled(f) {
+      const k = this.react();
+      if (Math.abs(k - 1) < 1e-3) return f;
+      const g = this._sf || (this._sf = { kickEv: new Float32Array(f.kickEv.length), snareEv: new Float32Array(f.snareEv.length), accentEv: new Float32Array(f.accentEv.length) });
+      for (const key in f) {
+        const v = f[key];
+        if (typeof v !== 'object') g[key] = v;
+        else if (key !== 'kickEv' && key !== 'snareEv' && key !== 'accentEv') g[key] = v;
+      }
+      for (const t of ['kick', 'snare', 'hat', 'accent']) g[t] = Math.min(1, f[t] * k);
+      for (const t of ['kickEv', 'snareEv', 'accentEv']) {
+        const a = f[t], b = g[t];
+        for (let i = 0; i < a.length; i += 2) { b[i] = a[i]; b[i + 1] = Math.min(1, a[i + 1] * k); }
+      }
+      g.level = Math.min(1, f.level * (0.6 + 0.4 * k));
+      return g;
+    }
+
     /** レンダラーに渡すフレーム情報（オブジェクトは使い回す） */
     frame(f, dt, getText) {
       const s = this.state, fr = this._fr || (this._fr = {});
       fr.scene = VJ.scenes.byId[s.sceneId];
       fr.uniforms = s.uniforms;
-      fr.f = f;
+      fr.f = this._scaled(f);
       fr.time = this.now;
       fr.dt = dt;
       fr.sceneTime = this.now - s.sceneStart;
@@ -3553,7 +4577,7 @@ void main() {
       fr.flashColor = s.flashColor;
       fr.black = s.black;
       fr.master = s.master;
-      fr.impact = s.impact;
+      fr.impact = s.impact * Math.min(1, this.react());
       const ta = this.textAlpha();
       if (ta > 0 && getText) {
         const t = fr._text || (fr._text = { tex: null, alpha: 0 });
@@ -3563,9 +4587,22 @@ void main() {
       } else {
         fr.text = null;
       }
-      fr.titleTex = s.sceneId === 'title' && getText ? getText(this.titleText(), '').tex : null;
+      const ma = this.msgAlpha();
+      if (ma > 0 && getText) {
+        const t = fr._text2 || (fr._text2 = { tex: null, alpha: 0 });
+        t.tex = getText(s.msg.text, '').tex;
+        t.alpha = ma;
+        fr.text2 = t;
+      } else {
+        fr.text2 = null;
+      }
+      const logo = this.settings.logo ? this.settings.logoMode : 'off';
+      const isTitle = s.sceneId === 'title';
+      fr.titleLogo = isTitle && !s.endState && (logo === 'title' || logo === 'both');
+      fr.titleTex = isTitle && getText ? getText(this.titleText(), this.countdownText()).tex : null;
+      fr.logoCorner = (logo === 'corner' || (logo === 'both' && !isTitle)) && s.sceneId !== 'test' ? this.settings.logoCorner || 'br' : '';
       fr.latSq = this.settings.latencySquare ? s.latSq : -1;
-      fr.vignette = 0.6;
+      fr.vignette = s.sceneId === 'test' ? 0 : 0.6;
       return fr;
     }
   }
@@ -3579,16 +4616,20 @@ void main() {
 (function (VJ) {
   'use strict';
 
-  const SCENE_KEYS = { Digit0: 'title', Digit1: 'ripple', Digit2: 'tunnel', Digit3: 'horizon', Digit4: 'aurora', Digit5: 'kaleido', Digit6: 'glitch' };
+  const SCENE_KEYS = {
+    Digit0: 'title', Digit1: 'ripple', Digit2: 'tunnel', Digit3: 'horizon', Digit4: 'aurora', Digit5: 'kaleido',
+    Digit6: 'glitch', Digit7: 'eq', Digit8: 'stars', Digit9: 'scope',
+  };
   for (const k of Object.keys(SCENE_KEYS)) SCENE_KEYS[k.replace('Digit', 'Numpad')] = SCENE_KEYS[k];
 
   const HOLD = { KeyL: 1500, KeyR: 2000 };
 
   const KEY_HELP = [
-    ['1〜6', 'シーン切替（次のビートで）'], ['Shift+数字', 'すぐ切替'], ['0', 'タイトル（バンド名）'],
+    ['1〜9', 'シーン切替（次のビートで）'], ['Shift+数字', 'すぐ切替'], ['0', 'タイトル（バンド名）'],
     ['→ / ←', '次の曲 / 前の曲（曲名を表示）'], ['Space', 'フラッシュ'], ['S（押している間）', 'ストロボ'],
     ['B', '暗転 ON/OFF'], ['C / Shift+C', 'パレット 次 / 前'], ['↑ / ↓', '感度'], ['Shift+↑ / ↓', '全体の明るさ'],
-    ['A', 'オート ON/OFF'], ['T', '曲名をもう一度表示'], ['F', '全画面にする'], ['D', '診断表示'],
+    ['A', 'オート ON/OFF'], ['Enter', 'タップテンポ（拍に合わせて 3 回以上）'], ['Q / W / E', 'テロップ 1〜3 を表示・消す'],
+    ['T', '曲名をもう一度表示'], ['G', 'テストパターン（位置合わせ）'], ['F', '全画面にする'], ['D', '診断表示'],
     ['H', 'このヘルプ'], ['M', '設定パネル'], ['L', 'ロック（長押しで解除）'], ['R（2 秒長押し）', 'ソフトリセット'],
     ['Esc', 'パネルを閉じる（全画面中は長押しで解除）'],
   ];
@@ -3643,6 +4684,11 @@ void main() {
       else if (code === 'ArrowDown') (shift ? show.nudgeMaster(-1) : show.nudgeSensitivity(-1));
       else if (code === 'KeyA') show.toggleAuto();
       else if (code === 'KeyT') show.showSongTitle();
+      else if (code === 'Enter' || code === 'NumpadEnter') show.tap();
+      else if (code === 'KeyQ') show.toggleMessage(0);
+      else if (code === 'KeyW') show.toggleMessage(1);
+      else if (code === 'KeyE') show.toggleMessage(2);
+      else if (code === 'KeyG') show.toggleTestPattern();
       else if (code === 'KeyF') ui.enterFullscreen();
       else if (code === 'KeyD') ui.toggleHud();
       else if (code === 'KeyH') ui.toggleHelp();
@@ -3682,7 +4728,7 @@ void main() {
     el: null,
     visible: false,
     last: 0,
-    lamps: { k: 0, s: 0, h: 0, a: 0 },
+    lamps: { k: 0, s: 0, h: 0, a: 0, b: 0 },
 
     init(el) { hud.el = el; },
     toggle(force) {
@@ -3697,26 +4743,35 @@ void main() {
       if (fl & 2) L.s = t;
       if (fl & 4) L.h = t;
       if (fl & 8) L.a = t;
+      if (fl & 32) L.b = t;
     },
 
     update(app, f, perfNow) {
       hud.note(f, perfNow);
       if (!hud.visible || perfNow - hud.last < 250) return;
       hud.last = perfNow;
+      hud.el.textContent = hud.text(app, f, perfNow);
+    },
+
+    /** 診断の文字列（出力ウィンドウから操作ウィンドウへも送る） */
+    text(app, f, perfNow) {
+      if (!f || f.level === undefined) return '';
       const s = app.show.state, d = app.engine.diagnostics(), r = app.renderer.info(), m = app.engine.meter;
       const L = hud.lamps;
       const lamp = (k, c) => (perfNow - L[k] < 300 ? `[${c}]` : ` ${c.toLowerCase()} `);
       const song = app.show.currentSong();
+      const prof = VJ.profileById(app.settings.profile);
       const lines = [
         `MOMOSAI VJ ${VJ.version}  ${VJ.buildTime}`,
         `シーン  ${pad(s.sceneId, 8)} ${s.pending ? '→ ' + s.pending.id + '（待機）' : ''}`,
         `パレット ${VJ.palettes[s.paletteIdx].name}   オート ${s.auto ? 'ON' : 'OFF'}   ロック ${s.locked ? 'ON' : 'OFF'}   暗転 ${s.blackout ? 'ON' : 'OFF'}`,
         `曲     ${song ? 'M' + (s.songIdx + 1) + ' ' + song.title : s.endState ? '（終演）' : '（開演前）'}`,
-        `感度 ${s.sens > 0 ? '+' : ''}${s.sens}   明るさ ${Math.round(s.master * 100)}%`,
+        `感度 ${s.sens > 0 ? '+' : ''}${s.sens}   明るさ ${Math.round(s.master * 100)}%   動き ${Math.round(app.show.react() * 100)}%   タイプ ${prof.name}`,
         '',
         `入力   ${d.status}  ${d.device}  ${d.channels}ch  ${d.sampleRate}Hz`,
         `メーター L ${m.l.toFixed(1)}dB  R ${m.mono ? '—' : m.r.toFixed(1) + 'dB'}  ${performance.now() - m.clip < 2000 ? '⚠ クリップ' : ''}`,
-        `ヒット ${lamp('k', 'K')}${lamp('s', 'S')}${lamp('h', 'H')}${lamp('a', 'A')}  K${f.kickN} S${f.snareN} H${f.hatN} A${f.accentN} I${f.impactN}`,
+        `ヒット ${lamp('k', 'K')}${lamp('s', 'S')}${lamp('h', 'H')}${lamp('a', 'A')}${lamp('b', 'B')}  K${f.kickN} S${f.snareN} H${f.hatN} A${f.accentN} I${f.impactN}`,
+        `テンポ ${f.bpm ? f.bpm.toFixed(1) + ' BPM' : '—'}  確度 ${(f.beatConf || 0).toFixed(2)}${f.tempoManual ? '  （タップ）' : ''}   ${f.melodic ? 'ドラムなしモード' : 'ドラムモード'}`,
         `level ${bar(f.level)} low ${bar(f.low, 8)} mid ${bar(f.mid, 8)} high ${bar(f.high, 8)}`,
         `盛上り ${bar(f.intensity)} ${f.active ? '' : '（無音）'}`,
         '',
@@ -3725,9 +4780,9 @@ void main() {
         `遅延   base ${ms(d.baseLatency)}  out ${ms(d.outputLatency)}  track ${ms(d.trackLatency)}  塊 ${d.chunk}/${d.chunkMax}`,
         `整合   一致 ${d.align}  不一致 ${d.alignMiss}  飛び ${d.gaps}  再起動 ${d.restarts}  再接続 ${d.reconnects}`,
         `安全   フラッシュ却下 ${app.show.limiter.denied}  エラー ${app.errors}  ${r.failed.length ? 'シェーダ失敗: ' + r.failed.join(',') : ''}`,
-        `保護   スリープ防止 ${VJ.guard.wakeLockOk ? 'ON' : 'OFF'}  Esc取込 ${VJ.guard.kbLockOk ? 'ON' : 'OFF'}  MIDI ${VJ.midi && VJ.midi.inputs.length ? VJ.midi.inputs.join(',') : '—'}`,
+        `保護   スリープ防止 ${VJ.guard.wakeLockOk ? 'ON' : 'OFF'}  Esc取込 ${VJ.guard.kbLockOk ? 'ON' : 'OFF'}  MIDI ${VJ.midi && VJ.midi.inputs.length ? VJ.midi.inputs.join(',') : '—'}  画面 ${VJ.link ? VJ.link.role : 'solo'}`,
       ];
-      hud.el.textContent = lines.join('\n');
+      return lines.join('\n');
     },
   };
 
@@ -3845,16 +4900,8 @@ void main() {
         return true;
       }
       if (st === 0xb0) {
-        if (d1 === 1) {
-          show.state.master = Math.max(0.2, Math.min(1, 0.2 + (d2 / 127) * 0.8));
-          show.settings.master = show.state.master;
-          return true;
-        }
-        if (d1 === 2) {
-          const step = Math.round((d2 / 127) * 10 - 5);
-          if (step !== show.state.sens) show.nudgeSensitivity(step - show.state.sens);
-          return true;
-        }
+        if (d1 === 1) { show.setMaster(0.2 + (d2 / 127) * 0.8); return true; }
+        if (d1 === 2) { show.setSensitivity(Math.round((d2 / 127) * 10 - 5)); return true; }
       }
       return false;
     },
@@ -3885,12 +4932,302 @@ void main() {
   VJ.midi.NOTE_SCENES = NOTE_SCENES;
 })(globalThis.VJ = globalThis.VJ || {});
 </script>
+<script>/* src/ui/link.js */
+/* 出力ウィンドウ（2 画面運用）。
+ *   操作ウィンドウ（この画面）… パネル・キー・MIDI・メーター表示。描画と音声解析は止める
+ *   出力ウィンドウ（?role=output）… 音声入力・解析・描画を担当（遅延は 1 画面のときと同じ）
+ * 操作ウィンドウでは app.show / app.engine を「リモコン」に差し替え、操作は postMessage で出力側へ送る。
+ * 出力側は 1 秒に 10 回、状態（シーン・曲・メーター・ヒット・テンポ・HUD）を送り返す。
+ * 出力ウィンドウを閉じると、操作ウィンドウは元の 1 画面の動作に戻る。 */
+(function (VJ) {
+  'use strict';
+
+  const SHOW_METHODS = ['selectScene', 'nextSong', 'prevSong', 'flash', 'setStrobe', 'toggleBlackout', 'setBlackout', 'cyclePalette',
+    'nudgeSensitivity', 'nudgeMaster', 'toggleAuto', 'lock', 'unlock', 'showSongTitle', 'tap', 'toggleMessage', 'showMessage',
+    'toggleTestPattern', 'restoreSession', 'setMaster', 'setSensitivity'];
+
+  // ---------------------------------------------------------------- 操作側のリモコン
+  class RemoteShow {
+    constructor(link, settings) {
+      this.link = link;
+      this.settings = settings;
+      this.state = { sceneId: 'title', locked: false, songIdx: -1, endState: false, auto: !!settings.auto, sens: 0, master: 1, paletteIdx: 0, blackout: false, pending: null };
+      this.limiter = { denied: 0 };
+      this.listeners = [];
+      this.applySettings(settings);
+      for (const m of SHOW_METHODS) {
+        this[m] = (...args) => { this.link.send({ t: 'cmd', target: 'show', name: m, args }); return true; };
+      }
+    }
+    on(fn) { this.listeners.push(fn); }
+    applySettings(s) {
+      this.settings = s;
+      this.setlist = VJ.setlist.parse(s.setlistText);
+      this.profile = VJ.profileById(s.profile);
+    }
+    currentSong() {
+      const i = this.state.songIdx;
+      return !this.state.endState && i >= 0 && this.setlist.songs[i] ? this.setlist.songs[i] : null;
+    }
+    react() { return VJ.util.clamp((+this.settings.react || 1) * (this.profile.show.react || 1), 0.2, 1.6); }
+    session() { return { songIdx: this.state.songIdx, endState: this.state.endState, sceneId: this.state.sceneId, paletteIdx: this.state.paletteIdx, t: Date.now() }; }
+  }
+
+  class RemoteEngine {
+    constructor(link) {
+      this.link = link;
+      this.status = 'idle';
+      this.message = '';
+      this.opts = { source: 'mic', deviceId: '', deviceLabel: '', channel: 'mix', monitor: true };
+      this.meter = { l: -120, r: -120, lPeak: -120, rPeak: -120, clip: 0, mono: false };
+      this.diag = { status: 'idle', sampleRate: 0, channels: 0, device: '', chunk: 0, chunkMax: 0, align: 0, alignMiss: 0, gaps: 0, restarts: 0, reconnects: 0 };
+      this.listeners = [];
+      this.ctx = null;
+    }
+    get running() { return this.status === 'running'; }
+    get sampleRate() { return this.diag.sampleRate || 48000; }
+    on(fn) { this.listeners.push(fn); }
+    _set(st, msg) { this.status = st; this.message = msg || ''; for (const fn of this.listeners) { try { fn(st, this.message); } catch (e) { /* noop */ } } }
+    diagnostics() { return this.diag; }
+    updateMeters() { return this.meter; }
+    listDevices() { return this.link.request({ t: 'cmd', target: 'engine', name: 'listDevices', args: [] }).catch(() => []); }
+    setChannel(ch) { this.opts.channel = ch; this.link.send({ t: 'cmd', target: 'engine', name: 'setChannel', args: [ch] }); }
+    setMonitor(on) { this.opts.monitor = on; this.link.send({ t: 'cmd', target: 'engine', name: 'setMonitor', args: [on] }); }
+    skipFile(d) { this.link.send({ t: 'cmd', target: 'engine', name: 'skipFile', args: [d] }); return true; }
+    stop() { this.link.send({ t: 'cmd', target: 'engine', name: 'stop', args: [] }); }
+    pull() { return { samples: new Float32Array(0), gapped: false }; }
+    watchdog() {}
+    latest() { return new Float32Array(8192); }
+  }
+
+  // ---------------------------------------------------------------- 本体
+  const link = {
+    role: VJ.params && VJ.params.role === 'output' ? 'output' : 'solo',
+    peer: null,
+    app: null,
+    pending: new Map(),
+    seq: 0,
+    lastStatus: null,
+    _poll: null,
+
+    send(msg) {
+      if (!link.peer || link.peer.closed) return false;
+      try { link.peer.postMessage(msg, '*'); return true; } catch (e) { return false; }
+    },
+    request(msg) {
+      const id = ++link.seq;
+      msg.id = id;
+      return new Promise((resolve, reject) => {
+        link.pending.set(id, { resolve, reject });
+        if (!link.send(msg)) { link.pending.delete(id); reject(new Error('出力ウィンドウがありません')); }
+        setTimeout(() => { if (link.pending.has(id)) { link.pending.delete(id); reject(new Error('出力ウィンドウから応答がありません')); } }, 60000);
+      });
+    },
+
+    /** 操作側：出力ウィンドウを開く */
+    async openOutput(app) {
+      if (link.role === 'control' && link.peer && !link.peer.closed) { link.peer.focus(); return; }
+      link.app = app;
+      const base = location.href.replace(/[?#].*$/, '');
+      const keep = ['test', 'scale', 'pr', 'desync'].filter((k) => VJ.params[k] !== undefined).map((k) => `&${k}=${encodeURIComponent(VJ.params[k])}`).join('');
+      let features = 'popup,width=960,height=540';
+      // 複数の画面があれば、もう一方の画面（プロジェクター）に開く（ウィンドウの管理の許可が必要）
+      try {
+        if (window.getScreenDetails) {
+          const sd = await window.getScreenDetails();
+          const other = sd.screens.find((x) => x !== sd.currentScreen);
+          if (other) features = `popup,left=${other.availLeft},top=${other.availTop},width=${other.availWidth},height=${other.availHeight}`;
+        }
+      } catch (e) { /* 許可されなければ普通に開く */ }
+      const w = window.open(base + '?role=output' + keep, 'momosai-vj-output', features);
+      if (!w) { app.ui.toast('出力ウィンドウを開けませんでした（ポップアップのブロックを解除してください）', 'warn'); return; }
+      link.peer = w;
+      link.role = 'control';
+      // 1 画面の状態を退避し、リモコンに差し替える
+      const local = { show: app.show, engine: app.engine, wasRunning: app.engine.running, opts: Object.assign({}, app.engine.opts), session: app.show.session() };
+      link.local = local;
+      if (local.engine.running) local.engine.stop();
+      app.paused = true;
+      app.show = new RemoteShow(link, app.settings);
+      app.show.state = Object.assign({}, local.show.state);
+      app.engine = new RemoteEngine(link);
+      VJ.panel.bindEngine();
+      document.getElementById('remote').hidden = false;
+      document.getElementById('btn-output').textContent = '出力ウィンドウを前面に';
+      clearInterval(link._poll);
+      link._poll = setInterval(() => { if (link.peer && link.peer.closed) link.closeOutput(true); }, 500);
+    },
+
+    /** 操作側：出力ウィンドウを閉じて 1 画面に戻る */
+    closeOutput(alreadyClosed) {
+      if (link.role !== 'control') return;
+      clearInterval(link._poll);
+      if (!alreadyClosed && link.peer && !link.peer.closed) link.peer.close();
+      const app = link.app, local = link.local;
+      const last = app.show.session();
+      app.show = local.show;
+      app.engine = local.engine;
+      app.show.applySettings(app.settings);
+      app.show.restoreSession(last);
+      link.peer = null;
+      link.role = 'solo';
+      app.paused = false;
+      document.getElementById('remote').hidden = true;
+      document.getElementById('btn-output').textContent = '出力ウィンドウを開く（2 画面）';
+      VJ.panel.renderStatus(app.engine.status, '');
+      app.ui.toast('出力ウィンドウを閉じました（この画面に戻しました。音声は ▶ 開始 で再開）');
+      for (const p of link.pending.values()) p.reject(new Error('出力ウィンドウが閉じられました'));
+      link.pending.clear();
+    },
+
+    /** 操作側：出力ウィンドウからのメッセージ */
+    _onControlMessage(d) {
+      const app = link.app;
+      if (d.t === 'hello') {
+        link.send({ t: 'settings', settings: app.settings });
+        link.send({ t: 'cmd', target: 'show', name: 'restoreSession', args: [link.local.session] });
+        // 1 画面のとき動いていた入力を出力側で再開（画面共有は出力側での操作が必要なので除く）
+        const o = link.local.opts;
+        if (link.local.wasRunning && o && (o.source === 'mic' || o.source === 'demo')) {
+          app.startAudio({ source: o.source, deviceId: o.deviceId, deviceLabel: o.deviceLabel, channel: o.channel, monitor: o.monitor }).catch(() => {});
+        }
+      } else if (d.t === 'status') {
+        link.lastStatus = d;
+        const show = app.show, eng = app.engine;
+        Object.assign(show.state, d.state);
+        show.limiter.denied = d.denied;
+        eng.meter = d.meter;
+        eng.diag = d.diag;
+        Object.assign(eng.opts, d.engineOpts);
+        if (eng.status !== d.engineStatus) eng._set(d.engineStatus, d.engineMessage);
+        const now = performance.now(), L = VJ.hud.lamps;
+        if (d.hits & 1) L.k = now;
+        if (d.hits & 2) L.s = now;
+        if (d.hits & 4) L.h = now;
+        if (d.hits & 8) L.a = now;
+        if (d.hits & 32) L.b = now;
+        // キー操作で変わった設定（パレット・感度・明るさ・オート）をこちらにも反映
+        let changed = false;
+        for (const k of Object.keys(d.patch || {})) if (app.settings[k] !== d.patch[k]) { app.settings[k] = d.patch[k]; changed = true; }
+        if (changed) { VJ.panel.syncFromSettings(); VJ.panel.save(); }
+        link._features = d.f;
+      } else if (d.t === 'engine') {
+        app.engine._set(d.status, d.message);
+      } else if (d.t === 'toast') {
+        app.ui.toast(d.msg, d.kind);
+      } else if (d.t === 'res') {
+        const p = link.pending.get(d.id);
+        if (p) { link.pending.delete(d.id); if (d.error) p.reject(Object.assign(new Error(d.error), { name: d.errorName })); else p.resolve(d.value); }
+      } else if (d.t === 'bye') {
+        setTimeout(() => { if (link.peer && link.peer.closed) link.closeOutput(true); }, 300);
+      }
+    },
+
+    /** 操作側：描画を止めている間の画面更新（メーター・状態表示） */
+    remoteTick(ts) {
+      const d = link.lastStatus;
+      VJ.panel.tick(link._features || null, ts);
+      if (!d || ts - (link._statusT || 0) < 250) return;
+      link._statusT = ts;
+      const s = d.state, f = d.f || {};
+      const songs = link.app.show.setlist.songs;
+      const song = s.songIdx >= 0 && !s.endState ? songs[s.songIdx] : null;
+      const sc = VJ.scenes.byId[s.sceneId];
+      const lines = [
+        `シーン  ${sc ? sc.key + ' ' + sc.nameJa : s.sceneId}${s.pending ? '（次のビートで切替待ち）' : ''}`,
+        `曲     ${song ? 'M' + (s.songIdx + 1) + ' ' + song.title : s.endState ? '（終演）' : '（開演前）'}`,
+        `テンポ  ${f.bpm && f.beatConf > 0.2 ? Math.round(f.bpm) + ' BPM' : '—'}   ${f.melodic ? 'ドラムの無い曲として反応中' : ''}`,
+        `状態   オート ${s.auto ? 'ON' : 'OFF'}  暗転 ${s.blackout ? 'ON' : 'OFF'}  ロック ${s.locked ? 'ON' : 'OFF'}  パレット ${VJ.palettes[s.paletteIdx] ? VJ.palettes[s.paletteIdx].name : ''}`,
+        `出力   ${d.fps ? d.fps.toFixed(0) + 'fps' : ''}  ${d.size ? d.size.join('x') : ''}  ${d.fullscreen ? '全画面' : '全画面ではありません（出力ウィンドウをダブルクリック）'}`,
+      ];
+      document.getElementById('remote-status').textContent = lines.join('\n');
+      if (VJ.hud.visible && d.hud) VJ.hud.el.textContent = d.hud;
+    },
+
+    // ---------------------------------------------------------------- 出力側
+    initOutput(app) {
+      link.app = app;
+      link.peer = window.opener || null;
+      document.body.classList.add('output');
+      VJ.panel.toggle(false);
+      const hint = document.getElementById('out-hint');
+      hint.hidden = false;
+      setTimeout(() => { hint.hidden = true; }, 8000);
+      document.addEventListener('dblclick', () => { VJ.guard.enterFullscreen(); hint.hidden = true; });
+      app.show.on((msg, kind) => link.send({ t: 'toast', msg, kind }));
+      app.engine.on((status, message) => link.send({ t: 'engine', status, message }));
+      let hits = 0;
+      app.onFeatures = (f) => { hits |= f.onsetFlags; };
+      setInterval(() => {
+        if (!link.peer || link.peer.closed) return;
+        const s = app.show.state, f = app.lastFeatures || {};
+        const r = app.renderer.info();
+        link.send({
+          t: 'status',
+          state: { sceneId: s.sceneId, pending: s.pending ? { id: s.pending.id } : null, songIdx: s.songIdx, endState: s.endState, auto: s.auto, locked: s.locked, blackout: s.blackout, sens: s.sens, master: s.master, paletteIdx: s.paletteIdx },
+          denied: app.show.limiter.denied,
+          meter: app.engine.updateMeters(),
+          diag: app.engine.diagnostics(),
+          engineStatus: app.engine.status,
+          engineMessage: app.engine.message,
+          engineOpts: { source: app.engine.opts.source, deviceId: app.engine.opts.deviceId, deviceLabel: app.engine.opts.deviceLabel, channel: app.engine.opts.channel },
+          hits,
+          f: { bpm: f.bpm, beatConf: f.beatConf, melodic: f.melodic, tempoManual: f.tempoManual, active: f.active },
+          patch: { paletteIdx: app.settings.paletteIdx, sensitivity: app.settings.sensitivity, master: app.settings.master, auto: app.settings.auto },
+          fps: r.fps, size: r.size, fullscreen: !!document.fullscreenElement,
+          hud: VJ.hud.text ? VJ.hud.text(app, f, performance.now()) : '',
+        });
+        hits = 0;
+      }, 100);
+      window.addEventListener('beforeunload', () => link.send({ t: 'bye' }));
+      link.send({ t: 'hello' });
+    },
+
+    async _onOutputMessage(d) {
+      const app = link.app;
+      if (d.t === 'settings') {
+        for (const k of Object.keys(d.settings)) app.settings[k] = d.settings[k];
+        app.applySettings();
+        return;
+      }
+      if (d.t !== 'cmd') return;
+      let value, error = null, errorName = '';
+      try {
+        if (d.target === 'show') value = app.show[d.name](...(d.args || []));
+        else if (d.target === 'engine') value = await app.engine[d.name](...(d.args || []));
+        else if (d.target === 'app') value = await app[d.name](...(d.args || []));
+        else if (d.target === 'ui') value = await app.ui[d.name](...(d.args || []));
+        if (value && typeof value === 'object' && !Array.isArray(value)) value = JSON.parse(JSON.stringify(value));
+        if (Array.isArray(value)) value = value.map((x) => (x && typeof x.toJSON === 'function' ? x.toJSON() : x));
+      } catch (e) {
+        error = (e && e.message) || String(e);
+        errorName = (e && e.name) || '';
+      }
+      if (d.id) link.send({ t: 'res', id: d.id, value: error ? undefined : value, error, errorName });
+    },
+  };
+
+  window.addEventListener('message', (e) => {
+    const d = e.data;
+    if (!d || typeof d !== 'object' || !d.t) return;
+    if (link.role === 'control' && e.source === link.peer) link._onControlMessage(d);
+    else if (link.role === 'output' && e.source === window.opener) link._onOutputMessage(d);
+  });
+
+  link.RemoteShow = RemoteShow;
+  link.RemoteEngine = RemoteEngine;
+  VJ.link = link;
+})(globalThis.VJ = globalThis.VJ || {});
+</script>
 <script>/* src/ui/panel.js */
-/* 設定パネル（開始画面兼用）。映像は背後で動き続けるので、設定しながら見え方を確認できる。 */
+/* 設定パネル（開始画面兼用）。映像は背後で動き続けるので、設定しながら見え方を確認できる。
+ * 操作はすべて app 経由（app.show / app.engine / app.applySettings）。出力ウィンドウ（2 画面）のときは
+ * app.show・app.engine がリモコン（link.js）に差し替わるので、このファイルは同じまま動く。 */
 (function (VJ) {
   'use strict';
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const OUT_DEFAULT = { rotate: 0, flipH: false, flipV: false, size: 1, x: 0, y: 0 };
 
   const panel = {
     app: null,
@@ -3898,59 +5235,123 @@ void main() {
     _saveT: null,
     _prevT: null,
     _meterT: 0,
+    files: [],
 
     init(app) {
       panel.app = app;
       const s = app.settings;
+      s.output = Object.assign({}, OUT_DEFAULT, s.output || {});
       $('ver').textContent = VJ.version.startsWith('__') ? '開発版（index.html）' : `v${VJ.version} ${VJ.buildTime}`;
 
-      // 入力
+      // ① 入力
       document.querySelectorAll('input[name=src]').forEach((r) => r.addEventListener('change', panel._srcChanged));
       $('btn-refresh').addEventListener('click', () => panel.refreshDevices());
       $('btn-start').addEventListener('click', () => panel.startAudio());
       $('device').addEventListener('change', () => {
         const d = $('device');
         s.deviceId = d.value;
-        s.deviceLabel = d.selectedOptions[0] ? d.selectedOptions[0].textContent : '';
+        s.deviceLabel = d.value && d.selectedOptions[0] ? d.selectedOptions[0].textContent : '';
         panel.save();
         if (app.engine.running && app.engine.opts.source === 'mic') panel.startAudio();
       });
+      $('file').addEventListener('change', () => { panel.files = Array.from($('file').files || []); });
+      $('btn-skip').addEventListener('click', () => app.engine.skipFile(1));
       $('channel').value = s.channel;
       $('channel').addEventListener('change', () => { s.channel = $('channel').value; app.engine.setChannel(s.channel); panel.save(); });
       $('monitor').checked = s.monitor;
       $('monitor').addEventListener('change', () => { s.monitor = $('monitor').checked; app.engine.setMonitor(s.monitor); panel.save(); });
-      app.engine.on((st, msg) => panel.renderStatus(st, msg));
+      panel.bindEngine();
 
-      // バンド名・セットリスト
+      // ② 音楽のタイプ・テンポ
+      const prof = $('opt-profile');
+      prof.innerHTML = VJ.profiles.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+      prof.value = VJ.profileById(s.profile).id;
+      prof.addEventListener('change', () => { s.profile = prof.value; panel.renderProfile(); panel.applyShow(true); });
+      panel.renderProfile();
+      $('btn-tap').addEventListener('click', () => app.show.tap());
+
+      // ③ バンド名・セットリスト・文字
       $('band').value = s.bandName;
       $('setlist').value = s.setlistText;
       $('band').addEventListener('input', () => { s.bandName = $('band').value; panel.applyShow(); });
       $('setlist').addEventListener('input', () => { s.setlistText = $('setlist').value; panel.applyShow(); });
+      $('logo-file').addEventListener('change', panel.loadLogo);
+      $('btn-logo-clear').addEventListener('click', () => { s.logo = ''; $('logo-file').value = ''; panel.renderLogo(); panel.applyShow(true); });
+      $('opt-logomode').value = s.logoMode;
+      $('opt-logomode').addEventListener('change', () => { s.logoMode = $('opt-logomode').value; panel.applyShow(true); });
+      $('opt-logocorner').value = s.logoCorner;
+      $('opt-logocorner').addEventListener('change', () => { s.logoCorner = $('opt-logocorner').value; panel.applyShow(true); });
+      panel.renderLogo();
+      for (let i = 0; i < 3; i++) {
+        $('msg-' + i).value = s.messages[i] || '';
+        $('msg-' + i).addEventListener('input', () => { s.messages[i] = $('msg-' + i).value; panel.applyShow(); });
+      }
+      document.querySelectorAll('button[data-msg]').forEach((b) => b.addEventListener('click', () => {
+        const i = +b.dataset.msg;
+        s.messages[i] = $('msg-' + i).value;
+        panel.applyShow(true);
+        app.show.toggleMessage(i);
+      }));
+      $('opt-countdown').value = s.countdownTo || '';
+      $('opt-countdown').addEventListener('input', () => { s.countdownTo = $('opt-countdown').value; panel.applyShow(); });
 
-      // オプション
+      // ④ 表示
+      const out = s.output;
+      $('out-rotate').value = String(out.rotate);
+      $('out-rotate').addEventListener('change', () => { out.rotate = +$('out-rotate').value; panel.applyShow(true); });
+      $('out-fliph').checked = !!out.flipH;
+      $('out-fliph').addEventListener('change', () => { out.flipH = $('out-fliph').checked; panel.applyShow(true); });
+      $('out-flipv').checked = !!out.flipV;
+      $('out-flipv').addEventListener('change', () => { out.flipV = $('out-flipv').checked; panel.applyShow(true); });
+      const bindOut = (id, key, fmt) => {
+        const el = $(id), v = $(id + '-v');
+        el.value = out[key];
+        v.textContent = fmt(+el.value);
+        el.addEventListener('input', () => { out[key] = +el.value; v.textContent = fmt(+el.value); panel.applyShow(true); });
+      };
+      bindOut('out-size', 'size', (x) => Math.round(x * 100) + '%');
+      bindOut('out-x', 'x', (x) => (x > 0 ? '+' : '') + Math.round(x * 100) + '%');
+      bindOut('out-y', 'y', (x) => (x > 0 ? '+' : '') + Math.round(x * 100) + '%');
+      $('btn-test').addEventListener('click', () => app.show.toggleTestPattern());
+      $('btn-out-reset').addEventListener('click', () => {
+        Object.assign(out, OUT_DEFAULT);
+        panel.syncOutputUi();
+        panel.applyShow(true);
+      });
+      $('btn-output').addEventListener('click', () => VJ.link.openOutput(app));
+      $('btn-output-close').addEventListener('click', () => VJ.link.closeOutput());
+
+      // ⑤ オプション
       const bindCheck = (id, key, after) => {
         $(id).checked = !!s[key];
         $(id).addEventListener('change', () => { s[key] = $(id).checked; if (after) after(); panel.applyShow(true); });
       };
       bindCheck('opt-auto', 'auto');
       bindCheck('opt-autoflash', 'autoFlash');
+      bindCheck('opt-noflash', 'noFlash');
       bindCheck('opt-toast', 'toast');
       bindCheck('opt-latsq', 'latencySquare');
+      bindCheck('opt-autostart', 'autoStart');
       bindCheck('opt-desync', 'desynchronized', () => app.ui.toast('低遅延描画の切替は再読み込み後に有効になります'));
-      const bindRange = (id, key, fmt, after) => {
+      const bindRange = (id, key, fmt) => {
         const el = $(id), v = $(id + '-v');
         el.value = s[key];
         v.textContent = fmt(+el.value);
-        el.addEventListener('input', () => { s[key] = +el.value; v.textContent = fmt(+el.value); if (after) after(); panel.applyShow(true); });
+        el.addEventListener('input', () => { s[key] = +el.value; v.textContent = fmt(+el.value); panel.applyShow(true); });
       };
       bindRange('opt-sens', 'sensitivity', (x) => (x > 0 ? '+' : '') + x);
+      bindRange('opt-react', 'react', (x) => Math.round(x * 100) + '%');
       bindRange('opt-master', 'master', (x) => Math.round(x * 100) + '%');
-      bindRange('opt-scale', 'maxScale', (x) => Math.round(x * 100) + '%', () => app.renderer.setMaxScale(s.maxScale));
+      bindRange('opt-scale', 'maxScale', (x) => Math.round(x * 100) + '%');
+      bindRange('opt-gate', 'gateDb', (x) => x + ' dBFS');
+      $('opt-fps').value = String(s.fpsCap || 0);
+      $('opt-fps').addEventListener('change', () => { s.fpsCap = +$('opt-fps').value; panel.applyShow(true); });
       const pal = $('opt-palette');
       pal.innerHTML = VJ.palettes.map((p, i) => `<option value="${i}">${i + 1}. ${esc(p.name)}</option>`).join('');
       pal.value = s.paletteIdx;
       pal.addEventListener('change', () => { s.paletteIdx = +pal.value; panel.renderCustom(); panel.applyShow(true); });
       panel.renderCustom();
+      panel.renderAutoScenes();
 
       $('btn-export').addEventListener('click', panel.exportSettings);
       $('btn-import').addEventListener('click', () => $('import-file').click());
@@ -3959,32 +5360,43 @@ void main() {
         if (!confirm('設定（セットリスト含む）を初期状態に戻しますか？')) return;
         panel.replaceSettings(VJ.storage.reset());
       });
-
       $('btn-midi').addEventListener('click', async () => {
         const ok = await VJ.midi.init(app);
         $('midi-status').textContent = ok
           ? (VJ.midi.inputs.length ? '接続中：' + VJ.midi.inputs.join(', ') : 'MIDI 機器が見つかりません（つなぐと自動で認識）')
           : 'この環境では MIDI を使えません';
       });
+
+      // ⑥ 本番・再開
       $('btn-show').addEventListener('click', () => panel.startShow());
       $('panel-close').addEventListener('click', () => panel.toggle(false));
+      $('btn-resume').addEventListener('click', () => { app.show.restoreSession(panel._resume); $('resume-box').hidden = true; });
+      $('btn-resume-no').addEventListener('click', () => { $('resume-box').hidden = true; });
 
       // キー一覧
-      const keysHtml = VJ.keys.KEY_HELP.map(([k, d]) => `<kbd>${esc(k)}</kbd><span>${esc(d)}</span>`).join('');
-      $('keys-full').innerHTML = keysHtml;
+      $('keys-full').innerHTML = VJ.keys.KEY_HELP.map(([k, d]) => `<kbd>${esc(k)}</kbd><span>${esc(d)}</span>`).join('');
       $('keys-mini').innerHTML = VJ.keys.KEY_HELP.slice(0, 8).map(([k, d]) => `<kbd>${esc(k)}</kbd><span>${esc(d)}</span>`).join('');
 
+      // 前回の音声入力の種類を選んでおく
+      const last = s.lastSource;
+      if (last && document.querySelector(`input[name=src][value=${last}]`)) document.querySelector(`input[name=src][value=${last}]`).checked = true;
       panel._srcChanged();
       panel.renderSetlist();
       panel.renderWarnings();
       panel.refreshDevices();
     },
 
+    /** app.engine（差し替わることがある）の状態通知を受け取る */
+    bindEngine() {
+      panel.app.engine.on((st, msg) => panel.renderStatus(st, msg));
+    },
+
     _srcChanged() {
       const src = panel.source();
       $('mic-opts').hidden = src !== 'mic';
+      $('display-opts').hidden = src !== 'display';
       $('file-opts').hidden = src !== 'file';
-      $('monitor-row').hidden = src === 'mic';
+      $('monitor-row').hidden = src === 'mic' || src === 'display';
     },
 
     source() {
@@ -4009,25 +5421,28 @@ void main() {
       if (sel.selectedIndex < 0) sel.value = '';
     },
 
-    async startAudio() {
+    /** 入力の開始。opts を省略するとパネルの選択から作る */
+    async startAudio(given) {
       const app = panel.app, s = app.settings;
-      const src = panel.source();
-      const opts = { source: src, deviceId: $('device').value || s.deviceId, deviceLabel: s.deviceLabel, channel: s.channel, monitor: s.monitor };
-      if (src === 'file') {
-        const f = $('file').files[0];
-        if (!f) { panel.renderStatus('error', '音声ファイルを選んでください'); return false; }
-        opts.fileData = await f.arrayBuffer();
+      const src = given ? given.source : panel.source();
+      const opts = Object.assign({ source: src, deviceId: $('device').value || s.deviceId, deviceLabel: s.deviceLabel, channel: s.channel, monitor: s.monitor }, given || {});
+      if (src === 'file' && !opts.files) {
+        if (!panel.files.length) { panel.renderStatus('error', '音声ファイルを選んでください（複数選ぶと順番に再生）'); return false; }
+        opts.files = [];
+        for (const f of panel.files) opts.files.push({ name: f.name, data: await f.arrayBuffer() });
       }
       $('btn-start').disabled = true;
       try {
         await app.startAudio(opts);
+        s.lastSource = src;
         if (src === 'mic') {
           s.deviceId = app.engine.opts.deviceId;
           s.deviceLabel = app.engine.opts.deviceLabel;
-          panel.save();
           await panel.refreshDevices();
         }
+        panel.save();
         $('btn-start').textContent = '↻ 入力を切り替え / 再開始';
+        $('btn-skip').hidden = !(src === 'file' && opts.files && opts.files.length > 1);
         return true;
       } catch (e) {
         return false;
@@ -4041,15 +5456,14 @@ void main() {
       el.className = 'status ' + (st === 'running' ? 'ok' : st === 'error' ? 'bad' : st === 'idle' ? '' : 'warn');
       if (st === 'running') {
         const d = e.diagnostics();
-        const name = e.opts.source === 'mic' ? d.device : e.opts.source === 'demo' ? 'デモ音源' : '音声ファイル';
-        el.textContent = `入力中：${name}（${d.sampleRate}Hz / ${d.channels}ch）${msg ? ' — ' + msg : ''}`;
-      } else if (st === 'starting') el.textContent = '開始中…（マイクの許可を求められたら「許可」）';
+        el.textContent = `入力中：${d.device}（${d.sampleRate}Hz / ${d.channels}ch）${msg ? ' — ' + msg : ''}`;
+      } else if (st === 'starting') el.textContent = '開始中…（マイクや画面共有の許可を求められたら「許可」）';
       else if (st === 'error') el.textContent = msg || 'エラー';
       else if (st === 'lost' || st === 'reconnecting') el.textContent = msg || '再接続中…';
       else el.textContent = 'まだ開始していません';
     },
 
-    /** メーター（20Hz） */
+    /** メーター・テンポ表示（20Hz） */
     tick(f, perfNow) {
       if (!panel.visible || perfNow - panel._meterT < 50) return;
       panel._meterT = perfNow;
@@ -4066,16 +5480,26 @@ void main() {
       $('ls').classList.toggle('on', perfNow - L.s < 120);
       $('lh').classList.toggle('on', perfNow - L.h < 120);
       $('la').classList.toggle('on', perfNow - L.a < 200);
+      $('lb').classList.toggle('on', perfNow - L.b < 120);
+      if (f) {
+        $('bpm-view').textContent = f.bpm && f.beatConf > 0.2 ? `${Math.round(f.bpm)} BPM${f.tempoManual ? '（タップ）' : ''}` : '— BPM';
+        $('mode-view').textContent = !f.active ? '' : f.melodic ? 'ドラムの無い曲として反応中' : 'ドラムに反応中';
+      }
     },
 
     applyShow(immediate) {
       clearTimeout(panel._prevT);
       const run = () => {
-        panel.app.show.applySettings(panel.app.settings);
+        panel.app.applySettings();
         panel.renderSetlist();
         panel.save();
       };
       if (immediate) run(); else panel._prevT = setTimeout(run, 200);
+    },
+
+    renderProfile() {
+      const p = VJ.profileById(panel.app.settings.profile);
+      $('profile-desc').textContent = p.desc;
     },
 
     renderSetlist() {
@@ -4109,6 +5533,58 @@ void main() {
       }));
     },
 
+    renderAutoScenes() {
+      const s = panel.app.settings;
+      if (!s.autoScenes || typeof s.autoScenes !== 'object') s.autoScenes = {};
+      const el = $('auto-scenes');
+      el.innerHTML = VJ.scenes.list.filter((d) => !d.hidden && d.id !== 'title')
+        .map((d) => `<label><input type="checkbox" data-scene="${d.id}" ${s.autoScenes[d.id] === false ? '' : 'checked'}> ${d.key} ${esc(d.nameJa)}</label>`).join('');
+      el.querySelectorAll('input').forEach((inp) => inp.addEventListener('change', () => {
+        s.autoScenes[inp.dataset.scene] = inp.checked;
+        panel.applyShow(true);
+      }));
+    },
+
+    renderLogo() {
+      const s = panel.app.settings, img = $('logo-preview');
+      img.hidden = !s.logo;
+      if (s.logo) img.src = s.logo; else img.removeAttribute('src');
+    },
+
+    /** ロゴ画像を読み込み、長辺 1024px 以下に縮めて data URL にする（設定に保存できる大きさに） */
+    async loadLogo(e) {
+      const f = e.target.files[0];
+      if (!f) return;
+      try {
+        const url = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(f); });
+        const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('画像を読み込めません')); i.src = url; });
+        const k = Math.min(1, 1024 / Math.max(img.naturalWidth, img.naturalHeight));
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(img.naturalWidth * k));
+        c.height = Math.max(1, Math.round(img.naturalHeight * k));
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        let out = c.toDataURL('image/png');
+        if (out.length > 1.5e6) out = c.toDataURL('image/webp', 0.9);
+        panel.app.settings.logo = out;
+        if (panel.app.settings.logoMode === 'off') { panel.app.settings.logoMode = 'title'; $('opt-logomode').value = 'title'; }
+        panel.renderLogo();
+        panel.applyShow(true);
+      } catch (err) {
+        panel.app.ui.toast('ロゴ画像を読み込めませんでした：' + err.message, 'warn');
+      }
+    },
+
+    syncOutputUi() {
+      const out = panel.app.settings.output;
+      $('out-rotate').value = String(out.rotate);
+      $('out-fliph').checked = !!out.flipH;
+      $('out-flipv').checked = !!out.flipV;
+      for (const [id, key] of [['out-size', 'size'], ['out-x', 'x'], ['out-y', 'y']]) {
+        $(id).value = out[key];
+        $(id).dispatchEvent(new Event('input'));
+      }
+    },
+
     renderWarnings() {
       const app = panel.app, w = [];
       const ua = navigator.userAgent;
@@ -4124,13 +5600,22 @@ void main() {
       $('warnings').innerHTML = w.map((x) => `<div class="warnbox">⚠ ${esc(x)}</div>`).join('');
     },
 
+    /** 前回の続き（起動時に main.js から） */
+    offerResume(sess) {
+      panel._resume = sess;
+      const songs = panel.app.show.setlist.songs;
+      const song = sess.songIdx >= 0 && songs[sess.songIdx];
+      $('resume-text').textContent = song ? `前回は M${sess.songIdx + 1}「${song.title}」まで進んでいました。` : sess.endState ? '前回は終演まで進んでいました。' : '前回の状態が残っています。';
+      $('resume-box').hidden = false;
+    },
+
     async startShow() {
       const app = panel.app;
       if (!app.engine.running) {
         const ok = await panel.startAudio();
         if (!ok) { app.ui.toast('音声入力を開始できませんでした（パネルの表示を確認）', 'warn'); }
       }
-      await VJ.guard.startShow();
+      await app.ui.startShow();
       panel.toggle(false);
       app.ui.toast('ショー開始 — H でキー一覧 / M で設定');
     },
@@ -4142,8 +5627,11 @@ void main() {
     },
 
     save() {
+      if (VJ.link && VJ.link.role === 'output') return; // 出力ウィンドウは保存しない（操作側が保存する）
       clearTimeout(panel._saveT);
-      panel._saveT = setTimeout(() => VJ.storage.save(panel.app.settings), 300);
+      panel._saveT = setTimeout(() => {
+        if (!VJ.storage.save(panel.app.settings)) panel.app.ui.toast('設定を保存できませんでした（ロゴ画像が大きすぎる可能性があります）', 'warn');
+      }, 300);
     },
 
     exportSettings() {
@@ -4168,26 +5656,45 @@ void main() {
       e.target.value = '';
     },
 
+    /** 設定をまるごと入れ替えて画面に反映 */
     replaceSettings(ns) {
       const s = panel.app.settings;
       for (const k of Object.keys(ns)) s[k] = ns[k];
+      s.output = Object.assign({}, OUT_DEFAULT, s.output || {});
       $('band').value = s.bandName;
       $('setlist').value = s.setlistText;
       $('channel').value = s.channel;
       $('monitor').checked = s.monitor;
-      $('opt-auto').checked = s.auto;
-      $('opt-autoflash').checked = s.autoFlash;
-      $('opt-toast').checked = s.toast;
-      $('opt-latsq').checked = s.latencySquare;
-      $('opt-desync').checked = s.desynchronized;
-      for (const [id, key] of [['opt-sens', 'sensitivity'], ['opt-master', 'master'], ['opt-scale', 'maxScale']]) {
+      $('opt-profile').value = VJ.profileById(s.profile).id;
+      panel.renderProfile();
+      for (const [id, key] of [['opt-auto', 'auto'], ['opt-autoflash', 'autoFlash'], ['opt-noflash', 'noFlash'], ['opt-toast', 'toast'],
+        ['opt-latsq', 'latencySquare'], ['opt-autostart', 'autoStart'], ['opt-desync', 'desynchronized']]) $(id).checked = !!s[key];
+      for (const [id, key] of [['opt-sens', 'sensitivity'], ['opt-react', 'react'], ['opt-master', 'master'], ['opt-scale', 'maxScale'], ['opt-gate', 'gateDb']]) {
         $(id).value = s[key];
         $(id).dispatchEvent(new Event('input'));
       }
+      $('opt-fps').value = String(s.fpsCap || 0);
       $('opt-palette').value = s.paletteIdx;
+      $('opt-logomode').value = s.logoMode;
+      $('opt-logocorner').value = s.logoCorner;
+      for (let i = 0; i < 3; i++) $('msg-' + i).value = s.messages[i] || '';
+      $('opt-countdown').value = s.countdownTo || '';
       panel.renderCustom();
+      panel.renderAutoScenes();
+      panel.renderLogo();
+      panel.syncOutputUi();
       panel.applyShow(true);
       VJ.storage.save(s);
+    },
+
+    /** キー操作などで変わった設定をパネルの表示に反映（出力ウィンドウからの通知など） */
+    syncFromSettings() {
+      const s = panel.app.settings;
+      $('opt-palette').value = s.paletteIdx;
+      for (const [id, key] of [['opt-sens', 'sensitivity'], ['opt-master', 'master']]) {
+        if (+$(id).value !== +s[key]) { $(id).value = s[key]; $(id + '-v').textContent = key === 'master' ? Math.round(s[key] * 100) + '%' : (s[key] > 0 ? '+' : '') + s[key]; }
+      }
+      $('opt-auto').checked = !!s.auto;
     },
   };
 
@@ -4228,16 +5735,42 @@ void main() {
     app.show.onSensitivity = (s) => { if (app.extractor) app.extractor.setSensitivity(s); };
     app.ensureExtractor = () => {
       const sr = app.engine.sampleRate;
-      if (!app.extractor || app.extractor.sr !== sr) {
-        app.extractor = new VJ.dsp.FeatureExtractor({ sampleRate: sr });
+      const key = VJ.dspKey(app.settings);
+      if (!app.extractor || app.extractor.sr !== sr || app.dspKey !== key) {
+        app.extractor = new VJ.dsp.FeatureExtractor({ sampleRate: sr, config: VJ.makeDspConfig(app.settings) });
         app.extractor.setSensitivity(app.show.state.sens);
+        app.dspKey = key;
       }
       return app.extractor;
     };
     app.getText = (main, sub) => app.renderer.text.get(main, sub);
+    const link = VJ.link;
+    const remote = () => link.role === 'control';
+
+    /** 設定を反映（2 画面のときは出力ウィンドウへ送る） */
+    app.applySettings = () => {
+      const s = app.settings;
+      app.show.applySettings(s);
+      if (remote()) { link.send({ t: 'settings', settings: s }); return; }
+      app.renderer.setOutput(s.output);
+      app.renderer.setLogo(s.logo);
+      app.renderer.setMaxScale(s.maxScale);
+    };
     app.startAudio = async (opts) => {
+      if (remote()) return link.request({ t: 'cmd', target: 'app', name: 'startAudio', args: [opts] });
       await app.engine.start(opts);
       app.ensureExtractor().resync();
+      return true;
+    };
+    app.show.onTap = () => (app.extractor ? app.extractor.tap() : 0);
+    app.show.onSongStart = () => { if (app.extractor) app.extractor.tempo.clearManual(); };
+    // 前回の続きから再開できるように、曲・シーンの位置を保存（操作ウィンドウ以外）
+    const SESSION_KEY = VJ.storage.KEY + '/session';
+    let sessT = null;
+    app.show.onSession = (sess) => {
+      if (remote() || app.paused) return;
+      clearTimeout(sessT);
+      sessT = setTimeout(() => { try { localStorage.setItem(SESSION_KEY, JSON.stringify(sess)); } catch (e) { /* noop */ } }, 500);
     };
 
     // トースト
@@ -4257,10 +5790,20 @@ void main() {
       toast,
       toggleHud: () => VJ.hud.toggle(),
       toggleHelp: () => { help.hidden = !help.hidden; },
-      togglePanel: () => VJ.panel.toggle(),
-      closeOverlays: () => { help.hidden = true; VJ.hud.toggle(false); VJ.panel.toggle(false); },
+      togglePanel: () => {
+        if (link.role === 'output') { toast('設定は元の（操作）ウィンドウで行ってください'); return; }
+        VJ.panel.toggle();
+      },
+      closeOverlays: () => { help.hidden = true; VJ.hud.toggle(false); if (link.role !== 'output') VJ.panel.toggle(false); },
       enterFullscreen: () => VJ.guard.enterFullscreen(),
+      startShow: async () => {
+        if (remote()) return link.request({ t: 'cmd', target: 'ui', name: 'startShow', args: [] });
+        await VJ.guard.startShow();
+        if (link.role === 'output' && !document.fullscreenElement) document.getElementById('out-hint').hidden = false;
+        return true;
+      },
       softReset: async () => {
+        if (remote()) return link.request({ t: 'cmd', target: 'ui', name: 'softReset', args: [] });
         toast('ソフトリセット中…');
         try {
           if (app.engine.status !== 'idle') await app.engine.restart();
@@ -4271,6 +5814,7 @@ void main() {
         } catch (e) {
           toast('リセット失敗：' + e.message, 'warn');
         }
+        return true;
       },
     };
     help.addEventListener('click', () => { help.hidden = true; });
@@ -4280,13 +5824,38 @@ void main() {
     VJ.guard.install();
     VJ.keys.install(app);
     VJ.panel.init(app);
+    app.applySettings();
     if (VJ.params.test) VJ.testing = makeTesting(app);
 
-    let last = 0;
+    if (link.role === 'output') {
+      link.initOutput(app);
+    } else {
+      // 前回の続き（6 時間以内・曲が進んでいたとき）
+      try {
+        const sess = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+        if (sess && Date.now() - sess.t < 6 * 3600 * 1000 && (sess.songIdx >= 0 || sess.endState)) VJ.panel.offerResume(sess);
+      } catch (e) { /* noop */ }
+      // 起動したら自動で開始（展示・BGM 用）
+      if (settings.autoStart && (settings.lastSource === 'mic' || settings.lastSource === 'demo')) {
+        setTimeout(async () => {
+          await VJ.panel.startAudio({ source: settings.lastSource });
+          const ctx = app.engine.ctx;
+          if (ctx && ctx.state !== 'running') {
+            toast('画面をクリックすると音声入力が始まります', 'warn');
+            const go = () => { ctx.resume(); window.removeEventListener('pointerdown', go); window.removeEventListener('keydown', go); };
+            window.addEventListener('pointerdown', go);
+            window.addEventListener('keydown', go);
+          }
+        }, 300);
+      }
+    }
+
+    let last = 0, lastRender = 0;
     const silent = new Float32Array(8192);
     let prefetchAt = 0;
     function frame(ts) {
       requestAnimationFrame(frame);
+      if (link.role === 'control') { link.remoteTick(ts); return; }
       if (app.paused) return;
       const now = ts / 1000;
       const dt = last ? Math.min(0.1, Math.max(0.001, now - last)) : 1 / 60;
@@ -4302,7 +5871,14 @@ void main() {
         if (pulled.samples.length) fx.process(pulled.samples);
         f = fx.computeFrame(engine.running ? engine.latest() : silent, now, dt);
         app.show.update(f, dt, now);
-        app.renderer.render(app.show.frame(f, dt, app.getText), ts);
+        // フレームレート上限（非力な PC 向け）：解析と演出は毎フレーム、描画だけ間引く
+        const cap = settings.fpsCap;
+        if (!cap || ts - lastRender >= 1000 / cap - 4) {
+          lastRender = ts;
+          app.renderer.render(app.show.frame(f, dt, app.getText), ts);
+        }
+        app.lastFeatures = f;
+        if (app.onFeatures) app.onFeatures(f);
         if (app.onFrame) app.onFrame(ts, engine.ctx ? engine.ctx.currentTime : 0, f);
         app.errorsInRow = 0;
         // 次の曲名のテクスチャを先に作っておく（曲頭での引っかかり防止）
@@ -4345,10 +5921,14 @@ void main() {
           if (o.offset) samples = samples.subarray(Math.round(o.offset * sr));
           if (o.seconds) samples = samples.subarray(0, Math.round(o.seconds * sr));
           const settings = Object.assign({}, app.settings, o.settings || {});
+          app.renderer.setOutput(settings.output);
+          if (settings.logo !== undefined) app.renderer.setLogo(settings.logo);
           const show = new VJ.ShowController(settings);
           show.sceneAvailable = (id) => app.renderer.available(id);
-          const fx = new VJ.dsp.FeatureExtractor({ sampleRate: sr });
+          const fx = new VJ.dsp.FeatureExtractor({ sampleRate: sr, config: VJ.makeDspConfig(settings) });
+          show.onTap = () => fx.tap();
           if (o.sceneId) show._applyScene(o.sceneId);
+          if (o.logoWait) await new Promise((r) => setTimeout(r, o.logoWait));
           const fps = o.fps || 60, dt = 1 / fps, spf = sr / fps;
           const latest = new Float32Array(8192);
           const frames = o.frames || Math.floor(samples.length / spf);
@@ -4373,8 +5953,12 @@ void main() {
           }
           res.denied = show.limiter.denied;
           res.kickN = fx.features.kickN;
+          res.bpm = fx.features.bpm;
+          res.melodic = fx.features.melodic;
           return res;
         } finally {
+          app.renderer.setOutput(app.settings.output);
+          app.renderer.setLogo(app.settings.logo);
           app.paused = false;
         }
       },

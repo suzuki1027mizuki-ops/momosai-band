@@ -29,6 +29,20 @@
     latencySquare: false, // 遅延計測用の白い四角
     monitor: true, // デモ/ファイル再生時にスピーカーから鳴らす（マイクは絶対に出力しない）
     maxScale: 1.0, // 描画解像度の上限倍率
+    profile: 'auto', // 音楽のタイプ（profiles.js）
+    gateDb: -70, // これより小さい音は無音とみなす（dBFS）。ざわざわした会場では上げる
+    noFlash: false, // フラッシュ類を一切使わない（光に配慮が必要な会場）
+    react: 1.0, // 動きの大きさ 0.3〜1.5
+    autoScenes: {}, // オートで使うシーン（false のものは使わない）
+    fpsCap: 0, // 0 = 制限なし / 30 = 30fps（非力な PC 向け）
+    messages: ['', '', ''], // テロップ（Q / W / E）
+    countdownTo: '', // 開演時刻 'HH:MM'（タイトルにカウントダウン）
+    logo: '', // ロゴ画像（data URL）
+    logoMode: 'title', // title: バンド名の代わり / corner: 隅に透かし / both / off
+    logoCorner: 'br', // tl / tr / bl / br
+    output: { rotate: 0, flipH: false, flipV: false, size: 1, x: 0, y: 0 }, // 表示の調整
+    autoStart: false, // 起動したら前回の入力で自動的に開始
+    lastSource: 'mic', // 前回の音声入力の種類
   };
 
   /** 解析パラメータ（調整はテストで行う。UI には出さない） */
@@ -51,6 +65,12 @@
       b1: { band: 1, W: 3, L: 3, R: 3, K: 2.2, minRise: 3, refractory: 0.08 },
       b2: { band: 2, W: 2, L: 3, R: 3, K: 2.2, minRise: 3, refractory: 0.08 },
     },
+    // ドラムが無い曲用：中域（150Hz〜5kHz）の立ち上がり（ピアノ・ギター・歌の発音）
+    melodic: { W: 2, L: 4, R: 6, K: 1.5, minRise: 2.5, refractory: 0.12, relDb: 16, peakFall: 3 },
+    melodicMode: 'auto', // auto: ドラムが無ければ自動で切替 / on: 常に / off: 使わない
+    drumRatioDb: -2, // キック時に 低域 ÷ 中域 がこれより大きければドラムとみなす
+    // テンポ推定に使う帯域ごとの重み（立ち上がりの強さの和）
+    tempoWeights: [1.0, 0.5, 0.5, 0.8, 0.4],
     kickSnareHops: 5, // スネア検出からこのホップ数以内のキック候補は…
     kickSnareRelDb: 7, // …キック帯域のピークよりこれ以上小さければ捨てる
     statTau: 1.0, // flux の平均・分散の時定数

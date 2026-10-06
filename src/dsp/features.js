@@ -11,7 +11,7 @@
   const { clamp01, powToDb, dbToLin, decay } = VJ.util;
 
   const TYPES = ['kick', 'snare', 'hat', 'accent', 'impact'];
-  const FLAG = { kick: 1, snare: 2, hat: 4, accent: 8, impact: 16 };
+  const FLAG = { kick: 1, snare: 2, hat: 4, accent: 8, impact: 16, beat: 32, downbeat: 64 };
 
   function makeFeatures(cfg) {
     const H = cfg.historyLen;
@@ -28,7 +28,8 @@
       spectrum: new Float32Array(cfg.specBands),
       spectrumSlow: new Float32Array(cfg.specBands),
       waveform: new Float32Array(cfg.waveLen),
-      bpm: 0, beatPhase: 0, beatConf: 0,
+      bpm: 0, beatPhase: 0, beatConf: 0, barPhase: 0, beatN: 0, tempoManual: false,
+      melodic: false, // ドラムの無い曲として扱っているか
     };
   }
 
@@ -53,6 +54,21 @@
         this.detType[p.band] = key;
       }
       this.bandGroup = [0, 0, 1, 1, 2]; // low / mid / high
+
+      // ドラムが無い曲用のメロディ立ち上がり検出
+      this.melDet = new D.OnsetDetector(cfg.melodic, hopSec, cfg.statTau);
+      this.melFloor = new D.NoiseFloor(cfg.noiseFloor, hopSec);
+      this.melMode = cfg.melodicMode === 'on';
+      this.kickRing = new Float64Array(32).fill(-1e12);
+      this.kickRingIdx = 0;
+      this.melRing = new Float64Array(32).fill(-1e12);
+      this.melRingIdx = 0;
+      this.activeSec = 0;
+
+      // テンポ
+      this.tempo = new D.TempoTracker(sr, hop);
+      this.tempoState = {};
+      this.lastBeatIndex = null;
 
       // 自動正規化：full, low, mid, high
       this.agc = [0, 1, 2, 3].map(() => new D.AutoGain(cfg.agc, hopSec));
@@ -185,6 +201,7 @@
       const active = actDb > Math.max(fl[0].db + 6, cfg.silenceAbsDb);
       this.active = active;
       if (active) this.silenceSec = 0; else this.silenceSec = (this.silenceSec || 0) + this.hopSec;
+      if (active) this.activeSec += this.hopSec; else if (this.silenceSec > 2) this.activeSec = 0;
 
       // 自動正規化と包絡線
       for (let g = 0; g < 4; g++) this.agc[g].update(groupDb[g], active && groupDb[g] > fl[g].db + cfg.gateDb, fl[g].db);
@@ -209,9 +226,42 @@
           // スネアの胴鳴りがキック帯域に漏れた分は、キック帯域のピークより明らかに小さければ捨てる
           if (s > 0 && type === 'kick' && this.hopCount - this.lastSnareHop <= cfg.kickSnareHops && det.rel < -cfg.kickSnareRelDb) continue;
           if (s > 0 && type === 'snare') this.lastSnareHop = this.hopCount;
+          if (s > 0 && type === 'kick') {
+            // 低域が中域より十分強い立ち上がりだけを「ドラムがある」証拠として数える
+            // （ピアノやギターの低い音がキック帯域に漏れたものは中域の方が強い）
+            if (powToDb(this.bandE[0]) - powToDb(this.bandE[1] + this.bandE[2]) > cfg.drumRatioDb) {
+              this.kickRing[this.kickRingIdx] = sampleEnd;
+              this.kickRingIdx = (this.kickRingIdx + 1) % this.kickRing.length;
+            }
+            this.tempo.noteKick(s, sampleEnd);
+            if (this.melMode) continue; // ドラムの無い曲モードではメロディの立ち上がりをキックとして使う
+          }
           if (s > 0) this._onset(type, sampleEnd, s);
-          else if (det.strengthUpdate > 0 && this.boost[type] < det.strengthUpdate) this.boost[type] = det.strengthUpdate;
+          else if (det.strengthUpdate > 0 && !(type === 'kick' && this.melMode) && this.boost[type] < det.strengthUpdate) this.boost[type] = det.strengthUpdate;
         }
+      }
+
+      // メロディ（150Hz〜5kHz）の立ち上がり
+      const eMel = this.bandE[1] + this.bandE[2] + 0.5 * this.bandE[3];
+      const melFl = this.melFloor.update(powToDb(eMel), this.agc[2].ref);
+      const ms = this.melDet.step(eMel, active ? Math.max(melFl + cfg.gateDb, cfg.silenceAbsDb) : Infinity, this.sens);
+      if (ms > 0) {
+        this.melRing[this.melRingIdx] = sampleEnd;
+        this.melRingIdx = (this.melRingIdx + 1) % this.melRing.length;
+        if (this.melMode) this._onset('kick', sampleEnd, ms);
+      } else if (this.melMode && this.melDet.strengthUpdate > 0 && this.boost.kick < this.melDet.strengthUpdate) {
+        this.boost.kick = this.melDet.strengthUpdate;
+      }
+      if ((this.hopCount & 63) === 0) this._updateMode();
+
+      // テンポ推定用の立ち上がりの強さ
+      if (active) {
+        const w = cfg.tempoWeights;
+        let osf = 0;
+        for (let b = 0; b < nb; b++) osf += w[b] * this.det[b].flux;
+        this.tempo.push(osf, sampleEnd);
+      } else {
+        this.tempo.push(0, sampleEnd);
       }
 
       // アクセント（キメ）：3 帯域以上が同時に立ち上がり、かつ全帯域の短時間音量が
@@ -250,6 +300,21 @@
       this.l3s.update(dbFull > -120 ? Math.max(dbFull, -90) : -90);
       this.peak60.update(this.l3s.v);
     }
+
+    /** ドラムの有無でモードを切り替える（auto のとき） */
+    _updateMode() {
+      const mode = this.cfg.melodicMode;
+      if (mode === 'on') { this.melMode = true; return; }
+      if (mode === 'off') { this.melMode = false; return; }
+      const since = this.sampleCount - 6 * this.sr;
+      let kicks = 0, mels = 0;
+      for (let i = 0; i < 32; i++) { if (this.kickRing[i] > since) kicks++; if (this.melRing[i] > since) mels++; }
+      if (!this.melMode && this.activeSec > 4 && kicks <= 1 && mels >= 4) this.melMode = true;
+      else if (this.melMode && kicks >= 5) this.melMode = false;
+    }
+
+    /** タップテンポ（今の音声位置を拍として登録）。BPM（3 回目以降）を返す */
+    tap() { return this.tempo.tap(this.sampleCount); }
 
     _onset(type, sample, strength) {
       if (this.onsetLog) this.onsetLog.push({ type, sample, strength });
@@ -300,6 +365,17 @@
         f[t] = v > this.boost[t] ? v : this.boost[t];
         this.boost[t] = 0;
       }
+      // テンポ・拍
+      const ts = this.tempo.state(this.sampleCount, this.tempoState);
+      f.bpm = ts.bpm; f.beatPhase = ts.phase; f.beatConf = ts.conf; f.barPhase = ts.bar; f.tempoManual = ts.manual;
+      if (ts.bpm && this.lastBeatIndex !== null && ts.beatIndex > this.lastBeatIndex && ts.conf >= 0.25 && this.active) {
+        this.flagsAcc |= FLAG.beat;
+        f.beatN++;
+        if (ts.bar < 0.25) this.flagsAcc |= FLAG.downbeat;
+      }
+      this.lastBeatIndex = ts.bpm ? ts.beatIndex : null;
+      f.melodic = this.melMode;
+
       f.onsetFlags = this.flagsAcc;
       this.flagsAcc = 0;
 

@@ -88,6 +88,8 @@
     async start(opts) {
       Object.assign(this.opts, opts || {});
       this._set('starting');
+      this._playToken = (this._playToken || 0) + 1;
+      this._nextDecoded = null;
       this._stopSource();
       const ctx = this._ensureContext();
       try { await ctx.resume(); } catch (e) { /* noop */ }
@@ -100,8 +102,14 @@
           ab.copyToChannel(s.samples, 0);
           this._startBuffer(ab, true);
         } else if (this.opts.source === 'file') {
-          const ab = await ctx.decodeAudioData(this.opts.fileData.slice(0));
-          this._startBuffer(ab, true);
+          const files = this.opts.files && this.opts.files.length ? this.opts.files
+            : this.opts.fileData ? [{ name: '音声ファイル', data: this.opts.fileData }] : [];
+          if (!files.length) throw new Error('音声ファイルを選んでください');
+          this.playlist = files;
+          await this._playFile(0);
+          return 0;
+        } else if (this.opts.source === 'display') {
+          await this._startDisplay();
         } else if (this.opts.source === 'buffer') {
           return this._startBuffer(this.opts.audioBuffer, !!this.opts.loop, this.opts.when);
         }
@@ -146,6 +154,70 @@
         navigator.mediaDevices.removeEventListener('devicechange', this._onDeviceChange);
         navigator.mediaDevices.addEventListener('devicechange', this._onDeviceChange);
       }
+    }
+
+    /** プレイリストの i 曲目を再生（1 曲ならループ。複数なら終わったら次へ、最後の次は最初へ） */
+    async _playFile(i) {
+      const list = this.playlist, ctx = this.ctx;
+      const token = (this._playToken = (this._playToken || 0) + 1);
+      const item = list[i % list.length];
+      const ab = this._nextDecoded && this._nextDecoded.i === i ? await this._nextDecoded.p : await ctx.decodeAudioData(item.data.slice(0));
+      if (token !== this._playToken) return;
+      this._stopSource();
+      this._startBuffer(ab, list.length === 1);
+      this.nowPlaying = item.name;
+      this.playIdx = i % list.length;
+      this._set('running', list.length > 1 ? `▶ ${i % list.length + 1}/${list.length} ${item.name}` : '');
+      if (list.length > 1) {
+        const src = this.bufferSrc;
+        const next = (i + 1) % list.length;
+        // 次の曲を先にデコードしておく（曲間を短く）
+        const p = ctx.decodeAudioData(list[next].data.slice(0));
+        p.catch(() => {});
+        this._nextDecoded = { i: next, p };
+        src.onended = () => { if (this.bufferSrc === src && this.status === 'running') this._playFile(next).catch((e) => this._set('error', describeError(e))); };
+      }
+    }
+
+    /** 次の曲へ（プレイリスト） */
+    skipFile(d) {
+      if (!this.playlist || this.opts.source !== 'file' || !this.bufferSrc) return false;
+      const n = this.playlist.length;
+      this._playFile((((this.playIdx || 0) + (d || 1)) % n + n) % n).catch((e) => this._set('error', describeError(e)));
+      return true;
+    }
+
+    /** PC で再生中の音（画面共有の音声）。映像は使わないが、止めると共有自体が終わる環境があるので最小設定で残す */
+    async _startDisplay() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        throw new Error('この環境では「PC で再生中の音」を使えません（Chrome / Edge で開いてください）');
+      }
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: 1, width: { max: 320 }, height: { max: 240 } },
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+        systemAudio: 'include', selfBrowserSurface: 'exclude', surfaceSwitching: 'include',
+      });
+      const track = stream.getAudioTracks()[0];
+      if (!track) {
+        for (const t of stream.getTracks()) t.stop();
+        const e = new Error('音声が共有されていません。共有の画面で「システム音声を共有」（タブの場合は「タブの音声も共有」）をオンにしてから選び直してください。');
+        e.name = 'NoAudioShared';
+        throw e;
+      }
+      for (const v of stream.getVideoTracks()) v.onended = () => this._displayEnded();
+      this.stream = stream;
+      const st = track.getSettings ? track.getSettings() : {};
+      this.trackSettings = st;
+      this.opts.deviceLabel = track.label || '画面共有の音声';
+      track.onended = () => this._displayEnded();
+      this.srcNode = this.ctx.createMediaStreamSource(stream);
+      this.channels = st.channelCount || 2;
+      this._route(this.srcNode, false);
+    }
+
+    _displayEnded() {
+      if (this.opts.source !== 'display' || this.status === 'idle') return;
+      this._set('lost', '画面共有が終了しました。もう一度「▶ 開始」を押して共有し直してください。');
     }
 
     _startBuffer(audioBuffer, loop, when) {
@@ -212,6 +284,7 @@
     }
 
     stop() {
+      this._playToken = (this._playToken || 0) + 1;
       this._stopSource();
       this._set('idle');
     }
@@ -381,7 +454,8 @@
         outputLatency: ctx && ctx.outputLatency !== undefined ? ctx.outputLatency : null,
         trackLatency: this.trackSettings && this.trackSettings.latency !== undefined ? this.trackSettings.latency : null,
         channels: this.channels,
-        device: this.opts.deviceLabel || (this.opts.source === 'mic' ? '既定のデバイス' : this.opts.source),
+        device: this.opts.source === 'file' ? (this.nowPlaying || '音声ファイル') : this.opts.source === 'demo' ? 'デモ音源'
+          : this.opts.deviceLabel || (this.opts.source === 'mic' ? '既定のデバイス' : this.opts.source),
         chunk: this.diag.chunk,
         chunkMax: this.diag.chunkMax,
         align: this.diag.align,
@@ -395,6 +469,8 @@
 
   function describeError(e) {
     const name = (e && e.name) || '';
+    if (name === 'NoAudioShared') return e.message;
+    if ((name === 'NotAllowedError' || name === 'AbortError') && e && /display|screen|share/i.test(String(e.message))) return '画面共有がキャンセルされました。もう一度「▶ 開始」を押して、共有する画面（またはタブ）と音声を選んでください。';
     if (name === 'NotAllowedError' || name === 'SecurityError') {
       return 'マイクの使用が許可されていません。アドレスバー左のアイコン →「マイク」を「許可」にしてから、もう一度お試しください。'
         + '（Mac: システム設定 > プライバシーとセキュリティ > マイク で Chrome を許可 / Windows: 設定 > プライバシー > マイク でデスクトップアプリのアクセスを許可）';

@@ -1,5 +1,6 @@
-/* 仕上げパス：シーンの拡大 + インパクト（色収差＋ズーム）+ 曲名 + フラッシュ + 明るさ + 暗転
- * + 周辺減光 + ディザ + 遅延計測用の四角。 */
+/* 仕上げパス：表示の調整（位置・サイズ・回転・反転）→ シーンの拡大 + インパクト（色収差＋ズーム）
+ * + 曲名 + テロップ + ロゴの透かし + フラッシュ + 明るさ + 暗転 + 周辺減光 + ディザ + 遅延計測用の四角。
+ * 「論理座標」はシーン・文字の座標（回転後の画面）、「物理座標」は実際のキャンバスの画素。 */
 (function (VJ) {
   'use strict';
   VJ.scenes.POST = `#version 300 es
@@ -7,48 +8,69 @@ precision highp float;
 out vec4 outColor;
 uniform sampler2D u_scene;
 uniform sampler2D u_text;
-uniform vec2 u_res;
-uniform float u_time, u_flash, u_black, u_master, u_impact, u_textAlpha, u_latSq, u_vignette;
+uniform sampler2D u_text2;
+uniform sampler2D u_logo;
+uniform vec2 u_res;          // 物理（キャンバス）サイズ
+uniform vec4 u_area;         // 表示エリア（物理 px）：中心 x, y, 幅, 高さ
+uniform float u_rot;         // 0..3（90° 単位、時計回り）
+uniform vec2 u_flip;         // 左右・上下反転（物理）
+uniform vec2 u_lres;         // 論理サイズ（回転後）
+uniform float u_time, u_flash, u_black, u_master, u_impact, u_textAlpha, u_text2Alpha, u_logoAlpha, u_latSq, u_vignette;
 uniform vec3 u_flashColor;
-uniform vec4 u_textRect;
+uniform vec4 u_textRect, u_text2Rect, u_logoRect;
 
 float hash12(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 
-void main() {
-  vec2 uv = gl_FragCoord.xy / u_res;
-  vec2 c = uv - 0.5;
-  // インパクト：明るさを変えずに色収差とズーム（フラッシュ制限の対象外で安全）
-  vec2 uz = 0.5 + c * (1.0 - 0.03 * u_impact);
-  float ca = 0.008 * u_impact;
-  vec3 col;
-  col.r = texture(u_scene, uz + c * ca).r;
-  col.g = texture(u_scene, uz).g;
-  col.b = texture(u_scene, uz - c * ca).b;
+// 枠の外は 0（分岐させずに掛け算で消す：ミップマップの微分が乱れないように）
+vec4 sampleRect(sampler2D t, vec4 rect, vec2 uv) {
+  vec2 q = (uv - rect.xy) / rect.zw;
+  float inside = step(0.0, q.x) * step(q.x, 1.0) * step(0.0, q.y) * step(q.y, 1.0);
+  return texture(t, clamp(q, 0.0, 1.0)) * inside;
+}
 
-  // 曲名
-  if (u_textAlpha > 0.001) {
-    vec2 t = (uv - u_textRect.xy) / u_textRect.zw;
-    if (t.x >= 0.0 && t.x <= 1.0 && t.y >= 0.0 && t.y <= 1.0) {
-      vec4 tx = texture(u_text, t);
-      col = mix(col, tx.rgb, tx.a * u_textAlpha);
-    }
+void main() {
+  vec2 px = gl_FragCoord.xy;
+  // 物理 → 表示エリア内の 0..1
+  vec2 q = (px - (u_area.xy - u_area.zw * 0.5)) / u_area.zw;
+  vec3 col = vec3(0.0);
+  if (q.x >= 0.0 && q.x <= 1.0 && q.y >= 0.0 && q.y <= 1.0) {
+    if (u_flip.x > 0.5) q.x = 1.0 - q.x;
+    if (u_flip.y > 0.5) q.y = 1.0 - q.y;
+    // 回転（論理 uv を求める）
+    vec2 uv = q;
+    if (u_rot > 0.5 && u_rot < 1.5) uv = vec2(1.0 - q.y, q.x);
+    else if (u_rot > 1.5 && u_rot < 2.5) uv = vec2(1.0 - q.x, 1.0 - q.y);
+    else if (u_rot > 2.5) uv = vec2(q.y, 1.0 - q.x);
+
+    vec2 c = uv - 0.5;
+    // インパクト：明るさを変えずに色収差とズーム（フラッシュ制限の対象外で安全）
+    vec2 uz = 0.5 + c * (1.0 - 0.03 * u_impact);
+    float ca = 0.008 * u_impact;
+    col.r = texture(u_scene, uz + c * ca).r;
+    col.g = texture(u_scene, uz).g;
+    col.b = texture(u_scene, uz - c * ca).b;
+
+    // 周辺減光はシーンにだけ（文字やロゴは隅でも暗くしない）
+    float aspect = u_lres.x / u_lres.y;
+    float v = smoothstep(1.25, 0.35, length(c * vec2(aspect, 1.0)) * 1.1);
+    col *= mix(1.0, v, u_vignette);
+
+    if (u_logoAlpha > 0.001) { vec4 t = sampleRect(u_logo, u_logoRect, uv); col = mix(col, t.rgb, t.a * u_logoAlpha); }
+    if (u_textAlpha > 0.001) { vec4 t = sampleRect(u_text, u_textRect, uv); col = mix(col, t.rgb, t.a * u_textAlpha); }
+    if (u_text2Alpha > 0.001) { vec4 t = sampleRect(u_text2, u_text2Rect, uv); col = mix(col, t.rgb, t.a * u_text2Alpha); }
+
+    col += u_flashColor * u_flash;
+    col *= u_master;
+    col *= 1.0 - u_black;
   }
 
-  col += u_flashColor * u_flash;
-  col *= u_master;
-  float aspect = u_res.x / u_res.y;
-  float v = smoothstep(1.25, 0.35, length(c * vec2(aspect, 1.0)) * 1.1);
-  col *= mix(1.0, v, u_vignette);
-  col *= 1.0 - u_black;
-
-  // 遅延計測用：右下の小さな四角
+  // 遅延計測用：右下（物理）の小さな四角
   if (u_latSq >= 0.0) {
-    vec2 px = gl_FragCoord.xy;
     float sz = max(24.0, u_res.y * 0.05);
     if (px.x > u_res.x - sz - 8.0 && px.x < u_res.x - 8.0 && px.y > 8.0 && px.y < sz + 8.0) col = vec3(u_latSq);
   }
   // ディザ（グラデーションの段差を防ぐ）
-  col += (hash12(gl_FragCoord.xy + fract(u_time) * 97.0) - 0.5) / 255.0;
+  col += (hash12(px + fract(u_time) * 97.0) - 0.5) / 255.0;
   outColor = vec4(clamp(col, 0.0, 1.0), 1.0);
 }`;
 })(globalThis.VJ = globalThis.VJ || {});

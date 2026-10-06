@@ -27,16 +27,8 @@
         return true;
       }
       if (st === 0xb0) {
-        if (d1 === 1) {
-          show.state.master = Math.max(0.2, Math.min(1, 0.2 + (d2 / 127) * 0.8));
-          show.settings.master = show.state.master;
-          return true;
-        }
-        if (d1 === 2) {
-          const step = Math.round((d2 / 127) * 10 - 5);
-          if (step !== show.state.sens) show.nudgeSensitivity(step - show.state.sens);
-          return true;
-        }
+        if (d1 === 1) { show.setMaster(0.2 + (d2 / 127) * 0.8); return true; }
+        if (d1 === 2) { show.setSensitivity(Math.round((d2 / 127) * 10 - 5)); return true; }
       }
       return false;
     },

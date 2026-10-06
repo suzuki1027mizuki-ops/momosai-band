@@ -13,7 +13,7 @@ test('セットリスト：全角記号・番号・コメント・未知の指�
     '',
     '１．夜に駆ける｜２、６｜neon',
     '02) ドライフラワー | オーロラ | さくら | notitle',
-    '22才の別れ | 9 | nope',
+    '22才の別れ | 99 | nope',
     '3 マリーゴールド',
     '@end ありがとう！',
   ].join('\n'));
@@ -27,7 +27,7 @@ test('セットリスト：全角記号・番号・コメント・未知の指�
   assert.equal(p.songs[1].notitle, true);
   assert.equal(p.songs[2].title, '22才の別れ');
   assert.equal(p.songs[3].title, 'マリーゴールド');
-  assert.equal(p.errors.length, 2); // 9 と nope
+  assert.equal(p.errors.length, 2); // 99 と nope
 });
 
 test('フラッシュ制限：1 秒に 3 回まで・200ms 間隔・赤は白に', () => {
@@ -161,7 +161,7 @@ test('MIDI：ノートでシーン・フラッシュ・暗転・曲送り、CC �
 
 test('キー割り当て：数字・テンキーがすべてのシーンに対応', () => {
   const ids = new Set(Object.values(VJ.keys.SCENE_KEYS));
-  for (const s of VJ.scenes.list) assert.ok(ids.has(s.id), s.id);
+  for (const s of VJ.scenes.list) if (!s.hidden) assert.ok(ids.has(s.id), s.id);
   assert.equal(VJ.keys.SCENE_KEYS.Numpad3, 'horizon');
   assert.equal(VJ.keys.SCENE_KEYS.Digit0, 'title');
 });

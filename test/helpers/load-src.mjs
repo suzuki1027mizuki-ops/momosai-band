@@ -24,7 +24,7 @@ export function loadVJ(include = DEFAULT_INCLUDE) {
 
 /** 音声を「描画フレーム」相当のチャンクで流し、オンセットのログと特徴量の推移を返す */
 export function analyze(VJ, samples, sr, opts = {}) {
-  const fx = new VJ.dsp.FeatureExtractor({ sampleRate: sr });
+  const fx = new VJ.dsp.FeatureExtractor({ sampleRate: sr, config: opts.config || (opts.profile ? VJ.makeDspConfig({ profile: opts.profile, gateDb: -70 }) : undefined) });
   fx.onsetLog = [];
   if (opts.sens) fx.setSensitivity(opts.sens);
   const fps = opts.fps || 60;
@@ -46,7 +46,7 @@ export function analyze(VJ, samples, sr, opts = {}) {
       latest.fill(0);
       latest.set(samples.subarray(start, end), 8192 - (end - start));
       const f = fx.computeFrame(latest, i / sr, chunk.length / sr);
-      if (opts.keepFrames) frames.push({ t: i / sr, level: f.level, low: f.low, mid: f.mid, high: f.high, kick: f.kick, intensity: f.intensity, active: f.active, impactN: f.impactN });
+      if (opts.keepFrames) frames.push({ t: i / sr, level: f.level, low: f.low, mid: f.mid, high: f.high, kick: f.kick, intensity: f.intensity, active: f.active, impactN: f.impactN, flags: f.onsetFlags, bpm: f.bpm, conf: f.beatConf, melodic: f.melodic });
     }
   }
   return { log: fx.onsetLog, fx, frames };

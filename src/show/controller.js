@@ -29,8 +29,12 @@
         songIdx: -1, endState: false,
         flash: 0, flashColor: [1, 1, 1], impact: 0, strobe: false,
         text: null, travel: 0, idle: 1, latSq: 0,
+        msg: null, // テロップ { text, t0, off }
+        beforeTest: null, // テストパターンの前のシーン
         uniforms: null,
       };
+      this.onTap = null; // () => BPM（タップテンポ。FeatureExtractor へつなぐ）
+      this.onSession = null; // 状態が変わったら呼ばれる（前回の続きから再開するため）
       this.fx = { requestFlash: (s, src) => this.flash(s, src) };
       this.applySettings(settings);
       this._applyScene('title');
@@ -47,9 +51,19 @@
       this.state.master = clamp(+s.master || 1, 0.2, 1);
       this.state.sens = clamp(s.sensitivity | 0, -5, 5);
       this.state.paletteIdx = s.paletteIdx | 0;
+      this.profile = VJ.profileById(s.profile);
       this._palette();
       if (this.onSensitivity) this.onSensitivity(this.state.sens);
     }
+    /** 自動のフラッシュ（キメ・ブレイク明け・シーンの反転など）を使うか */
+    autoFlashOn() { return !!this.settings.autoFlash && this.profile.show.autoFlash !== false && !this.settings.noFlash; }
+    /** オートで使ってよいシーンか */
+    autoAllowed(id) {
+      const def = VJ.scenes.byId[id];
+      return !!def && !def.hidden && id !== 'title' && this.sceneAvailable(id) && !(this.settings.autoScenes && this.settings.autoScenes[id] === false);
+    }
+    /** 動きの大きさ（設定 × 音楽タイプの基準） */
+    react() { return VJ.util.clamp((+this.settings.react || 1) * (this.profile.show.react || 1), 0.2, 1.6); }
     get auto() { return this.state.auto; }
     bandName() { return (this.setlist && this.setlist.band) || this.settings.bandName || ''; }
     endText() { return (this.setlist && this.setlist.end) || this.settings.endText || 'Thank you!'; }
@@ -74,6 +88,26 @@
       this.state.sceneStart = this.now;
       this.state.pending = null;
       this.director.noteSwitch(this.now);
+      this._session();
+    }
+
+    _session() { if (this.onSession) this.onSession(this.session()); }
+    /** 再開用の状態 */
+    session() {
+      const s = this.state;
+      return { songIdx: s.songIdx, endState: s.endState, sceneId: s.sceneId === 'test' ? (s.beforeTest || 'title') : s.sceneId, paletteIdx: s.paletteIdx, t: Date.now() };
+    }
+    /** 前回の続きから再開 */
+    restoreSession(x) {
+      if (!x) return false;
+      const songs = this.setlist.songs;
+      this.state.songIdx = Math.max(-1, Math.min(songs.length, x.songIdx | 0));
+      this.state.endState = !!x.endState || this.state.songIdx >= songs.length;
+      if (typeof x.paletteIdx === 'number') { this.state.paletteIdx = x.paletteIdx; this._palette(); }
+      this._applyScene(VJ.scenes.byId[x.sceneId] && this.sceneAvailable(x.sceneId) ? x.sceneId : 'title');
+      const song = this.currentSong();
+      this._toast(song ? `M${this.state.songIdx + 1} ${song.title} から再開` : '再開しました');
+      return true;
     }
 
     selectScene(id, opts) {
@@ -82,6 +116,7 @@
       if (!this.sceneAvailable(id)) { this._toast(`「${VJ.scenes.byId[id].nameJa}」は使えません（シェーダエラー）`, 'warn'); return false; }
       this.director.noteSwitch(this.now);
       this.director.silentFrom = null;
+      this.state.beforeTest = null;
       const name = VJ.scenes.byId[id].nameJa;
       if (opts.immediate || !this.lastActive) {
         this._applyScene(id);
@@ -135,8 +170,10 @@
       if (song.palette !== null) { this.state.paletteIdx = song.palette; this._palette(); }
       this.director.noteSwitch(this.now);
       this.director.silentFrom = null;
+      if (this.onSongStart) this.onSongStart(i);
       if (!song.notitle) this.showSongTitle();
       this._toast(`M${i + 1} ${song.title}`);
+      this._session();
     }
 
     showSongTitle() {
@@ -156,6 +193,8 @@
     // ---- 光・色・明るさ --------------------------------------------------
     /** フラッシュ（制限器を通る）。strength 0 は「枠だけ消費」（反転・残像リセット用） */
     flash(strength, src) {
+      if (this.settings.noFlash) return false;
+      if ((src === 'auto' || src === 'kaleido-reset' || src === 'glitch-invert') && !this.autoFlashOn()) return false;
       if (!this.limiter.allow(this.now)) return false;
       if (strength > 0) this.state.flash = Math.max(this.state.flash, strength);
       return true;
@@ -184,6 +223,16 @@
       this.settings.master = this.state.master;
       this._toast(`明るさ: ${Math.round(this.state.master * 100)}%`);
     }
+    /** 明るさを直接（MIDI のつまみなど）。0.2〜1 */
+    setMaster(v) {
+      this.state.master = clamp(+v || 0.2, 0.2, 1);
+      this.settings.master = Math.round(this.state.master * 100) / 100;
+    }
+    /** 感度を直接（-5〜+5） */
+    setSensitivity(step) {
+      const v = clamp(Math.round(step), -5, 5);
+      if (v !== this.state.sens) this.nudgeSensitivity(v - this.state.sens);
+    }
     toggleAuto() {
       this.state.auto = !this.state.auto;
       this.settings.auto = this.state.auto;
@@ -192,6 +241,62 @@
     }
     lock() { this.state.locked = true; this._toast('ロック（L 長押しで解除）'); }
     unlock() { this.state.locked = false; this._toast('ロック解除'); }
+
+    /** タップテンポ */
+    tap() {
+      const bpm = this.onTap ? this.onTap() : 0;
+      this._toast(bpm ? `テンポ: ${Math.round(bpm)} BPM（タップ）` : 'タップ（3 回以上たたくとテンポが決まります）');
+      return bpm;
+    }
+
+    /** テロップ：i 番目のメッセージを表示・もう一度で消す */
+    toggleMessage(i) {
+      const text = (this.settings.messages && this.settings.messages[i]) || '';
+      if (!text) { this._toast(`テロップ ${i + 1} が空です（設定 M で入力）`, 'warn'); return; }
+      this.showMessage(text);
+    }
+    /** テロップを表示（同じ文字なら消す）。空文字で消す */
+    showMessage(text) {
+      const m = this.state.msg;
+      if (!text || (m && !m.off && m.text === text)) {
+        if (m && !m.off) m.off = this.now;
+        return;
+      }
+      this.state.msg = { text, t0: this.now, off: 0 };
+    }
+    msgAlpha() {
+      const m = this.state.msg;
+      if (!m) return 0;
+      const a = Math.min(1, (this.now - m.t0) / 0.3);
+      if (!m.off) return a;
+      const b = 1 - (this.now - m.off) / 0.5;
+      if (b <= 0) { this.state.msg = null; return 0; }
+      return Math.min(a, b);
+    }
+
+    /** テストパターンの表示・解除 */
+    toggleTestPattern() {
+      const s = this.state;
+      if (s.sceneId === 'test') { const back = s.beforeTest || 'title'; s.beforeTest = null; this._applyScene(back); this._toast('テストパターン解除'); return; }
+      s.beforeTest = s.sceneId;
+      this._applyScene('test');
+      this._toast('テストパターン（G で戻る）');
+    }
+
+    /** 開演までのカウントダウン文字（無ければ ''） */
+    countdownText(nowDate) {
+      const t = String(this.settings.countdownTo || '').trim();
+      const m = /^(\d{1,2})[:：](\d{2})$/.exec(t);
+      if (!m || this.state.songIdx >= 0 || this.state.endState) return '';
+      const d = nowDate || new Date();
+      const target = new Date(d.getFullYear(), d.getMonth(), d.getDate(), +m[1], +m[2], 0);
+      let sec = Math.ceil((target - d) / 1000);
+      if (sec <= 0 || sec > 6 * 3600) return '';
+      const h = Math.floor(sec / 3600); sec -= h * 3600;
+      const mm = Math.floor(sec / 60), ss = sec % 60;
+      const pad = (x) => String(x).padStart(2, '0');
+      return '開演まで ' + (h ? `${h}:${pad(mm)}:${pad(ss)}` : `${pad(mm)}:${pad(ss)}`);
+    }
 
     // ---- 毎フレーム ------------------------------------------------------
     update(f, dt, now) {
@@ -209,19 +314,19 @@
 
       // 予約された切替：次のビート（キック/スネア/アクセント）で
       if (s.pending) {
-        const hit = ((fl & 1) && f.kick >= 0.5) || ((fl & 2) && f.snare >= 0.5) || (fl & 8);
+        const hit = ((fl & 1) && f.kick >= 0.5) || ((fl & 2) && f.snare >= 0.5) || (fl & 8) || ((fl & 32) && f.beatConf >= 0.4);
         if (hit || now >= s.pending.deadline || !f.active) this._applyScene(s.pending.id);
       }
 
       // オート
-      const a = this.director.update(this, f, now);
+      const a = s.sceneId === 'test' ? null : this.director.update(this, f, now);
       if (a) {
         if (a.scene && a.scene !== s.sceneId && this.sceneAvailable(a.scene)) this._applyScene(a.scene);
         if (a.palette) this.cyclePalette(1, true);
       }
 
       // 自動フラッシュ・ストロボ・インパクト
-      if (this.settings.autoFlash && (fl & (8 | 16))) this.flash(fl & 16 ? 0.7 : 0.45, 'auto');
+      if (fl & (8 | 16)) this.flash(fl & 16 ? 0.7 : 0.45, 'auto');
       if (s.strobe && (fl & 3)) this.flash(0.65, 'strobe');
       if (fl & 16) s.impact = 1;
       else if (fl & 8) s.impact = Math.max(s.impact, 0.6);
@@ -262,12 +367,31 @@
 
     titleText() { return this.state.endState ? this.endText() : this.bandName(); }
 
+    /** 動きの大きさを掛けた特徴量（オブジェクトは使い回す） */
+    _scaled(f) {
+      const k = this.react();
+      if (Math.abs(k - 1) < 1e-3) return f;
+      const g = this._sf || (this._sf = { kickEv: new Float32Array(f.kickEv.length), snareEv: new Float32Array(f.snareEv.length), accentEv: new Float32Array(f.accentEv.length) });
+      for (const key in f) {
+        const v = f[key];
+        if (typeof v !== 'object') g[key] = v;
+        else if (key !== 'kickEv' && key !== 'snareEv' && key !== 'accentEv') g[key] = v;
+      }
+      for (const t of ['kick', 'snare', 'hat', 'accent']) g[t] = Math.min(1, f[t] * k);
+      for (const t of ['kickEv', 'snareEv', 'accentEv']) {
+        const a = f[t], b = g[t];
+        for (let i = 0; i < a.length; i += 2) { b[i] = a[i]; b[i + 1] = Math.min(1, a[i + 1] * k); }
+      }
+      g.level = Math.min(1, f.level * (0.6 + 0.4 * k));
+      return g;
+    }
+
     /** レンダラーに渡すフレーム情報（オブジェクトは使い回す） */
     frame(f, dt, getText) {
       const s = this.state, fr = this._fr || (this._fr = {});
       fr.scene = VJ.scenes.byId[s.sceneId];
       fr.uniforms = s.uniforms;
-      fr.f = f;
+      fr.f = this._scaled(f);
       fr.time = this.now;
       fr.dt = dt;
       fr.sceneTime = this.now - s.sceneStart;
@@ -279,7 +403,7 @@
       fr.flashColor = s.flashColor;
       fr.black = s.black;
       fr.master = s.master;
-      fr.impact = s.impact;
+      fr.impact = s.impact * Math.min(1, this.react());
       const ta = this.textAlpha();
       if (ta > 0 && getText) {
         const t = fr._text || (fr._text = { tex: null, alpha: 0 });
@@ -289,9 +413,22 @@
       } else {
         fr.text = null;
       }
-      fr.titleTex = s.sceneId === 'title' && getText ? getText(this.titleText(), '').tex : null;
+      const ma = this.msgAlpha();
+      if (ma > 0 && getText) {
+        const t = fr._text2 || (fr._text2 = { tex: null, alpha: 0 });
+        t.tex = getText(s.msg.text, '').tex;
+        t.alpha = ma;
+        fr.text2 = t;
+      } else {
+        fr.text2 = null;
+      }
+      const logo = this.settings.logo ? this.settings.logoMode : 'off';
+      const isTitle = s.sceneId === 'title';
+      fr.titleLogo = isTitle && !s.endState && (logo === 'title' || logo === 'both');
+      fr.titleTex = isTitle && getText ? getText(this.titleText(), this.countdownText()).tex : null;
+      fr.logoCorner = (logo === 'corner' || (logo === 'both' && !isTitle)) && s.sceneId !== 'test' ? this.settings.logoCorner || 'br' : '';
       fr.latSq = this.settings.latencySquare ? s.latSq : -1;
-      fr.vignette = 0.6;
+      fr.vignette = s.sceneId === 'test' ? 0 : 0.6;
       return fr;
     }
   }

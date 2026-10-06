@@ -9,7 +9,7 @@
     constructor(sr, seconds) {
       this.sr = sr;
       this.buf = new Float32Array(Math.ceil(sr * seconds));
-      this.onsets = { kick: [], snare: [], hat: [], crash: [] };
+      this.onsets = { kick: [], snare: [], hat: [], crash: [], note: [] };
     }
 
     add(start, fn, dur) {
@@ -97,6 +97,39 @@
       }, dur);
     }
 
+    /** ピアノ/ギターの単音・和音（倍音が速く減衰する撥弦・打鍵の音）。freqs は配列 */
+    pluck(t, freqs, vel, dur) {
+      this.onsets.note.push(t);
+      const sr = this.sr, n = freqs.length;
+      const ph = new Float64Array(n * 4);
+      this.add(t, (x) => {
+        let s = 0;
+        for (let k = 0; k < n; k++) {
+          for (let h = 0; h < 4; h++) {
+            const i = k * 4 + h;
+            ph[i] += (freqs[k] * (h + 1)) / sr;
+            if (ph[i] > 1) ph[i] -= 1;
+            s += Math.sin(2 * Math.PI * ph[i]) * Math.exp(-x * (2.2 + h * 2.5)) / (h + 1);
+          }
+        }
+        const atk = Math.min(1, x / 0.003);
+        return (s / Math.sqrt(n)) * atk * 0.32 * vel;
+      }, dur || 1.6);
+    }
+
+    /** 歌・ストリングスのような持続音（立ち上がりがゆっくり。オンセットの正解には含めない） */
+    pad(t, freq, vel, dur) {
+      const sr = this.sr;
+      let ph = 0;
+      this.add(t, (x) => {
+        const vib = 1 + 0.004 * Math.sin(2 * Math.PI * 5.5 * x);
+        ph += (freq * vib) / sr;
+        if (ph > 1) ph -= 1;
+        const env = Math.min(1, x / 0.25) * Math.min(1, Math.max(0, (dur - x) / 0.3));
+        return (Math.sin(2 * Math.PI * ph) + 0.3 * Math.sin(4 * Math.PI * ph)) * env * 0.18 * vel;
+      }, dur);
+    }
+
     normalize(peak) {
       let m = 0;
       for (const v of this.buf) m = Math.max(m, Math.abs(v));
@@ -175,6 +208,19 @@
         }
         if (sec.guitar === 'chord') m.guitar(tb, bar * 0.98, root, g, false);
         else if (sec.guitar === 'chug') for (let k = 0; k < 8; k++) m.guitar(tb + k * e8, e8 * 0.9, root, g, true);
+        // 鍵盤・アコースティック系（ドラムなしの曲のテスト用）
+        const r4 = root * 4, maj = [1, 1.26, 1.5, 2];
+        if (sec.keys === 'arp') {
+          const seq = [0, 2, 1, 3, 2, 1, 3, 2];
+          for (let k = 0; k < 8; k++) m.pluck(tb + k * e8 + jit(), [r4 * maj[seq[k]]], v() * (k % 2 ? 0.8 : 1), 1.2);
+        } else if (sec.keys === 'chords') {
+          m.pluck(tb + jit(), maj.map((x) => r4 * x), v(), 2.0);
+          m.pluck(tb + 2 * beat + jit(), maj.map((x) => r4 * x), v() * 0.85, 2.0);
+        } else if (sec.keys === 'ballad') {
+          m.pluck(tb + jit(), maj.slice(0, 3).map((x) => r4 * x), v() * 0.9, 2.4);
+          for (let k = 1; k < 4; k++) m.pluck(tb + k * beat + jit(), [r4 * 2 * maj[(b + k) % 4]], v() * 0.7, 1.4);
+        }
+        if (sec.vocal) m.pad(tb, r4 * 2 * maj[b % 4], g, bar);
       }
       t0 += sec.bars * bar;
     }

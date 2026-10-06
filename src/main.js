@@ -31,16 +31,42 @@
     app.show.onSensitivity = (s) => { if (app.extractor) app.extractor.setSensitivity(s); };
     app.ensureExtractor = () => {
       const sr = app.engine.sampleRate;
-      if (!app.extractor || app.extractor.sr !== sr) {
-        app.extractor = new VJ.dsp.FeatureExtractor({ sampleRate: sr });
+      const key = VJ.dspKey(app.settings);
+      if (!app.extractor || app.extractor.sr !== sr || app.dspKey !== key) {
+        app.extractor = new VJ.dsp.FeatureExtractor({ sampleRate: sr, config: VJ.makeDspConfig(app.settings) });
         app.extractor.setSensitivity(app.show.state.sens);
+        app.dspKey = key;
       }
       return app.extractor;
     };
     app.getText = (main, sub) => app.renderer.text.get(main, sub);
+    const link = VJ.link;
+    const remote = () => link.role === 'control';
+
+    /** 設定を反映（2 画面のときは出力ウィンドウへ送る） */
+    app.applySettings = () => {
+      const s = app.settings;
+      app.show.applySettings(s);
+      if (remote()) { link.send({ t: 'settings', settings: s }); return; }
+      app.renderer.setOutput(s.output);
+      app.renderer.setLogo(s.logo);
+      app.renderer.setMaxScale(s.maxScale);
+    };
     app.startAudio = async (opts) => {
+      if (remote()) return link.request({ t: 'cmd', target: 'app', name: 'startAudio', args: [opts] });
       await app.engine.start(opts);
       app.ensureExtractor().resync();
+      return true;
+    };
+    app.show.onTap = () => (app.extractor ? app.extractor.tap() : 0);
+    app.show.onSongStart = () => { if (app.extractor) app.extractor.tempo.clearManual(); };
+    // 前回の続きから再開できるように、曲・シーンの位置を保存（操作ウィンドウ以外）
+    const SESSION_KEY = VJ.storage.KEY + '/session';
+    let sessT = null;
+    app.show.onSession = (sess) => {
+      if (remote() || app.paused) return;
+      clearTimeout(sessT);
+      sessT = setTimeout(() => { try { localStorage.setItem(SESSION_KEY, JSON.stringify(sess)); } catch (e) { /* noop */ } }, 500);
     };
 
     // トースト
@@ -60,10 +86,20 @@
       toast,
       toggleHud: () => VJ.hud.toggle(),
       toggleHelp: () => { help.hidden = !help.hidden; },
-      togglePanel: () => VJ.panel.toggle(),
-      closeOverlays: () => { help.hidden = true; VJ.hud.toggle(false); VJ.panel.toggle(false); },
+      togglePanel: () => {
+        if (link.role === 'output') { toast('設定は元の（操作）ウィンドウで行ってください'); return; }
+        VJ.panel.toggle();
+      },
+      closeOverlays: () => { help.hidden = true; VJ.hud.toggle(false); if (link.role !== 'output') VJ.panel.toggle(false); },
       enterFullscreen: () => VJ.guard.enterFullscreen(),
+      startShow: async () => {
+        if (remote()) return link.request({ t: 'cmd', target: 'ui', name: 'startShow', args: [] });
+        await VJ.guard.startShow();
+        if (link.role === 'output' && !document.fullscreenElement) document.getElementById('out-hint').hidden = false;
+        return true;
+      },
       softReset: async () => {
+        if (remote()) return link.request({ t: 'cmd', target: 'ui', name: 'softReset', args: [] });
         toast('ソフトリセット中…');
         try {
           if (app.engine.status !== 'idle') await app.engine.restart();
@@ -74,6 +110,7 @@
         } catch (e) {
           toast('リセット失敗：' + e.message, 'warn');
         }
+        return true;
       },
     };
     help.addEventListener('click', () => { help.hidden = true; });
@@ -83,13 +120,38 @@
     VJ.guard.install();
     VJ.keys.install(app);
     VJ.panel.init(app);
+    app.applySettings();
     if (VJ.params.test) VJ.testing = makeTesting(app);
 
-    let last = 0;
+    if (link.role === 'output') {
+      link.initOutput(app);
+    } else {
+      // 前回の続き（6 時間以内・曲が進んでいたとき）
+      try {
+        const sess = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+        if (sess && Date.now() - sess.t < 6 * 3600 * 1000 && (sess.songIdx >= 0 || sess.endState)) VJ.panel.offerResume(sess);
+      } catch (e) { /* noop */ }
+      // 起動したら自動で開始（展示・BGM 用）
+      if (settings.autoStart && (settings.lastSource === 'mic' || settings.lastSource === 'demo')) {
+        setTimeout(async () => {
+          await VJ.panel.startAudio({ source: settings.lastSource });
+          const ctx = app.engine.ctx;
+          if (ctx && ctx.state !== 'running') {
+            toast('画面をクリックすると音声入力が始まります', 'warn');
+            const go = () => { ctx.resume(); window.removeEventListener('pointerdown', go); window.removeEventListener('keydown', go); };
+            window.addEventListener('pointerdown', go);
+            window.addEventListener('keydown', go);
+          }
+        }, 300);
+      }
+    }
+
+    let last = 0, lastRender = 0;
     const silent = new Float32Array(8192);
     let prefetchAt = 0;
     function frame(ts) {
       requestAnimationFrame(frame);
+      if (link.role === 'control') { link.remoteTick(ts); return; }
       if (app.paused) return;
       const now = ts / 1000;
       const dt = last ? Math.min(0.1, Math.max(0.001, now - last)) : 1 / 60;
@@ -105,7 +167,14 @@
         if (pulled.samples.length) fx.process(pulled.samples);
         f = fx.computeFrame(engine.running ? engine.latest() : silent, now, dt);
         app.show.update(f, dt, now);
-        app.renderer.render(app.show.frame(f, dt, app.getText), ts);
+        // フレームレート上限（非力な PC 向け）：解析と演出は毎フレーム、描画だけ間引く
+        const cap = settings.fpsCap;
+        if (!cap || ts - lastRender >= 1000 / cap - 4) {
+          lastRender = ts;
+          app.renderer.render(app.show.frame(f, dt, app.getText), ts);
+        }
+        app.lastFeatures = f;
+        if (app.onFeatures) app.onFeatures(f);
         if (app.onFrame) app.onFrame(ts, engine.ctx ? engine.ctx.currentTime : 0, f);
         app.errorsInRow = 0;
         // 次の曲名のテクスチャを先に作っておく（曲頭での引っかかり防止）
@@ -148,10 +217,14 @@
           if (o.offset) samples = samples.subarray(Math.round(o.offset * sr));
           if (o.seconds) samples = samples.subarray(0, Math.round(o.seconds * sr));
           const settings = Object.assign({}, app.settings, o.settings || {});
+          app.renderer.setOutput(settings.output);
+          if (settings.logo !== undefined) app.renderer.setLogo(settings.logo);
           const show = new VJ.ShowController(settings);
           show.sceneAvailable = (id) => app.renderer.available(id);
-          const fx = new VJ.dsp.FeatureExtractor({ sampleRate: sr });
+          const fx = new VJ.dsp.FeatureExtractor({ sampleRate: sr, config: VJ.makeDspConfig(settings) });
+          show.onTap = () => fx.tap();
           if (o.sceneId) show._applyScene(o.sceneId);
+          if (o.logoWait) await new Promise((r) => setTimeout(r, o.logoWait));
           const fps = o.fps || 60, dt = 1 / fps, spf = sr / fps;
           const latest = new Float32Array(8192);
           const frames = o.frames || Math.floor(samples.length / spf);
@@ -176,8 +249,12 @@
           }
           res.denied = show.limiter.denied;
           res.kickN = fx.features.kickN;
+          res.bpm = fx.features.bpm;
+          res.melodic = fx.features.melodic;
           return res;
         } finally {
+          app.renderer.setOutput(app.settings.output);
+          app.renderer.setLogo(app.settings.logo);
           app.paused = false;
         }
       },

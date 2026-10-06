@@ -31,7 +31,7 @@ body.nocursor #panel, body.nocursor #panel * { cursor: auto !important; }
   position: fixed; top: 0; right: 0; bottom: 0; width: min(440px, 100vw);
   background: var(--panel); border-left: 1px solid var(--line);
   overflow-y: auto; padding: 14px 16px 40px; font-size: 14px; line-height: 1.5;
-  scrollbar-width: thin;
+  scrollbar-width: thin; z-index: 20;
 }
 #panel header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 #panel header h1 { font-size: 18px; margin: 0; letter-spacing: 0.08em; font-weight: 900;
@@ -77,16 +77,28 @@ table.setlist th { color: var(--muted); font-weight: normal; }
 .warnbox { background: #2a1a00; border: 1px solid var(--warn); color: #ffd99a; border-radius: 6px; padding: 8px; margin: 8px 0; font-size: 13px; }
 
 /* トースト・HUD・ヘルプ */
-#toast { position: fixed; left: 12px; bottom: 10px; font-size: 13px; color: rgba(255,255,255,0.85);
+#toast { position: fixed; z-index: 30; left: 12px; bottom: 10px; font-size: 13px; color: rgba(255,255,255,0.85);
   background: rgba(0,0,0,0.55); padding: 3px 10px; border-radius: 4px; pointer-events: none; opacity: 0; transition: opacity 0.25s; }
 #toast.show { opacity: 1; transition: none; }
 #toast.warn { color: #ffd99a; }
-#hud { position: fixed; left: 10px; top: 10px; margin: 0; padding: 8px 10px; font: 12px/1.45 var(--mono);
+#hud { position: fixed; z-index: 25; left: 10px; top: 10px; margin: 0; padding: 8px 10px; font: 12px/1.45 var(--mono);
   background: rgba(0,0,0,0.72); color: #cfe; white-space: pre; border-radius: 6px; pointer-events: none; max-width: calc(100vw - 20px); overflow: hidden; }
-#help { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.6); }
+#help { position: fixed; z-index: 35; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.6); }
 #help .box { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 24px; max-width: 640px; width: calc(100vw - 32px); }
 #help h3 { margin: 0 0 10px; color: var(--accent); }
-#fatal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #000; color: #fff; padding: 24px; text-align: center; font-size: 16px; line-height: 1.7; }
+details { margin: 8px 0; border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.bpm { font-family: var(--mono); min-width: 80px; }
+.row.msg input[type=text] { flex: 1; width: auto; }
+#logo-preview { max-height: 60px; max-width: 200px; background: #222; border-radius: 4px; }
+#auto-scenes label { font-size: 13px; }
+.warnbox.resume { background: #0d2a1a; border-color: var(--ok); color: #c8ffd8; }
+#remote { position: fixed; left: 16px; top: 16px; max-width: max(260px, calc(100vw - min(440px, 100vw) - 40px)); display: flex; z-index: 10; }
+#remote .box { background: var(--panel); border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; max-width: 640px; }
+#remote h3 { margin: 0 0 6px; color: var(--accent); }
+#remote pre { font: 12px/1.45 var(--mono); white-space: pre-wrap; color: #cfe; margin: 8px 0; }
+#out-hint { position: fixed; z-index: 30; left: 50%; top: 16px; transform: translateX(-50%); background: rgba(0,0,0,0.7); color: #fff; padding: 6px 14px; border-radius: 6px; font-size: 14px; pointer-events: none; }
+#fatal { position: fixed; z-index: 40; inset: 0; display: flex; align-items: center; justify-content: center; background: #000; color: #fff; padding: 24px; text-align: center; font-size: 16px; line-height: 1.7; }
 </style>
 </head>
 <body>
@@ -99,10 +111,14 @@ table.setlist th { color: var(--muted); font-weight: normal; }
     <button class="close" id="panel-close" title="閉じる（M で開く）">×</button>
   </header>
   <div id="warnings"></div>
+  <div id="resume-box" hidden>
+    <div class="warnbox resume"><span id="resume-text"></span> <button id="btn-resume">前回の続きから再開</button> <button id="btn-resume-no">いいえ</button></div>
+  </div>
 
   <h2>① 音声入力</h2>
   <div class="row">
     <label><input type="radio" name="src" value="mic" checked> マイク / ライン</label>
+    <label><input type="radio" name="src" value="display"> PC で再生中の音</label>
     <label><input type="radio" name="src" value="demo"> デモ音源</label>
     <label><input type="radio" name="src" value="file"> 音声ファイル</label>
   </div>
@@ -110,8 +126,10 @@ table.setlist th { color: var(--muted); font-weight: normal; }
     <select id="device"><option value="">（既定のデバイス）</option></select>
     <button id="btn-refresh" title="デバイス一覧を更新">↻</button>
   </div>
+  <div class="hint" id="display-opts" hidden>YouTube・音楽アプリ・DJ ソフトなど PC で流している音に反応します。開始すると共有する画面を聞かれるので、<b>「システム音声を共有」</b>（タブなら「タブの音声も共有」）をオンにして選んでください。Mac は Chrome のタブの音だけ使えます。</div>
   <div class="row" id="file-opts" hidden>
-    <input type="file" id="file" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac">
+    <input type="file" id="file" multiple accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac">
+    <button id="btn-skip" title="次の曲（複数選んだとき）" hidden>次の曲 ▶▶</button>
   </div>
   <div class="row">
     <span>解析するチャンネル</span>
@@ -128,50 +146,130 @@ table.setlist th { color: var(--muted); font-weight: normal; }
   <div class="status" id="audio-status">まだ開始していません</div>
   <div class="meter"><span>L</span><div class="track"><div class="fill" id="ml"></div><div class="peak" id="mlp"></div></div><span id="mlv">—</span></div>
   <div class="meter"><span>R</span><div class="track"><div class="fill" id="mr"></div><div class="peak" id="mrp"></div></div><span id="mrv">—</span></div>
-  <div class="lamps"><span class="lamp" id="lk">KICK</span><span class="lamp" id="ls">SNARE</span><span class="lamp" id="lh">HAT</span><span class="lamp" id="la">ACCENT</span></div>
-  <div class="hint">メーターが緑〜黄色の範囲で動けば OK。片方しか動かないときは「解析するチャンネル」はミックスのままで大丈夫です。</div>
+  <div class="lamps"><span class="lamp" id="lk">KICK</span><span class="lamp" id="ls">SNARE</span><span class="lamp" id="lh">HAT</span><span class="lamp" id="la">ACCENT</span><span class="lamp" id="lb">BEAT</span></div>
+  <div class="hint">メーターが緑〜黄色の範囲で動けば OK。片方しか動かないときも「解析するチャンネル」はミックスのままで大丈夫です。</div>
 
-  <h2>② バンド名・セットリスト</h2>
+  <h2>② 音楽のタイプ・テンポ</h2>
+  <div class="row"><select id="opt-profile"></select></div>
+  <div class="hint" id="profile-desc"></div>
+  <div class="row">
+    <span>テンポ</span><b id="bpm-view" class="bpm">— BPM</b><span class="hint" id="mode-view"></span>
+    <button id="btn-tap" title="拍に合わせて 3 回以上（Enter キーでも）">タップ</button>
+  </div>
+
+  <h2>③ バンド名・セットリスト・文字</h2>
   <div class="row"><input type="text" id="band" placeholder="バンド名"></div>
   <textarea id="setlist" spellcheck="false"></textarea>
-  <div class="hint">1 行 1 曲：<code>曲名 | シーン | パレット</code>。シーンは 1〜6（カンマで複数→オートで順番に）。<code>@end</code> で終演の文字。→ キーで次の曲。</div>
+  <div class="hint">1 行 1 曲：<code>曲名 | シーン | パレット</code>。シーンは 1〜9（カンマで複数→オートで順番に）。<code>@end</code> で終演の文字。→ キーで次の曲。</div>
   <div id="setlist-preview"></div>
+  <details>
+    <summary>ロゴ画像・テロップ・開演カウントダウン</summary>
+    <div class="row">
+      <span>ロゴ画像</span><input type="file" id="logo-file" accept="image/*">
+      <button id="btn-logo-clear">消す</button>
+    </div>
+    <div class="row">
+      <select id="opt-logomode">
+        <option value="title">タイトルでバンド名の代わりに表示</option>
+        <option value="corner">すべてのシーンの隅に小さく表示</option>
+        <option value="both">両方</option>
+        <option value="off">使わない</option>
+      </select>
+      <select id="opt-logocorner">
+        <option value="br">右下</option><option value="bl">左下</option><option value="tr">右上</option><option value="tl">左上</option>
+      </select>
+    </div>
+    <div class="row"><img id="logo-preview" alt="" hidden></div>
+    <div class="row"><span>テロップ</span></div>
+    <div class="row msg"><kbd>Q</kbd><input type="text" id="msg-0" placeholder="例：次は〇〇です"><button data-msg="0">表示</button></div>
+    <div class="row msg"><kbd>W</kbd><input type="text" id="msg-1" placeholder="例：手拍子お願いします！"><button data-msg="1">表示</button></div>
+    <div class="row msg"><kbd>E</kbd><input type="text" id="msg-2" placeholder="例：アンコールありがとう！"><button data-msg="2">表示</button></div>
+    <div class="hint">キー（Q / W / E）かボタンで表示、もう一度押すと消えます。</div>
+    <div class="row"><span>開演時刻</span><input type="time" id="opt-countdown"><span class="hint">タイトルに「開演まで 05:00」を表示（1 曲目に進むと消えます）</span></div>
+  </details>
 
-  <h2>③ オプション</h2>
+  <h2>④ 表示（スクリーンに合わせる）</h2>
+  <div class="row">
+    <span>回転</span>
+    <select id="out-rotate"><option value="0">なし</option><option value="90">90°（縦置き）</option><option value="180">180°（逆さ吊り）</option><option value="270">270°</option></select>
+    <label><input type="checkbox" id="out-fliph"> 左右反転（スクリーン裏から投影）</label>
+    <label><input type="checkbox" id="out-flipv"> 上下反転</label>
+  </div>
+  <div class="row"><span>サイズ</span><input type="range" id="out-size" min="0.3" max="1" step="0.01"><span id="out-size-v"></span></div>
+  <div class="row"><span>左右の位置</span><input type="range" id="out-x" min="-0.5" max="0.5" step="0.005"><span id="out-x-v"></span></div>
+  <div class="row"><span>上下の位置</span><input type="range" id="out-y" min="-0.5" max="0.5" step="0.005"><span id="out-y-v"></span></div>
+  <div class="row">
+    <button id="btn-test">テストパターン（G）</button>
+    <button id="btn-out-reset">表示を元に戻す</button>
+  </div>
+  <div class="row">
+    <button id="btn-output" class="primary">出力ウィンドウを開く（2 画面）</button>
+  </div>
+  <div class="hint" id="output-hint">プロジェクターを「拡張」でつないだときに使います。映像だけのウィンドウを開いてプロジェクター側で全画面にし、このウィンドウは操作・確認用になります（観客に操作画面が見えません）。</div>
+
+  <h2>⑤ オプション</h2>
   <div class="row">
     <label><input type="checkbox" id="opt-auto"> オート（自動でシーン切替）</label>
     <label><input type="checkbox" id="opt-autoflash"> キメで自動フラッシュ</label>
   </div>
   <div class="row">
-    <label><input type="checkbox" id="opt-toast"> キー操作を画面に小さく表示</label>
-    <label><input type="checkbox" id="opt-latsq"> 遅延計測用の四角（右下）</label>
+    <label><input type="checkbox" id="opt-noflash"> フラッシュを一切使わない（光に配慮が必要な会場）</label>
   </div>
   <div class="row"><span>感度</span><input type="range" id="opt-sens" min="-5" max="5" step="1"><span id="opt-sens-v"></span></div>
+  <div class="row"><span>動きの大きさ</span><input type="range" id="opt-react" min="0.3" max="1.5" step="0.05"><span id="opt-react-v"></span></div>
   <div class="row"><span>明るさ</span><input type="range" id="opt-master" min="0.2" max="1" step="0.1"><span id="opt-master-v"></span></div>
-  <div class="row"><span>画質上限</span><input type="range" id="opt-scale" min="0.4" max="1" step="0.05"><span id="opt-scale-v"></span></div>
   <div class="row">
     <span>パレット</span><select id="opt-palette"></select>
     <span id="custom-colors"></span>
   </div>
-  <div class="row">
-    <button id="btn-midi">MIDI コントローラを使う</button>
-    <span class="hint" id="midi-status">パッドのノート 36〜41＝シーン1〜6、43＝フラッシュ、44＝暗転</span>
-  </div>
-  <div class="row">
-    <label><input type="checkbox" id="opt-desync"> 低遅延描画（desynchronized・要再読み込み）</label>
-  </div>
-  <div class="row">
-    <button id="btn-export">設定を書き出し</button>
-    <button id="btn-import">設定を読み込み</button>
-    <input type="file" id="import-file" accept=".json,application/json" hidden>
-    <button id="btn-reset">初期設定に戻す</button>
-  </div>
+  <details>
+    <summary>詳しい設定</summary>
+    <div class="row"><span>オートで使うシーン</span></div>
+    <div class="row" id="auto-scenes"></div>
+    <div class="row"><span>無音とみなす音量</span><input type="range" id="opt-gate" min="-80" max="-30" step="1"><span id="opt-gate-v"></span></div>
+    <div class="hint">会場のざわざわで反応してしまうときは右へ（大きく）。小さい音に反応しないときは左へ。</div>
+    <div class="row"><span>画質上限</span><input type="range" id="opt-scale" min="0.4" max="1" step="0.05"><span id="opt-scale-v"></span></div>
+    <div class="row">
+      <span>フレームレート</span>
+      <select id="opt-fps"><option value="0">制限なし（推奨）</option><option value="30">30fps（非力な PC 向け）</option></select>
+    </div>
+    <div class="row">
+      <label><input type="checkbox" id="opt-toast"> キー操作を画面に小さく表示</label>
+      <label><input type="checkbox" id="opt-latsq"> 遅延計測用の四角（右下）</label>
+    </div>
+    <div class="row">
+      <label><input type="checkbox" id="opt-autostart"> 起動したら前回の入力で自動的に開始（展示・BGM 用）</label>
+    </div>
+    <div class="row">
+      <label><input type="checkbox" id="opt-desync"> 低遅延描画（desynchronized・要再読み込み）</label>
+    </div>
+    <div class="row">
+      <button id="btn-midi">MIDI コントローラを使う</button>
+      <span class="hint" id="midi-status">パッドのノート 36〜41＝シーン1〜6、43＝フラッシュ、44＝暗転</span>
+    </div>
+    <div class="row">
+      <button id="btn-export">設定を書き出し</button>
+      <button id="btn-import">設定を読み込み</button>
+      <input type="file" id="import-file" accept=".json,application/json" hidden>
+      <button id="btn-reset">初期設定に戻す</button>
+    </div>
+  </details>
 
-  <h2>④ 本番</h2>
+  <h2>⑥ 本番</h2>
   <button class="big" id="btn-show">ショー開始（全画面）</button>
   <div class="hint">全画面・スリープ防止・Esc 長押しでのみ解除、がまとめて有効になります。<b>H</b> でキー一覧、<b>M</b> でこのパネル。</div>
   <div class="keys" id="keys-mini"></div>
 </div>
+
+<div id="remote" hidden>
+  <div class="box">
+    <h3>出力ウィンドウで表示中</h3>
+    <p class="hint">映像は出力ウィンドウに出ています。キー操作とこのパネルはそのまま使えます。出力ウィンドウはプロジェクター側へ移動して<b>ダブルクリック</b>（または F）で全画面に。閉じるとこの画面に戻ります。</p>
+    <pre id="remote-status"></pre>
+    <button id="btn-output-close">出力ウィンドウを閉じる</button>
+  </div>
+</div>
+<div id="out-hint" hidden>ダブルクリック（または F キー）で全画面 ／ 操作は元のウィンドウで</div>
 
 <div id="toast"></div>
 <pre id="hud" hidden></pre>
@@ -181,10 +279,12 @@ table.setlist th { color: var(--muted); font-weight: normal; }
 <script src="src/core/ns.js"></script>
 <script src="src/core/config.js"></script>
 <script src="src/core/storage.js"></script>
+<script src="src/core/profiles.js"></script>
 <script src="src/dsp/biquad.js"></script>
 <script src="src/dsp/fft.js"></script>
 <script src="src/dsp/envelope.js"></script>
 <script src="src/dsp/onset.js"></script>
+<script src="src/dsp/tempo.js"></script>
 <script src="src/dsp/features.js"></script>
 <script src="src/audio/synth.js"></script>
 <script src="src/audio/engine.js"></script>
@@ -199,6 +299,10 @@ table.setlist th { color: var(--muted); font-weight: normal; }
 <script src="src/scenes/aurora.js"></script>
 <script src="src/scenes/kaleido.js"></script>
 <script src="src/scenes/glitch.js"></script>
+<script src="src/scenes/eq.js"></script>
+<script src="src/scenes/stars.js"></script>
+<script src="src/scenes/scope.js"></script>
+<script src="src/scenes/testpattern.js"></script>
 <script src="src/scenes/post.js"></script>
 <script src="src/show/palettes.js"></script>
 <script src="src/show/setlist.js"></script>
@@ -209,6 +313,7 @@ table.setlist th { color: var(--muted); font-weight: normal; }
 <script src="src/ui/hud.js"></script>
 <script src="src/ui/guard.js"></script>
 <script src="src/ui/midi.js"></script>
+<script src="src/ui/link.js"></script>
 <script src="src/ui/panel.js"></script>
 <script src="src/main.js"></script>
 </body>

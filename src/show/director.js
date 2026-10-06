@@ -6,9 +6,9 @@
   'use strict';
 
   const TIERS = {
-    low: ['aurora', 'horizon', 'ripple'],
-    mid: ['ripple', 'tunnel', 'horizon', 'kaleido'],
-    high: ['tunnel', 'kaleido', 'glitch'],
+    low: ['aurora', 'horizon', 'stars', 'ripple'],
+    mid: ['ripple', 'tunnel', 'horizon', 'kaleido', 'eq'],
+    high: ['tunnel', 'kaleido', 'glitch', 'eq'],
   };
 
   class AutoDirector {
@@ -44,9 +44,15 @@
       if (!f.active) return null;
       // タイトル（開演前・MC・終演）は操作者が離れるまで維持する
       if (st.sceneId === 'title') return null;
+      const prof = (show.profile && show.profile.show) || {};
+      const S = prof.switchSec || this.opts.switchSec;
+      const KF = prof.kickFallbackSec || this.opts.kickFallbackSec;
       const since = now - this.lastSwitch;
-      const trigger = (since >= this.opts.switchSec && (f.onsetFlags & (8 | 16)))
-        || (since >= this.opts.kickFallbackSec && (f.onsetFlags & 1) && f.kick >= 0.5);
+      const fl = f.onsetFlags;
+      // 1) キメ・ブレイク明け  2) 少し待っても無ければ小節の頭（テンポが取れているとき）  3) それも無ければキック
+      const trigger = (since >= S && (fl & (8 | 16)))
+        || (since >= S + 6 && (fl & 64) && f.beatConf >= 0.35)
+        || (since >= KF && (fl & 1));
       if (!trigger) return null;
       const song = show.currentSong();
       if (song && song.scenes.length === 1) return null; // 1 シーン指定の曲は固定
@@ -62,15 +68,18 @@
     _pick(show, f) {
       const song = show.currentSong();
       const cur = show.state.sceneId;
-      const ok = (id) => show.sceneAvailable(id);
       if (song && song.scenes.length > 1) {
-        const list = song.scenes.filter(ok);
+        const list = song.scenes.filter((id) => show.sceneAvailable(id));
         if (!list.length) return null;
         const i = list.indexOf(cur);
         return list[(i + 1) % list.length];
       }
-      const tier = f.intensity > 0.66 ? TIERS.high : f.intensity > 0.33 ? TIERS.mid : TIERS.low;
-      const cands = tier.filter((id) => id !== cur && ok(id));
+      const tiers = (show.profile && show.profile.show.tiers) || TIERS;
+      const ok = (id) => (show.autoAllowed ? show.autoAllowed(id) : show.sceneAvailable(id));
+      const tier = f.intensity > 0.66 ? tiers.high : f.intensity > 0.33 ? tiers.mid : tiers.low;
+      let cands = tier.filter((id) => id !== cur && ok(id));
+      // 選べるものが無ければ（オートで使うシーンを絞った場合など）許可されたシーン全体から
+      if (!cands.length) cands = VJ.scenes.list.map((d) => d.id).filter((id) => id !== cur && ok(id));
       if (!cands.length) return null;
       return cands[Math.floor(this.rng() * cands.length)];
     }
