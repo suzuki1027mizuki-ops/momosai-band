@@ -1,0 +1,8 @@
+node_modules/
+test/artifacts/
+test/fixtures/*.wav
+test/fixtures/*.json
+.vj-profile/
+dist/.vj-profile/
+.DS_Store
+Thumbs.db
