@@ -93,6 +93,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 #logo-preview { max-height: 60px; max-width: 200px; background: #222; border-radius: 4px; }
 #auto-scenes label { font-size: 13px; }
 .warnbox.resume { background: #0d2a1a; border-color: var(--ok); color: #c8ffd8; }
+body.remote-mode #stage { opacity: 0.25; }
 #remote { position: fixed; left: 16px; top: 16px; max-width: max(260px, calc(100vw - min(440px, 100vw) - 40px)); display: flex; z-index: 10; }
 #remote .box { background: var(--panel); border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; max-width: 640px; }
 #remote h3 { margin: 0 0 6px; color: var(--accent); }
@@ -284,7 +285,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
   'use strict';
 
   VJ.version = '1.0.0';
-  VJ.buildTime = '2026-10-06 #be9e995';
+  VJ.buildTime = '2026-10-06 #58e3a91';
 
   const LN10_20 = Math.LN10 / 20;
 
@@ -5053,6 +5054,7 @@ void main() {
       app.engine = new RemoteEngine(link);
       VJ.panel.bindEngine();
       document.getElementById('remote').hidden = false;
+      document.body.classList.add('remote-mode');
       document.getElementById('btn-output').textContent = '出力ウィンドウを前面に';
       clearInterval(link._poll);
       link._poll = setInterval(() => { if (link.peer && link.peer.closed) link.closeOutput(true); }, 500);
@@ -5073,6 +5075,7 @@ void main() {
       link.role = 'solo';
       app.paused = false;
       document.getElementById('remote').hidden = true;
+      document.body.classList.remove('remote-mode');
       document.getElementById('btn-output').textContent = '出力ウィンドウを開く（2 画面）';
       VJ.panel.renderStatus(app.engine.status, '');
       app.ui.toast('出力ウィンドウを閉じました（この画面に戻しました。音声は ▶ 開始 で再開）');

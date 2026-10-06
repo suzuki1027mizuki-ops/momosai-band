@@ -118,6 +118,7 @@
       app.engine = new RemoteEngine(link);
       VJ.panel.bindEngine();
       document.getElementById('remote').hidden = false;
+      document.body.classList.add('remote-mode');
       document.getElementById('btn-output').textContent = '出力ウィンドウを前面に';
       clearInterval(link._poll);
       link._poll = setInterval(() => { if (link.peer && link.peer.closed) link.closeOutput(true); }, 500);
@@ -138,6 +139,7 @@
       link.role = 'solo';
       app.paused = false;
       document.getElementById('remote').hidden = true;
+      document.body.classList.remove('remote-mode');
       document.getElementById('btn-output').textContent = '出力ウィンドウを開く（2 画面）';
       VJ.panel.renderStatus(app.engine.status, '');
       app.ui.toast('出力ウィンドウを閉じました（この画面に戻しました。音声は ▶ 開始 で再開）');
