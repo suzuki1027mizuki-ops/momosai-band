@@ -275,10 +275,8 @@
       if (sFull > this.fullPeak) this.fullPeak = sFull;
       else this.fullPeak = Math.max(sFull, this.fullPeak - ac.peakFall * this.hopSec);
       if (this.hopCount - this.lastAccentHop >= this.accentHops && this.env.level.v >= ac.minLevel && sFull >= lagged + ac.loudDb) {
-        let cnt = 0, zs = 0;
-        for (let b = 0; b < nb; b++) {
-          if (this.hopCount - this.lastZHop[b] <= ac.windowHops) { cnt++; zs += Math.max(0, this.det[b].z); }
-        }
+        let cnt = 0;
+        for (let b = 0; b < nb; b++) if (this.hopCount - this.lastZHop[b] <= ac.windowHops) cnt++;
         if (cnt >= ac.minBands) {
           this.lastAccentHop = this.hopCount;
           this._onset('accent', sampleEnd, Math.max(0.5, Math.min(1, 0.4 + (sFull - lagged) / 12)));

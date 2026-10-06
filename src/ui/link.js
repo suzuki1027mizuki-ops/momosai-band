@@ -9,7 +9,9 @@
 
   const SHOW_METHODS = ['selectScene', 'nextSong', 'prevSong', 'flash', 'setStrobe', 'toggleBlackout', 'setBlackout', 'cyclePalette',
     'nudgeSensitivity', 'nudgeMaster', 'toggleAuto', 'lock', 'unlock', 'showSongTitle', 'tap', 'toggleMessage', 'showMessage',
-    'toggleTestPattern', 'restoreSession', 'setMaster', 'setSensitivity'];
+    'toggleTestPattern', 'restoreSession', 'setMaster', 'setSensitivity', 'setPalette'];
+  // 出力側から操作側へ反映してよい設定（型も確認する）
+  const PATCH_KEYS = { paletteIdx: 'number', sensitivity: 'number', master: 'number', auto: 'boolean' };
 
   // ---------------------------------------------------------------- 操作側のリモコン
   class RemoteShow {
@@ -89,29 +91,35 @@
       });
     },
 
-    /** 操作側：出力ウィンドウを開く */
-    async openOutput(app) {
+    /** 操作側：出力ウィンドウを開く（ポップアップがブロックされないよう、クリック直後にまず開く） */
+    openOutput(app) {
       if (link.role === 'control' && link.peer && !link.peer.closed) { link.peer.focus(); return; }
-      link.app = app;
+      if (link.role === 'control') link.closeOutput(true); // 閉じた直後（見張りが気づく前）でも元に戻してから開く
       const base = location.href.replace(/[?#].*$/, '');
       const keep = ['test', 'scale', 'pr', 'desync'].filter((k) => VJ.params[k] !== undefined).map((k) => `&${k}=${encodeURIComponent(VJ.params[k])}`).join('');
-      let features = 'popup,width=960,height=540';
-      // 複数の画面があれば、もう一方の画面（プロジェクター）に開く（ウィンドウの管理の許可が必要）
-      try {
-        if (window.getScreenDetails) {
-          const sd = await window.getScreenDetails();
-          const other = sd.screens.find((x) => x !== sd.currentScreen);
-          if (other) features = `popup,left=${other.availLeft},top=${other.availTop},width=${other.availWidth},height=${other.availHeight}`;
-        }
-      } catch (e) { /* 許可されなければ普通に開く */ }
-      const w = window.open(base + '?role=output' + keep, 'momosai-vj-output', features);
+      const w = window.open(base + '?role=output' + keep, 'momosai-vj-output', 'popup,width=960,height=540');
       if (!w) { app.ui.toast('出力ウィンドウを開けませんでした（ポップアップのブロックを解除してください）', 'warn'); return; }
+      link.adopt(app, w, true);
+      // 画面が 2 つあれば、もう一方（プロジェクター）へ移す（「ウィンドウの管理」の許可が必要）
+      if (window.getScreenDetails) {
+        window.getScreenDetails().then((sd) => {
+          const other = sd.screens.find((x) => x !== sd.currentScreen);
+          if (other && !w.closed) { w.moveTo(other.availLeft, other.availTop); w.resizeTo(other.availWidth, other.availHeight); }
+        }).catch(() => {});
+      }
+    },
+
+    /** 出力ウィンドウ w を操作対象にする（開いたとき・操作側を再読み込みしたときの再接続） */
+    adopt(app, w, fresh) {
+      link.app = app;
       link.peer = w;
       link.role = 'control';
       // 1 画面の状態を退避し、リモコンに差し替える
-      const local = { show: app.show, engine: app.engine, wasRunning: app.engine.running, opts: Object.assign({}, app.engine.opts), session: app.show.session() };
+      const local = { show: app.show, engine: app.engine, wasRunning: fresh && app.engine.running, opts: Object.assign({}, app.engine.opts), session: app.show.session(), fresh };
       link.local = local;
-      if (local.engine.running) local.engine.stop();
+      if (local.engine.status !== 'idle') local.engine.stop(); // 開始途中（自動開始など）も止める
+      const resume = document.getElementById('resume-box');
+      if (resume) resume.hidden = true; // 出力側が本番の状態を持っているので、古い「前回の続き」は出さない
       app.paused = true;
       app.show = new RemoteShow(link, app.settings);
       app.show.state = Object.assign({}, local.show.state);
@@ -120,14 +128,23 @@
       document.getElementById('remote').hidden = false;
       document.body.classList.add('remote-mode');
       document.getElementById('btn-output').textContent = '出力ウィンドウを前面に';
+      document.getElementById('btn-output-stop').hidden = false;
       clearInterval(link._poll);
       link._poll = setInterval(() => { if (link.peer && link.peer.closed) link.closeOutput(true); }, 500);
+      if (!fresh) {
+        // 再接続：本番中の設定は出力側が正しい（こちらの保存は古いかもしれない）ので、出力側から取り込む
+        link.request({ t: 'cmd', target: 'app', name: 'getSettings', args: [] })
+          .then((ns) => { if (ns && typeof ns === 'object') VJ.panel.replaceSettings(ns); })
+          .catch(() => {});
+        app.ui.toast('出力ウィンドウに再接続しました');
+      }
     },
 
     /** 操作側：出力ウィンドウを閉じて 1 画面に戻る */
     closeOutput(alreadyClosed) {
       if (link.role !== 'control') return;
       clearInterval(link._poll);
+      link._closedPeer = link.peer;
       if (!alreadyClosed && link.peer && !link.peer.closed) link.peer.close();
       const app = link.app, local = link.local;
       const last = app.show.session();
@@ -141,6 +158,7 @@
       document.getElementById('remote').hidden = true;
       document.body.classList.remove('remote-mode');
       document.getElementById('btn-output').textContent = '出力ウィンドウを開く（2 画面）';
+      document.getElementById('btn-output-stop').hidden = true;
       VJ.panel.renderStatus(app.engine.status, '');
       app.ui.toast('出力ウィンドウを閉じました（この画面に戻しました。音声は ▶ 開始 で再開）');
       for (const p of link.pending.values()) p.reject(new Error('出力ウィンドウが閉じられました'));
@@ -151,12 +169,17 @@
     _onControlMessage(d) {
       const app = link.app;
       if (d.t === 'hello') {
+        // 出力ウィンドウが開いた／再読み込みされた：設定・曲の位置・音声入力を渡す
         link.send({ t: 'settings', settings: app.settings });
-        link.send({ t: 'cmd', target: 'show', name: 'restoreSession', args: [link.local.session] });
-        // 1 画面のとき動いていた入力を出力側で再開（画面共有は出力側での操作が必要なので除く）
-        const o = link.local.opts;
-        if (link.local.wasRunning && o && (o.source === 'mic' || o.source === 'demo')) {
-          app.startAudio({ source: o.source, deviceId: o.deviceId, deviceLabel: o.deviceLabel, channel: o.channel, monitor: o.monitor }).catch(() => {});
+        const first = link.local.fresh;
+        link.local.fresh = false;
+        const sess = first ? link.local.session : app.show.session();
+        link.send({ t: 'cmd', target: 'show', name: 'restoreSession', args: [sess] });
+        // 動いていた入力を出力側で再開（画面共有・ファイルは出力側での操作が必要なので除く）
+        const st = link.lastStatus;
+        const o = first ? (link.local.wasRunning ? link.local.opts : null) : (st && st.engineStatus === 'running' ? st.engineOpts : null);
+        if (o && (o.source === 'mic' || o.source === 'demo')) {
+          app.startAudio({ source: o.source, deviceId: o.deviceId, deviceLabel: o.deviceLabel, channel: o.channel || app.settings.channel, monitor: app.settings.monitor }).catch(() => {});
         }
       } else if (d.t === 'status') {
         link.lastStatus = d;
@@ -175,7 +198,10 @@
         if (d.hits & 32) L.b = now;
         // キー操作で変わった設定（パレット・感度・明るさ・オート）をこちらにも反映
         let changed = false;
-        for (const k of Object.keys(d.patch || {})) if (app.settings[k] !== d.patch[k]) { app.settings[k] = d.patch[k]; changed = true; }
+        for (const k of Object.keys(PATCH_KEYS)) {
+          const v = d.patch && d.patch[k];
+          if (typeof v === PATCH_KEYS[k] && app.settings[k] !== v) { app.settings[k] = v; changed = true; }
+        }
         if (changed) { VJ.panel.syncFromSettings(); VJ.panel.save(); }
         link._features = d.f;
       } else if (d.t === 'engine') {
@@ -231,6 +257,7 @@
         const r = app.renderer.info();
         link.send({
           t: 'status',
+          role: 'output',
           state: { sceneId: s.sceneId, pending: s.pending ? { id: s.pending.id } : null, songIdx: s.songIdx, endState: s.endState, auto: s.auto, locked: s.locked, blackout: s.blackout, sens: s.sens, master: s.master, paletteIdx: s.paletteIdx },
           denied: app.show.limiter.denied,
           meter: app.engine.updateMeters(),
@@ -274,11 +301,22 @@
     },
   };
 
+  /** このウィンドウが開いた出力ウィンドウか（ほかのページからの偽の通知でつなぎ替えない） */
+  function isOurWindow(w) {
+    try { return w.opener === window; } catch (e) { return false; }
+  }
+
   window.addEventListener('message', (e) => {
     const d = e.data;
     if (!d || typeof d !== 'object' || !d.t) return;
     if (link.role === 'control' && e.source === link.peer) link._onControlMessage(d);
     else if (link.role === 'output' && e.source === window.opener) link._onOutputMessage(d);
+    else if (link.role === 'solo' && d.t === 'status' && d.role === 'output' && e.source && VJ.app && VJ.app.show
+      && e.source !== window && !e.source.closed && e.source !== link._closedPeer && isOurWindow(e.source)) {
+      // 操作ウィンドウを再読み込みした：開いたままの出力ウィンドウにつなぎ直す
+      link.adopt(VJ.app, e.source, false);
+      link._onControlMessage(d);
+    }
   });
 
   link.RemoteShow = RemoteShow;

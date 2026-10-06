@@ -205,6 +205,7 @@ body.remote-mode #stage { opacity: 0.25; }
   </div>
   <div class="row">
     <button id="btn-output" class="primary">出力ウィンドウを開く（2 画面）</button>
+    <button id="btn-output-stop" hidden>出力ウィンドウを閉じる</button>
   </div>
   <div class="hint" id="output-hint">プロジェクターを「拡張」でつないだときに使います。映像だけのウィンドウを開いてプロジェクター側で全画面にし、このウィンドウは操作・確認用になります（観客に操作画面が見えません）。</div>
 
@@ -285,7 +286,7 @@ body.remote-mode #stage { opacity: 0.25; }
   'use strict';
 
   VJ.version = '1.0.0';
-  VJ.buildTime = '2026-10-06 #58e3a91';
+  VJ.buildTime = '2026-10-06 #6cfcc5f';
 
   const LN10_20 = Math.LN10 / 20;
 
@@ -1539,10 +1540,8 @@ body.remote-mode #stage { opacity: 0.25; }
       if (sFull > this.fullPeak) this.fullPeak = sFull;
       else this.fullPeak = Math.max(sFull, this.fullPeak - ac.peakFall * this.hopSec);
       if (this.hopCount - this.lastAccentHop >= this.accentHops && this.env.level.v >= ac.minLevel && sFull >= lagged + ac.loudDb) {
-        let cnt = 0, zs = 0;
-        for (let b = 0; b < nb; b++) {
-          if (this.hopCount - this.lastZHop[b] <= ac.windowHops) { cnt++; zs += Math.max(0, this.det[b].z); }
-        }
+        let cnt = 0;
+        for (let b = 0; b < nb; b++) if (this.hopCount - this.lastZHop[b] <= ac.windowHops) cnt++;
         if (cnt >= ac.minBands) {
           this.lastAccentHop = this.hopCount;
           this._onset('accent', sampleEnd, Math.max(0.5, Math.min(1, 0.4 + (sFull - lagged) / 12)));
@@ -4225,6 +4224,7 @@ void main() {
       this.state.auto = !!s.auto;
       this.state.master = clamp(+s.master || 1, 0.2, 1);
       this.state.sens = clamp(s.sensitivity | 0, -5, 5);
+      // settings.paletteIdx は常に「いま使っているパレット」（曲ごとのパレットも反映される）
       this.state.paletteIdx = s.paletteIdx | 0;
       this.profile = VJ.profileById(s.profile);
       this._palette();
@@ -4278,7 +4278,7 @@ void main() {
       const songs = this.setlist.songs;
       this.state.songIdx = Math.max(-1, Math.min(songs.length, x.songIdx | 0));
       this.state.endState = !!x.endState || this.state.songIdx >= songs.length;
-      if (typeof x.paletteIdx === 'number') { this.state.paletteIdx = x.paletteIdx; this._palette(); }
+      if (typeof x.paletteIdx === 'number') this.setPalette(x.paletteIdx);
       this._applyScene(VJ.scenes.byId[x.sceneId] && this.sceneAvailable(x.sceneId) ? x.sceneId : 'title');
       const song = this.currentSong();
       this._toast(song ? `M${this.state.songIdx + 1} ${song.title} から再開` : '再開しました');
@@ -4342,7 +4342,7 @@ void main() {
       const first = song.scenes.find((id) => this.sceneAvailable(id));
       if (first) this._applyScene(first);
       else if (this.state.sceneId === 'title') this._applyScene('ripple');
-      if (song.palette !== null) { this.state.paletteIdx = song.palette; this._palette(); }
+      if (song.palette !== null) this.setPalette(song.palette);
       this.director.noteSwitch(this.now);
       this.director.silentFrom = null;
       if (this.onSongStart) this.onSongStart(i);
@@ -4379,6 +4379,13 @@ void main() {
     setBlackout(on) {
       this.state.blackout = !!on;
       this._toast(on ? '暗転' : '暗転解除');
+    }
+    /** パレットを指定（設定にも反映） */
+    setPalette(i) {
+      const n = VJ.palettes.length;
+      this.state.paletteIdx = ((Math.round(+i || 0) % n) + n) % n;
+      this.settings.paletteIdx = this.state.paletteIdx;
+      this._palette();
     }
     cyclePalette(d, silent) {
       const n = VJ.palettes.length;
@@ -4465,6 +4472,8 @@ void main() {
       if (!m || this.state.songIdx >= 0 || this.state.endState) return '';
       const d = nowDate || new Date();
       const target = new Date(d.getFullYear(), d.getMonth(), d.getDate(), +m[1], +m[2], 0);
+      // 日付をまたぐ（23:50 に「00:10 開演」など）。夏時間の日でもずれないよう日付で進める
+      if (target - d < -12 * 3600 * 1000) target.setDate(target.getDate() + 1);
       let sec = Math.ceil((target - d) / 1000);
       if (sec <= 0 || sec > 6 * 3600) return '';
       const h = Math.floor(sec / 3600); sec -= h * 3600;
@@ -4635,11 +4644,27 @@ void main() {
     ['Esc', 'パネルを閉じる（全画面中は長押しで解除）'],
   ];
 
-  function isTyping(e) {
+  const TEXT_TYPES = ['text', 'search', 'email', 'url', 'password', 'number', 'tel', 'time', 'date', 'datetime-local', 'month', 'week'];
+  const ACTIVATE_TYPES = ['checkbox', 'radio', 'button', 'submit', 'reset', 'file', 'color'];
+
+  /**
+   * このキーをフォームの部品に任せるか（ショーの操作にしない）。
+   *  - 文字入力欄・テキストエリア・選択肢：すべて任せる
+   *  - スライダー・ラジオボタン：矢印キーだけ任せる（微調整できるように。数字キーなどはショーに効く）
+   *  - ボタン・チェックボックスなど：Space / Enter だけ任せる（キーボードで押せるように）
+   * マウスで押したボタン・チェックボックスは panel.js が直後にフォーカスを外すので、Space はフラッシュになる。
+   */
+  function forForm(e) {
     const t = e.target;
     if (!t || !t.tagName) return false;
     const tag = t.tagName.toLowerCase();
-    return tag === 'input' || tag === 'textarea' || tag === 'select' || t.isContentEditable;
+    if (tag === 'textarea' || tag === 'select' || t.isContentEditable) return true;
+    const type = tag === 'input' ? (t.type || 'text').toLowerCase() : '';
+    if (tag === 'input' && TEXT_TYPES.includes(type)) return true;
+    const activate = e.code === 'Space' || e.code === 'Enter' || e.code === 'NumpadEnter';
+    if (activate && (tag === 'button' || tag === 'summary' || (tag === 'input' && ACTIVATE_TYPES.includes(type)))) return true;
+    if (/^Arrow/.test(e.code) && tag === 'input' && (type === 'range' || type === 'radio')) return true;
+    return false;
   }
 
   /**
@@ -4649,10 +4674,8 @@ void main() {
     const holds = {};
     const handle = (e) => {
       if (e.repeat || e.isComposing) return;
-      if (isTyping(e)) {
-        if (e.code === 'Escape') { e.target.blur(); }
-        return;
-      }
+      if (forForm(e)) return;
+      if (e.code === 'Escape' && e.target && e.target.blur && e.target !== document.body) e.target.blur();
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const show = app.show, ui = app.ui, code = e.code;
       const shift = e.shiftKey;
@@ -4710,7 +4733,7 @@ void main() {
     return { handle, up };
   }
 
-  VJ.keys = { install, SCENE_KEYS, KEY_HELP };
+  VJ.keys = { install, SCENE_KEYS, KEY_HELP, forForm };
 })(globalThis.VJ = globalThis.VJ || {});
 </script>
 <script>/* src/ui/hud.js */
@@ -4945,7 +4968,9 @@ void main() {
 
   const SHOW_METHODS = ['selectScene', 'nextSong', 'prevSong', 'flash', 'setStrobe', 'toggleBlackout', 'setBlackout', 'cyclePalette',
     'nudgeSensitivity', 'nudgeMaster', 'toggleAuto', 'lock', 'unlock', 'showSongTitle', 'tap', 'toggleMessage', 'showMessage',
-    'toggleTestPattern', 'restoreSession', 'setMaster', 'setSensitivity'];
+    'toggleTestPattern', 'restoreSession', 'setMaster', 'setSensitivity', 'setPalette'];
+  // 出力側から操作側へ反映してよい設定（型も確認する）
+  const PATCH_KEYS = { paletteIdx: 'number', sensitivity: 'number', master: 'number', auto: 'boolean' };
 
   // ---------------------------------------------------------------- 操作側のリモコン
   class RemoteShow {
@@ -5025,29 +5050,35 @@ void main() {
       });
     },
 
-    /** 操作側：出力ウィンドウを開く */
-    async openOutput(app) {
+    /** 操作側：出力ウィンドウを開く（ポップアップがブロックされないよう、クリック直後にまず開く） */
+    openOutput(app) {
       if (link.role === 'control' && link.peer && !link.peer.closed) { link.peer.focus(); return; }
-      link.app = app;
+      if (link.role === 'control') link.closeOutput(true); // 閉じた直後（見張りが気づく前）でも元に戻してから開く
       const base = location.href.replace(/[?#].*$/, '');
       const keep = ['test', 'scale', 'pr', 'desync'].filter((k) => VJ.params[k] !== undefined).map((k) => `&${k}=${encodeURIComponent(VJ.params[k])}`).join('');
-      let features = 'popup,width=960,height=540';
-      // 複数の画面があれば、もう一方の画面（プロジェクター）に開く（ウィンドウの管理の許可が必要）
-      try {
-        if (window.getScreenDetails) {
-          const sd = await window.getScreenDetails();
-          const other = sd.screens.find((x) => x !== sd.currentScreen);
-          if (other) features = `popup,left=${other.availLeft},top=${other.availTop},width=${other.availWidth},height=${other.availHeight}`;
-        }
-      } catch (e) { /* 許可されなければ普通に開く */ }
-      const w = window.open(base + '?role=output' + keep, 'momosai-vj-output', features);
+      const w = window.open(base + '?role=output' + keep, 'momosai-vj-output', 'popup,width=960,height=540');
       if (!w) { app.ui.toast('出力ウィンドウを開けませんでした（ポップアップのブロックを解除してください）', 'warn'); return; }
+      link.adopt(app, w, true);
+      // 画面が 2 つあれば、もう一方（プロジェクター）へ移す（「ウィンドウの管理」の許可が必要）
+      if (window.getScreenDetails) {
+        window.getScreenDetails().then((sd) => {
+          const other = sd.screens.find((x) => x !== sd.currentScreen);
+          if (other && !w.closed) { w.moveTo(other.availLeft, other.availTop); w.resizeTo(other.availWidth, other.availHeight); }
+        }).catch(() => {});
+      }
+    },
+
+    /** 出力ウィンドウ w を操作対象にする（開いたとき・操作側を再読み込みしたときの再接続） */
+    adopt(app, w, fresh) {
+      link.app = app;
       link.peer = w;
       link.role = 'control';
       // 1 画面の状態を退避し、リモコンに差し替える
-      const local = { show: app.show, engine: app.engine, wasRunning: app.engine.running, opts: Object.assign({}, app.engine.opts), session: app.show.session() };
+      const local = { show: app.show, engine: app.engine, wasRunning: fresh && app.engine.running, opts: Object.assign({}, app.engine.opts), session: app.show.session(), fresh };
       link.local = local;
-      if (local.engine.running) local.engine.stop();
+      if (local.engine.status !== 'idle') local.engine.stop(); // 開始途中（自動開始など）も止める
+      const resume = document.getElementById('resume-box');
+      if (resume) resume.hidden = true; // 出力側が本番の状態を持っているので、古い「前回の続き」は出さない
       app.paused = true;
       app.show = new RemoteShow(link, app.settings);
       app.show.state = Object.assign({}, local.show.state);
@@ -5056,14 +5087,23 @@ void main() {
       document.getElementById('remote').hidden = false;
       document.body.classList.add('remote-mode');
       document.getElementById('btn-output').textContent = '出力ウィンドウを前面に';
+      document.getElementById('btn-output-stop').hidden = false;
       clearInterval(link._poll);
       link._poll = setInterval(() => { if (link.peer && link.peer.closed) link.closeOutput(true); }, 500);
+      if (!fresh) {
+        // 再接続：本番中の設定は出力側が正しい（こちらの保存は古いかもしれない）ので、出力側から取り込む
+        link.request({ t: 'cmd', target: 'app', name: 'getSettings', args: [] })
+          .then((ns) => { if (ns && typeof ns === 'object') VJ.panel.replaceSettings(ns); })
+          .catch(() => {});
+        app.ui.toast('出力ウィンドウに再接続しました');
+      }
     },
 
     /** 操作側：出力ウィンドウを閉じて 1 画面に戻る */
     closeOutput(alreadyClosed) {
       if (link.role !== 'control') return;
       clearInterval(link._poll);
+      link._closedPeer = link.peer;
       if (!alreadyClosed && link.peer && !link.peer.closed) link.peer.close();
       const app = link.app, local = link.local;
       const last = app.show.session();
@@ -5077,6 +5117,7 @@ void main() {
       document.getElementById('remote').hidden = true;
       document.body.classList.remove('remote-mode');
       document.getElementById('btn-output').textContent = '出力ウィンドウを開く（2 画面）';
+      document.getElementById('btn-output-stop').hidden = true;
       VJ.panel.renderStatus(app.engine.status, '');
       app.ui.toast('出力ウィンドウを閉じました（この画面に戻しました。音声は ▶ 開始 で再開）');
       for (const p of link.pending.values()) p.reject(new Error('出力ウィンドウが閉じられました'));
@@ -5087,12 +5128,17 @@ void main() {
     _onControlMessage(d) {
       const app = link.app;
       if (d.t === 'hello') {
+        // 出力ウィンドウが開いた／再読み込みされた：設定・曲の位置・音声入力を渡す
         link.send({ t: 'settings', settings: app.settings });
-        link.send({ t: 'cmd', target: 'show', name: 'restoreSession', args: [link.local.session] });
-        // 1 画面のとき動いていた入力を出力側で再開（画面共有は出力側での操作が必要なので除く）
-        const o = link.local.opts;
-        if (link.local.wasRunning && o && (o.source === 'mic' || o.source === 'demo')) {
-          app.startAudio({ source: o.source, deviceId: o.deviceId, deviceLabel: o.deviceLabel, channel: o.channel, monitor: o.monitor }).catch(() => {});
+        const first = link.local.fresh;
+        link.local.fresh = false;
+        const sess = first ? link.local.session : app.show.session();
+        link.send({ t: 'cmd', target: 'show', name: 'restoreSession', args: [sess] });
+        // 動いていた入力を出力側で再開（画面共有・ファイルは出力側での操作が必要なので除く）
+        const st = link.lastStatus;
+        const o = first ? (link.local.wasRunning ? link.local.opts : null) : (st && st.engineStatus === 'running' ? st.engineOpts : null);
+        if (o && (o.source === 'mic' || o.source === 'demo')) {
+          app.startAudio({ source: o.source, deviceId: o.deviceId, deviceLabel: o.deviceLabel, channel: o.channel || app.settings.channel, monitor: app.settings.monitor }).catch(() => {});
         }
       } else if (d.t === 'status') {
         link.lastStatus = d;
@@ -5111,7 +5157,10 @@ void main() {
         if (d.hits & 32) L.b = now;
         // キー操作で変わった設定（パレット・感度・明るさ・オート）をこちらにも反映
         let changed = false;
-        for (const k of Object.keys(d.patch || {})) if (app.settings[k] !== d.patch[k]) { app.settings[k] = d.patch[k]; changed = true; }
+        for (const k of Object.keys(PATCH_KEYS)) {
+          const v = d.patch && d.patch[k];
+          if (typeof v === PATCH_KEYS[k] && app.settings[k] !== v) { app.settings[k] = v; changed = true; }
+        }
         if (changed) { VJ.panel.syncFromSettings(); VJ.panel.save(); }
         link._features = d.f;
       } else if (d.t === 'engine') {
@@ -5167,6 +5216,7 @@ void main() {
         const r = app.renderer.info();
         link.send({
           t: 'status',
+          role: 'output',
           state: { sceneId: s.sceneId, pending: s.pending ? { id: s.pending.id } : null, songIdx: s.songIdx, endState: s.endState, auto: s.auto, locked: s.locked, blackout: s.blackout, sens: s.sens, master: s.master, paletteIdx: s.paletteIdx },
           denied: app.show.limiter.denied,
           meter: app.engine.updateMeters(),
@@ -5210,11 +5260,22 @@ void main() {
     },
   };
 
+  /** このウィンドウが開いた出力ウィンドウか（ほかのページからの偽の通知でつなぎ替えない） */
+  function isOurWindow(w) {
+    try { return w.opener === window; } catch (e) { return false; }
+  }
+
   window.addEventListener('message', (e) => {
     const d = e.data;
     if (!d || typeof d !== 'object' || !d.t) return;
     if (link.role === 'control' && e.source === link.peer) link._onControlMessage(d);
     else if (link.role === 'output' && e.source === window.opener) link._onOutputMessage(d);
+    else if (link.role === 'solo' && d.t === 'status' && d.role === 'output' && e.source && VJ.app && VJ.app.show
+      && e.source !== window && !e.source.closed && e.source !== link._closedPeer && isOurWindow(e.source)) {
+      // 操作ウィンドウを再読み込みした：開いたままの出力ウィンドウにつなぎ直す
+      link.adopt(VJ.app, e.source, false);
+      link._onControlMessage(d);
+    }
   });
 
   link.RemoteShow = RemoteShow;
@@ -5244,6 +5305,20 @@ void main() {
       panel.app = app;
       const s = app.settings;
       s.output = Object.assign({}, OUT_DEFAULT, s.output || {});
+      // マウスで押したボタン・チェックボックス・ラジオボタン・折りたたみは、押した直後にフォーカスを外す
+      // （残ると Space が「フラッシュ」ではなく「その部品を押す」になるため。キーボードで押したときは外さない）
+      $('panel').addEventListener('click', (e) => {
+        if (!e.detail) return; // キーボード（Space / Enter）での操作
+        const lab = e.target.closest('label');
+        const ctl = e.target.closest('button, summary, input[type=checkbox], input[type=radio]')
+          || (lab && lab.querySelector('input[type=checkbox], input[type=radio]'));
+        if (ctl) setTimeout(() => { if (document.activeElement === ctl) ctl.blur(); }, 0);
+      });
+      $('panel').addEventListener('change', (e) => {
+        if (e.target.matches('select, input[type=file], input[type=color]') && panel._pointer) e.target.blur();
+      });
+      $('panel').addEventListener('pointerdown', () => { panel._pointer = true; });
+      $('panel').addEventListener('keydown', () => { panel._pointer = false; });
       $('ver').textContent = VJ.version.startsWith('__') ? '開発版（index.html）' : `v${VJ.version} ${VJ.buildTime}`;
 
       // ① 入力
@@ -5323,6 +5398,7 @@ void main() {
       });
       $('btn-output').addEventListener('click', () => VJ.link.openOutput(app));
       $('btn-output-close').addEventListener('click', () => VJ.link.closeOutput());
+      $('btn-output-stop').addEventListener('click', () => VJ.link.closeOutput());
 
       // ⑤ オプション
       const bindCheck = (id, key, after) => {
@@ -5352,7 +5428,7 @@ void main() {
       const pal = $('opt-palette');
       pal.innerHTML = VJ.palettes.map((p, i) => `<option value="${i}">${i + 1}. ${esc(p.name)}</option>`).join('');
       pal.value = s.paletteIdx;
-      pal.addEventListener('change', () => { s.paletteIdx = +pal.value; panel.renderCustom(); panel.applyShow(true); });
+      pal.addEventListener('change', () => { app.show.setPalette(+pal.value); s.paletteIdx = +pal.value; panel.renderCustom(); panel.applyShow(true); });
       panel.renderCustom();
       panel.renderAutoScenes();
 
@@ -5484,6 +5560,7 @@ void main() {
       $('lh').classList.toggle('on', perfNow - L.h < 120);
       $('la').classList.toggle('on', perfNow - L.a < 200);
       $('lb').classList.toggle('on', perfNow - L.b < 120);
+      if (perfNow - (panel._syncT || 0) > 500) { panel._syncT = perfNow; panel.syncFromSettings(); }
       if (f) {
         $('bpm-view').textContent = f.bpm && f.beatConf > 0.2 ? `${Math.round(f.bpm)} BPM${f.tempoManual ? '（タップ）' : ''}` : '— BPM';
         $('mode-view').textContent = !f.active ? '' : f.melodic ? 'ドラムの無い曲として反応中' : 'ドラムに反応中';
@@ -5614,13 +5691,21 @@ void main() {
 
     async startShow() {
       const app = panel.app;
+      const warn = (e) => { app.ui.toast('ショー開始に失敗しました：' + ((e && e.message) || e), 'warn'); };
+      // 全画面はクリック直後でないと許可されないので、ふつうは先に。
+      // ただし「PC で再生中の音」は画面共有の開始にもクリック直後が必要なので、そちらを先にする
+      const displayFirst = !app.engine.running && panel.source() === 'display';
+      let shown = null;
+      if (!displayFirst) shown = Promise.resolve().then(() => app.ui.startShow()).catch(warn);
+      panel.toggle(false);
       if (!app.engine.running) {
         const ok = await panel.startAudio();
-        if (!ok) { app.ui.toast('音声入力を開始できませんでした（パネルの表示を確認）', 'warn'); }
+        if (!ok) { panel.toggle(true); app.ui.toast('音声入力を開始できませんでした（パネルの表示を確認）', 'warn'); }
       }
-      await app.ui.startShow();
-      panel.toggle(false);
-      app.ui.toast('ショー開始 — H でキー一覧 / M で設定');
+      if (displayFirst) shown = Promise.resolve().then(() => app.ui.startShow()).catch(warn);
+      await shown;
+      if (VJ.link.role === 'solo' && !document.fullscreenElement) app.ui.toast('F キーで全画面にできます', 'warn');
+      else app.ui.toast('ショー開始 — H でキー一覧 / M で設定');
     },
 
     toggle(force) {
@@ -5678,6 +5763,7 @@ void main() {
       }
       $('opt-fps').value = String(s.fpsCap || 0);
       $('opt-palette').value = s.paletteIdx;
+      panel.app.show.setPalette(s.paletteIdx | 0);
       $('opt-logomode').value = s.logoMode;
       $('opt-logocorner').value = s.logoCorner;
       for (let i = 0; i < 3; i++) $('msg-' + i).value = s.messages[i] || '';
@@ -5693,7 +5779,7 @@ void main() {
     /** キー操作などで変わった設定をパネルの表示に反映（出力ウィンドウからの通知など） */
     syncFromSettings() {
       const s = panel.app.settings;
-      $('opt-palette').value = s.paletteIdx;
+      if (+$('opt-palette').value !== (s.paletteIdx | 0)) { $('opt-palette').value = s.paletteIdx; panel.renderCustom(); }
       for (const [id, key] of [['opt-sens', 'sensitivity'], ['opt-master', 'master']]) {
         if (+$(id).value !== +s[key]) { $(id).value = s[key]; $(id + '-v').textContent = key === 'master' ? Math.round(s[key] * 100) + '%' : (s[key] > 0 ? '+' : '') + s[key]; }
       }
@@ -5765,6 +5851,7 @@ void main() {
       app.ensureExtractor().resync();
       return true;
     };
+    app.getSettings = () => JSON.parse(JSON.stringify(app.settings));
     app.show.onTap = () => (app.extractor ? app.extractor.tap() : 0);
     app.show.onSongStart = () => { if (app.extractor) app.extractor.tempo.clearManual(); };
     // 前回の続きから再開できるように、曲・シーンの位置を保存（操作ウィンドウ以外）
@@ -5798,7 +5885,10 @@ void main() {
         VJ.panel.toggle();
       },
       closeOverlays: () => { help.hidden = true; VJ.hud.toggle(false); if (link.role !== 'output') VJ.panel.toggle(false); },
-      enterFullscreen: () => VJ.guard.enterFullscreen(),
+      enterFullscreen: () => {
+        if (remote()) { toast('全画面は出力ウィンドウをダブルクリック（または出力ウィンドウで F）'); return false; }
+        return VJ.guard.enterFullscreen();
+      },
       startShow: async () => {
         if (remote()) return link.request({ t: 'cmd', target: 'ui', name: 'startShow', args: [] });
         await VJ.guard.startShow();
@@ -5841,6 +5931,7 @@ void main() {
       // 起動したら自動で開始（展示・BGM 用）
       if (settings.autoStart && (settings.lastSource === 'mic' || settings.lastSource === 'demo')) {
         setTimeout(async () => {
+          if (link.role !== 'solo') return; // 開いたままの出力ウィンドウにつなぎ直した場合は、そちらが本番
           await VJ.panel.startAudio({ source: settings.lastSource });
           const ctx = app.engine.ctx;
           if (ctx && ctx.state !== 'running') {
@@ -5849,7 +5940,7 @@ void main() {
             window.addEventListener('pointerdown', go);
             window.addEventListener('keydown', go);
           }
-        }, 300);
+        }, 700);
       }
     }
 

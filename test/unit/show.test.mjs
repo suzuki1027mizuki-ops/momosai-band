@@ -165,3 +165,29 @@ test('キー割り当て：数字・テンキーがすべてのシーンに対�
   assert.equal(VJ.keys.SCENE_KEYS.Numpad3, 'horizon');
   assert.equal(VJ.keys.SCENE_KEYS.Digit0, 'title');
 });
+
+test('曲ごとのパレットは、関係ない設定変更（バンド名の入力など）で元に戻らない', () => {
+  const s = Object.assign({}, VJ.defaultSettings, { auto: false, paletteIdx: 0, setlistText: 'A | 2 | fire' });
+  const c = new VJ.ShowController(s);
+  c.update(fakeFeatures(), 1 / 60, 1);
+  c.nextSong();
+  assert.equal(c.state.paletteIdx, 3);
+  assert.equal(s.paletteIdx, 3, '設定にも反映（パネルの表示が今のパレットになる）');
+  s.bandName = 'X';
+  c.applySettings(s);
+  assert.equal(c.state.paletteIdx, 3);
+  c.setPalette(5); // パネルでパレットを選び直したとき
+  assert.equal(c.state.paletteIdx, 5);
+  assert.equal(s.paletteIdx, 5);
+});
+
+test('開演カウントダウン：日付をまたいでも表示・開演後と 1 曲目以降は消える', () => {
+  const s = Object.assign({}, VJ.defaultSettings, { countdownTo: '00:10' });
+  const c = new VJ.ShowController(s);
+  assert.equal(c.countdownText(new Date(2026, 9, 6, 23, 50, 0)), '開演まで 20:00');
+  s.countdownTo = '18:30';
+  assert.equal(c.countdownText(new Date(2026, 9, 6, 17, 0, 0)), '開演まで 1:30:00');
+  assert.equal(c.countdownText(new Date(2026, 9, 6, 18, 31, 0)), '');
+  c.state.songIdx = 0;
+  assert.equal(c.countdownText(new Date(2026, 9, 6, 17, 0, 0)), '');
+});

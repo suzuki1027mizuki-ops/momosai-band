@@ -19,6 +19,20 @@
       panel.app = app;
       const s = app.settings;
       s.output = Object.assign({}, OUT_DEFAULT, s.output || {});
+      // マウスで押したボタン・チェックボックス・ラジオボタン・折りたたみは、押した直後にフォーカスを外す
+      // （残ると Space が「フラッシュ」ではなく「その部品を押す」になるため。キーボードで押したときは外さない）
+      $('panel').addEventListener('click', (e) => {
+        if (!e.detail) return; // キーボード（Space / Enter）での操作
+        const lab = e.target.closest('label');
+        const ctl = e.target.closest('button, summary, input[type=checkbox], input[type=radio]')
+          || (lab && lab.querySelector('input[type=checkbox], input[type=radio]'));
+        if (ctl) setTimeout(() => { if (document.activeElement === ctl) ctl.blur(); }, 0);
+      });
+      $('panel').addEventListener('change', (e) => {
+        if (e.target.matches('select, input[type=file], input[type=color]') && panel._pointer) e.target.blur();
+      });
+      $('panel').addEventListener('pointerdown', () => { panel._pointer = true; });
+      $('panel').addEventListener('keydown', () => { panel._pointer = false; });
       $('ver').textContent = VJ.version.startsWith('__') ? '開発版（index.html）' : `v${VJ.version} ${VJ.buildTime}`;
 
       // ① 入力
@@ -98,6 +112,7 @@
       });
       $('btn-output').addEventListener('click', () => VJ.link.openOutput(app));
       $('btn-output-close').addEventListener('click', () => VJ.link.closeOutput());
+      $('btn-output-stop').addEventListener('click', () => VJ.link.closeOutput());
 
       // ⑤ オプション
       const bindCheck = (id, key, after) => {
@@ -127,7 +142,7 @@
       const pal = $('opt-palette');
       pal.innerHTML = VJ.palettes.map((p, i) => `<option value="${i}">${i + 1}. ${esc(p.name)}</option>`).join('');
       pal.value = s.paletteIdx;
-      pal.addEventListener('change', () => { s.paletteIdx = +pal.value; panel.renderCustom(); panel.applyShow(true); });
+      pal.addEventListener('change', () => { app.show.setPalette(+pal.value); s.paletteIdx = +pal.value; panel.renderCustom(); panel.applyShow(true); });
       panel.renderCustom();
       panel.renderAutoScenes();
 
@@ -259,6 +274,7 @@
       $('lh').classList.toggle('on', perfNow - L.h < 120);
       $('la').classList.toggle('on', perfNow - L.a < 200);
       $('lb').classList.toggle('on', perfNow - L.b < 120);
+      if (perfNow - (panel._syncT || 0) > 500) { panel._syncT = perfNow; panel.syncFromSettings(); }
       if (f) {
         $('bpm-view').textContent = f.bpm && f.beatConf > 0.2 ? `${Math.round(f.bpm)} BPM${f.tempoManual ? '（タップ）' : ''}` : '— BPM';
         $('mode-view').textContent = !f.active ? '' : f.melodic ? 'ドラムの無い曲として反応中' : 'ドラムに反応中';
@@ -389,13 +405,21 @@
 
     async startShow() {
       const app = panel.app;
+      const warn = (e) => { app.ui.toast('ショー開始に失敗しました：' + ((e && e.message) || e), 'warn'); };
+      // 全画面はクリック直後でないと許可されないので、ふつうは先に。
+      // ただし「PC で再生中の音」は画面共有の開始にもクリック直後が必要なので、そちらを先にする
+      const displayFirst = !app.engine.running && panel.source() === 'display';
+      let shown = null;
+      if (!displayFirst) shown = Promise.resolve().then(() => app.ui.startShow()).catch(warn);
+      panel.toggle(false);
       if (!app.engine.running) {
         const ok = await panel.startAudio();
-        if (!ok) { app.ui.toast('音声入力を開始できませんでした（パネルの表示を確認）', 'warn'); }
+        if (!ok) { panel.toggle(true); app.ui.toast('音声入力を開始できませんでした（パネルの表示を確認）', 'warn'); }
       }
-      await app.ui.startShow();
-      panel.toggle(false);
-      app.ui.toast('ショー開始 — H でキー一覧 / M で設定');
+      if (displayFirst) shown = Promise.resolve().then(() => app.ui.startShow()).catch(warn);
+      await shown;
+      if (VJ.link.role === 'solo' && !document.fullscreenElement) app.ui.toast('F キーで全画面にできます', 'warn');
+      else app.ui.toast('ショー開始 — H でキー一覧 / M で設定');
     },
 
     toggle(force) {
@@ -453,6 +477,7 @@
       }
       $('opt-fps').value = String(s.fpsCap || 0);
       $('opt-palette').value = s.paletteIdx;
+      panel.app.show.setPalette(s.paletteIdx | 0);
       $('opt-logomode').value = s.logoMode;
       $('opt-logocorner').value = s.logoCorner;
       for (let i = 0; i < 3; i++) $('msg-' + i).value = s.messages[i] || '';
@@ -468,7 +493,7 @@
     /** キー操作などで変わった設定をパネルの表示に反映（出力ウィンドウからの通知など） */
     syncFromSettings() {
       const s = panel.app.settings;
-      $('opt-palette').value = s.paletteIdx;
+      if (+$('opt-palette').value !== (s.paletteIdx | 0)) { $('opt-palette').value = s.paletteIdx; panel.renderCustom(); }
       for (const [id, key] of [['opt-sens', 'sensitivity'], ['opt-master', 'master']]) {
         if (+$(id).value !== +s[key]) { $(id).value = s[key]; $(id + '-v').textContent = key === 'master' ? Math.round(s[key] * 100) + '%' : (s[key] > 0 ? '+' : '') + s[key]; }
       }

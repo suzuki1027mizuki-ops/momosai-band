@@ -202,6 +202,97 @@ test('出力ウィンドウ（2 画面）：操作側のキーで出力側が切
   await ctrl.close();
 });
 
+test('チェックボックスやスライダーを触った直後でもショーのキーが効く（スライダーの矢印は微調整に使える）', async () => {
+  await page.evaluate(() => { VJ.panel.toggle(true); document.querySelectorAll('#panel details').forEach((d) => { d.open = true; }); });
+  // マウスでチェックボックスを押した直後：数字も Space もショーに効く
+  await page.click('#opt-latsq');
+  await page.waitForTimeout(50);
+  await page.keyboard.down('Shift'); await page.keyboard.press('Digit3'); await page.keyboard.up('Shift');
+  assert.equal(await page.evaluate(() => VJ.app.show.state.sceneId), 'horizon');
+  const before = await page.evaluate(() => VJ.app.settings.latencySquare);
+  await page.keyboard.press('Space');
+  assert.equal(await page.evaluate(() => VJ.app.settings.latencySquare), before, 'Space はチェックボックスを切り替えない');
+  // スライダーを触った直後：数字キーはショーに、矢印キーはスライダーに
+  await page.click('#opt-react');
+  await page.keyboard.down('Shift'); await page.keyboard.press('Digit4'); await page.keyboard.up('Shift');
+  assert.equal(await page.evaluate(() => VJ.app.show.state.sceneId), 'aurora');
+  const song0 = await page.evaluate(() => VJ.app.show.state.songIdx);
+  const v0 = await page.evaluate(() => +document.getElementById('opt-react').value);
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await page.evaluate(() => VJ.app.show.state.songIdx), song0, '→ で曲が進まない');
+  assert.ok(await page.evaluate(() => +document.getElementById('opt-react').value) > v0, 'スライダーが動く');
+  // キーボード（Tab）で選んだボタンは Space で押せる
+  await page.evaluate(() => { document.getElementById('btn-tap').focus(); });
+  const taps = await page.evaluate(() => { let n = 0; const orig = VJ.app.show.tap.bind(VJ.app.show); VJ.app.show.tap = () => { n++; return orig(); }; window.__taps = () => n; return 0; });
+  await page.keyboard.press('Space');
+  assert.equal(await page.evaluate(() => window.__taps()), taps + 1, 'ボタンが押される');
+  await page.evaluate(() => document.activeElement.blur());
+});
+
+test('2 画面のとき操作ウィンドウを再読み込みしても、出力ウィンドウにつなぎ直す', async () => {
+  const p = await openApp(browser, DIST, 'test=1', { width: 480, height: 270 });
+  const ctrl = p.page;
+  const [out] = await Promise.all([ctrl.context().waitForEvent('page'), ctrl.click('#btn-output')]);
+  await out.waitForFunction(() => window.VJ && VJ.app && VJ.link.role === 'output', null, { timeout: 30000 });
+  await ctrl.waitForFunction(() => VJ.link.role === 'control' && VJ.link.lastStatus, null, { timeout: 15000 });
+  await ctrl.reload();
+  await ctrl.waitForFunction(() => window.VJ && VJ.link && VJ.link.role === 'control', null, { timeout: 15000 });
+  await ctrl.evaluate(() => VJ.panel.toggle(false));
+  await ctrl.keyboard.down('Shift'); await ctrl.keyboard.press('Digit8'); await ctrl.keyboard.up('Shift');
+  await out.waitForFunction(() => VJ.app.show.state.sceneId === 'stars', null, { timeout: 5000 });
+  await out.close();
+  await ctrl.close();
+});
+
+test('出力ウィンドウを再読み込みしても、曲の位置と音声入力が戻る', async () => {
+  const p = await openApp(browser, DIST, 'test=1', { width: 480, height: 270 });
+  const ctrl = p.page;
+  await ctrl.evaluate(() => { VJ.app.settings.setlistText = 'A | 1\nB | 2\nC | 3'; VJ.app.settings.monitor = false; VJ.app.applySettings(); });
+  const [out] = await Promise.all([ctrl.context().waitForEvent('page'), ctrl.click('#btn-output')]);
+  await out.waitForFunction(() => window.VJ && VJ.app && VJ.link.role === 'output', null, { timeout: 30000 });
+  await ctrl.waitForFunction(() => VJ.link.lastStatus, null, { timeout: 15000 });
+  await ctrl.evaluate(() => VJ.app.startAudio({ source: 'demo', monitor: false }));
+  await ctrl.evaluate(() => VJ.panel.toggle(false));
+  await ctrl.keyboard.press('ArrowRight');
+  await ctrl.keyboard.press('ArrowRight');
+  await out.waitForFunction(() => VJ.app.show.state.songIdx === 1 && VJ.app.engine.status === 'running', null, { timeout: 15000 });
+  await ctrl.waitForFunction(() => VJ.link.lastStatus.state.songIdx === 1 && VJ.link.lastStatus.engineStatus === 'running', null, { timeout: 5000 });
+  await out.reload();
+  await out.waitForFunction(() => window.VJ && VJ.app && VJ.app.show.state.songIdx === 1 && VJ.app.engine.status === 'running', null, { timeout: 20000 });
+  // 閉じた直後にすぐ開き直しても壊れない
+  await ctrl.evaluate(() => VJ.panel.toggle(true));
+  await ctrl.click('#btn-output-stop');
+  const [out2] = await Promise.all([ctrl.context().waitForEvent('page'), ctrl.click('#btn-output')]);
+  await out2.waitForFunction(() => window.VJ && VJ.app && VJ.link.role === 'output', null, { timeout: 30000 });
+  await ctrl.waitForFunction(() => VJ.link.role === 'control' && VJ.app.show instanceof VJ.link.RemoteShow && !(VJ.link.local.show instanceof VJ.link.RemoteShow), null, { timeout: 5000 });
+  await out2.close();
+  await ctrl.waitForFunction(() => VJ.link.role === 'solo' && !(VJ.app.show instanceof VJ.link.RemoteShow), null, { timeout: 5000 });
+  await ctrl.close();
+});
+
+test('自分が開いていないページからの偽の通知では、操作対象を切り替えない', async () => {
+  const fs2 = await import('node:fs');
+  const path = await import('node:path');
+  const dir = path.join(path.dirname(DIST), '..', 'test', 'artifacts');
+  fs2.mkdirSync(dir, { recursive: true });
+  const opener = path.join(dir, 'opener.html');
+  fs2.writeFileSync(opener, '<!doctype html><meta charset="utf-8"><body>opener</body>');
+  const ctx = await browser.newContext();
+  const x = await ctx.newPage();
+  await x.goto('file://' + opener);
+  const [vj] = await Promise.all([ctx.waitForEvent('page'), x.evaluate((u) => { window.vj = window.open(u + '?test=1', 'vj'); }, 'file://' + DIST)]);
+  await vj.waitForFunction(() => window.VJ && VJ.app && VJ.app.renderer, null, { timeout: 30000 });
+  await x.evaluate(() => {
+    for (let i = 0; i < 5; i++) window.vj.postMessage({ t: 'status', role: 'output', state: { sceneId: 'glitch' }, patch: { master: 0.3, bandName: 'HACK' }, meter: {}, diag: {} }, '*');
+  });
+  await vj.waitForTimeout(500);
+  const st = await vj.evaluate(() => ({ role: VJ.link.role, master: VJ.app.settings.master, band: VJ.app.settings.bandName, paused: VJ.app.paused }));
+  assert.equal(st.role, 'solo');
+  assert.equal(st.paused, false);
+  assert.notEqual(st.band, 'HACK');
+  await ctx.close();
+});
+
 test('コンソールエラーなし', () => {
   assert.deepEqual(errors.filter((e) => !/getDisplayMedia|NoAudioShared/.test(e)), []);
 });

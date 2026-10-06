@@ -21,11 +21,27 @@
     ['Esc', 'パネルを閉じる（全画面中は長押しで解除）'],
   ];
 
-  function isTyping(e) {
+  const TEXT_TYPES = ['text', 'search', 'email', 'url', 'password', 'number', 'tel', 'time', 'date', 'datetime-local', 'month', 'week'];
+  const ACTIVATE_TYPES = ['checkbox', 'radio', 'button', 'submit', 'reset', 'file', 'color'];
+
+  /**
+   * このキーをフォームの部品に任せるか（ショーの操作にしない）。
+   *  - 文字入力欄・テキストエリア・選択肢：すべて任せる
+   *  - スライダー・ラジオボタン：矢印キーだけ任せる（微調整できるように。数字キーなどはショーに効く）
+   *  - ボタン・チェックボックスなど：Space / Enter だけ任せる（キーボードで押せるように）
+   * マウスで押したボタン・チェックボックスは panel.js が直後にフォーカスを外すので、Space はフラッシュになる。
+   */
+  function forForm(e) {
     const t = e.target;
     if (!t || !t.tagName) return false;
     const tag = t.tagName.toLowerCase();
-    return tag === 'input' || tag === 'textarea' || tag === 'select' || t.isContentEditable;
+    if (tag === 'textarea' || tag === 'select' || t.isContentEditable) return true;
+    const type = tag === 'input' ? (t.type || 'text').toLowerCase() : '';
+    if (tag === 'input' && TEXT_TYPES.includes(type)) return true;
+    const activate = e.code === 'Space' || e.code === 'Enter' || e.code === 'NumpadEnter';
+    if (activate && (tag === 'button' || tag === 'summary' || (tag === 'input' && ACTIVATE_TYPES.includes(type)))) return true;
+    if (/^Arrow/.test(e.code) && tag === 'input' && (type === 'range' || type === 'radio')) return true;
+    return false;
   }
 
   /**
@@ -35,10 +51,8 @@
     const holds = {};
     const handle = (e) => {
       if (e.repeat || e.isComposing) return;
-      if (isTyping(e)) {
-        if (e.code === 'Escape') { e.target.blur(); }
-        return;
-      }
+      if (forForm(e)) return;
+      if (e.code === 'Escape' && e.target && e.target.blur && e.target !== document.body) e.target.blur();
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const show = app.show, ui = app.ui, code = e.code;
       const shift = e.shiftKey;
@@ -96,5 +110,5 @@
     return { handle, up };
   }
 
-  VJ.keys = { install, SCENE_KEYS, KEY_HELP };
+  VJ.keys = { install, SCENE_KEYS, KEY_HELP, forForm };
 })(globalThis.VJ = globalThis.VJ || {});

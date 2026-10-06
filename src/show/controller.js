@@ -50,6 +50,7 @@
       this.state.auto = !!s.auto;
       this.state.master = clamp(+s.master || 1, 0.2, 1);
       this.state.sens = clamp(s.sensitivity | 0, -5, 5);
+      // settings.paletteIdx は常に「いま使っているパレット」（曲ごとのパレットも反映される）
       this.state.paletteIdx = s.paletteIdx | 0;
       this.profile = VJ.profileById(s.profile);
       this._palette();
@@ -103,7 +104,7 @@
       const songs = this.setlist.songs;
       this.state.songIdx = Math.max(-1, Math.min(songs.length, x.songIdx | 0));
       this.state.endState = !!x.endState || this.state.songIdx >= songs.length;
-      if (typeof x.paletteIdx === 'number') { this.state.paletteIdx = x.paletteIdx; this._palette(); }
+      if (typeof x.paletteIdx === 'number') this.setPalette(x.paletteIdx);
       this._applyScene(VJ.scenes.byId[x.sceneId] && this.sceneAvailable(x.sceneId) ? x.sceneId : 'title');
       const song = this.currentSong();
       this._toast(song ? `M${this.state.songIdx + 1} ${song.title} から再開` : '再開しました');
@@ -167,7 +168,7 @@
       const first = song.scenes.find((id) => this.sceneAvailable(id));
       if (first) this._applyScene(first);
       else if (this.state.sceneId === 'title') this._applyScene('ripple');
-      if (song.palette !== null) { this.state.paletteIdx = song.palette; this._palette(); }
+      if (song.palette !== null) this.setPalette(song.palette);
       this.director.noteSwitch(this.now);
       this.director.silentFrom = null;
       if (this.onSongStart) this.onSongStart(i);
@@ -204,6 +205,13 @@
     setBlackout(on) {
       this.state.blackout = !!on;
       this._toast(on ? '暗転' : '暗転解除');
+    }
+    /** パレットを指定（設定にも反映） */
+    setPalette(i) {
+      const n = VJ.palettes.length;
+      this.state.paletteIdx = ((Math.round(+i || 0) % n) + n) % n;
+      this.settings.paletteIdx = this.state.paletteIdx;
+      this._palette();
     }
     cyclePalette(d, silent) {
       const n = VJ.palettes.length;
@@ -290,6 +298,8 @@
       if (!m || this.state.songIdx >= 0 || this.state.endState) return '';
       const d = nowDate || new Date();
       const target = new Date(d.getFullYear(), d.getMonth(), d.getDate(), +m[1], +m[2], 0);
+      // 日付をまたぐ（23:50 に「00:10 開演」など）。夏時間の日でもずれないよう日付で進める
+      if (target - d < -12 * 3600 * 1000) target.setDate(target.getDate() + 1);
       let sec = Math.ceil((target - d) / 1000);
       if (sec <= 0 || sec > 6 * 3600) return '';
       const h = Math.floor(sec / 3600); sec -= h * 3600;

@@ -58,6 +58,7 @@
       app.ensureExtractor().resync();
       return true;
     };
+    app.getSettings = () => JSON.parse(JSON.stringify(app.settings));
     app.show.onTap = () => (app.extractor ? app.extractor.tap() : 0);
     app.show.onSongStart = () => { if (app.extractor) app.extractor.tempo.clearManual(); };
     // 前回の続きから再開できるように、曲・シーンの位置を保存（操作ウィンドウ以外）
@@ -91,7 +92,10 @@
         VJ.panel.toggle();
       },
       closeOverlays: () => { help.hidden = true; VJ.hud.toggle(false); if (link.role !== 'output') VJ.panel.toggle(false); },
-      enterFullscreen: () => VJ.guard.enterFullscreen(),
+      enterFullscreen: () => {
+        if (remote()) { toast('全画面は出力ウィンドウをダブルクリック（または出力ウィンドウで F）'); return false; }
+        return VJ.guard.enterFullscreen();
+      },
       startShow: async () => {
         if (remote()) return link.request({ t: 'cmd', target: 'ui', name: 'startShow', args: [] });
         await VJ.guard.startShow();
@@ -134,6 +138,7 @@
       // 起動したら自動で開始（展示・BGM 用）
       if (settings.autoStart && (settings.lastSource === 'mic' || settings.lastSource === 'demo')) {
         setTimeout(async () => {
+          if (link.role !== 'solo') return; // 開いたままの出力ウィンドウにつなぎ直した場合は、そちらが本番
           await VJ.panel.startAudio({ source: settings.lastSource });
           const ctx = app.engine.ctx;
           if (ctx && ctx.state !== 'running') {
@@ -142,7 +147,7 @@
             window.addEventListener('pointerdown', go);
             window.addEventListener('keydown', go);
           }
-        }, 300);
+        }, 700);
       }
     }
 
