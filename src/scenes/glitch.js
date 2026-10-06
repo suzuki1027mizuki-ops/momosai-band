@@ -24,8 +24,8 @@ vec3 layer(vec2 uv) {
   float ry = uv.y * rows;
   float row = floor(ry);
   float h = hash12(vec2(row, u_seed));
-  // 盛り上がりで空の帯が減る
-  float kindF = h * mix(8.0, 5.5, u_intensity);
+  // 偶数番目の帯は必ず何か描く（構図がスカスカにならないように）。奇数番目は盛り上がりで空が減る
+  float kindF = mod(row, 2.0) < 0.5 ? h * 4.0 : h * mix(8.0, 5.5, u_intensity);
   int kind = int(kindF);
   float x = uv.x + u_scroll * (hash11(row + u_seed * 3.1) - 0.5) * 0.5;
   vec3 c = pal(h * 3.0 + u_seed * 0.07) * 0.9;

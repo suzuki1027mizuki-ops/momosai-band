@@ -186,7 +186,7 @@ table.setlist th { color: var(--muted); font-weight: normal; }
   'use strict';
 
   VJ.version = '1.0.0';
-  VJ.buildTime = '2026-10-06 94f7fd9';
+  VJ.buildTime = '2026-10-06 #a1ddf89';
 
   const LN10_20 = Math.LN10 / 20;
 
@@ -2375,7 +2375,9 @@ void main() {
       p.set('u_time', fr.time);
       p.set('u_dt', fr.dt);
       p.set('u_sceneTime', fr.sceneTime);
-      p.set('u_quality', fr.quality === undefined ? 1 : fr.quality);
+      // 描画倍率が下がっている（GPU が苦しい）ときは重いシーンの細部も減らす
+      const quality = Math.max(0, Math.min(1, (this.scale - 0.4) / 0.35));
+      p.set('u_quality', fr.quality === undefined ? quality : Math.min(quality, fr.quality));
       p.set('u_idle', fr.idle || 0);
       p.set('u_level', f.level); p.set('u_low', f.low); p.set('u_mid', f.mid); p.set('u_high', f.high);
       p.set('u_intensity', f.intensity); p.set('u_centroid', f.centroid);
@@ -2949,8 +2951,8 @@ vec3 layer(vec2 uv) {
   float ry = uv.y * rows;
   float row = floor(ry);
   float h = hash12(vec2(row, u_seed));
-  // 盛り上がりで空の帯が減る
-  float kindF = h * mix(8.0, 5.5, u_intensity);
+  // 偶数番目の帯は必ず何か描く（構図がスカスカにならないように）。奇数番目は盛り上がりで空が減る
+  float kindF = mod(row, 2.0) < 0.5 ? h * 4.0 : h * mix(8.0, 5.5, u_intensity);
   int kind = int(kindF);
   float x = uv.x + u_scroll * (hash11(row + u_seed * 3.1) - 0.5) * 0.5;
   vec3 c = pal(h * 3.0 + u_seed * 0.07) * 0.9;

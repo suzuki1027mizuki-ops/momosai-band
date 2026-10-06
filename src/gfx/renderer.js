@@ -227,7 +227,9 @@
       p.set('u_time', fr.time);
       p.set('u_dt', fr.dt);
       p.set('u_sceneTime', fr.sceneTime);
-      p.set('u_quality', fr.quality === undefined ? 1 : fr.quality);
+      // 描画倍率が下がっている（GPU が苦しい）ときは重いシーンの細部も減らす
+      const quality = Math.max(0, Math.min(1, (this.scale - 0.4) / 0.35));
+      p.set('u_quality', fr.quality === undefined ? quality : Math.min(quality, fr.quality));
       p.set('u_idle', fr.idle || 0);
       p.set('u_level', f.level); p.set('u_low', f.low); p.set('u_mid', f.mid); p.set('u_high', f.high);
       p.set('u_intensity', f.intensity); p.set('u_centroid', f.centroid);
