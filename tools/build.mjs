@@ -1,0 +1,40 @@
+// index.html と src/ をインライン化して、配布用の単一ファイル dist/momosai-vj.html を作る。
+// 依存パッケージなし。起動スクリプトと説明書も dist/ にコピーする。
+import fs from 'node:fs';
+import path from 'node:path';
+import { execSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const DIST = path.join(ROOT, 'dist');
+const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+
+let rev = '';
+try { rev = execSync('git rev-parse --short HEAD', { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch (e) { rev = 'nogit'; }
+const stamp = new Date().toISOString().slice(0, 10) + ' ' + rev;
+
+let html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+let count = 0;
+html = html.replace(/<script src="([^"]+)"><\/script>/g, (m, src) => {
+  const code = fs.readFileSync(path.join(ROOT, src), 'utf8')
+    .replace(/__VJ_VERSION__/g, pkg.version)
+    .replace(/__VJ_BUILD_TIME__/g, stamp)
+    .replace(/<\/script/gi, '<\\/script');
+  count++;
+  return `<script>/* ${src} */\n${code}</script>`;
+});
+if (/<script src=/.test(html)) throw new Error('インライン化できなかった script タグがあります');
+
+fs.mkdirSync(DIST, { recursive: true });
+fs.writeFileSync(path.join(DIST, 'momosai-vj.html'), html);
+
+const copy = (from, to, mode) => {
+  fs.copyFileSync(path.join(ROOT, from), path.join(DIST, to));
+  if (mode) fs.chmodSync(path.join(DIST, to), mode);
+};
+copy('launcher/start-windows.bat', 'start-windows.bat');
+copy('launcher/start-mac.command', 'start-mac.command', 0o755);
+if (fs.existsSync(path.join(ROOT, 'docs/MANUAL-ja.html'))) copy('docs/MANUAL-ja.html', 'MANUAL-ja.html');
+
+const kb = (fs.statSync(path.join(DIST, 'momosai-vj.html')).size / 1024).toFixed(0);
+console.log(`built dist/momosai-vj.html (${count} scripts, ${kb} KB, v${pkg.version} ${stamp})`);

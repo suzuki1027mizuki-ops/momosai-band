@@ -1,0 +1,138 @@
+// 演出まわり（セットリスト・フラッシュ制限・コントローラ・光過敏判定）の単体テスト。
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { loadVJ } from '../helpers/load-src.mjs';
+import { transitions, maxFlashesPerSecond } from '../helpers/flash.mjs';
+
+const VJ = loadVJ();
+
+test('セットリスト：全角記号・番号・コメント・未知の指定', () => {
+  const p = VJ.setlist.parse([
+    '@band　ももさいバンド',
+    '# コメント',
+    '',
+    '１．夜に駆ける｜２、６｜neon',
+    '02) ドライフラワー | オーロラ | さくら | notitle',
+    '22才の別れ | 9 | nope',
+    '3 マリーゴールド',
+    '@end ありがとう！',
+  ].join('\n'));
+  assert.equal(p.band, 'ももさいバンド');
+  assert.equal(p.end, 'ありがとう！');
+  assert.equal(p.songs.length, 4);
+  assert.deepEqual(p.songs[0], { title: '夜に駆ける', scenes: ['tunnel', 'glitch'], palette: 0, notitle: false, line: 4 });
+  assert.equal(p.songs[1].title, 'ドライフラワー');
+  assert.deepEqual(p.songs[1].scenes, ['aurora']);
+  assert.equal(p.songs[1].palette, 6);
+  assert.equal(p.songs[1].notitle, true);
+  assert.equal(p.songs[2].title, '22才の別れ');
+  assert.equal(p.songs[3].title, 'マリーゴールド');
+  assert.equal(p.errors.length, 2); // 9 と nope
+});
+
+test('フラッシュ制限：1 秒に 3 回まで・200ms 間隔・赤は白に', () => {
+  const lim = new VJ.safety.FlashLimiter();
+  let ok = 0;
+  for (let i = 0; i < 10; i++) if (lim.allow(i * 0.1)) ok++;
+  assert.equal(ok, 3);
+  // 1 秒の窓が過ぎればまた光る
+  assert.ok(lim.allow(1.5));
+  const l2 = new VJ.safety.FlashLimiter();
+  assert.ok(l2.allow(0));
+  assert.ok(!l2.allow(0.15));
+  assert.ok(l2.allow(0.21));
+  assert.deepEqual(VJ.safety.safeFlashColor([1, 0.1, 0.1]), [1, 1, 1]);
+  assert.deepEqual(VJ.safety.safeFlashColor([0.2, 0.9, 1]), [0.2, 0.9, 1]);
+});
+
+function fakeFeatures(over) {
+  return Object.assign({ active: true, silenceSec: 0, onsetFlags: 0, kick: 0, snare: 0, hat: 0, accent: 0, level: 0.5, intensity: 0.5, kickN: 0, snareN: 0 }, over || {});
+}
+
+test('コントローラ：シーン切替は次のビートまで待つ（最大 1 秒）・Shift で即時', () => {
+  const s = Object.assign({}, VJ.defaultSettings, { auto: false });
+  const c = new VJ.ShowController(s);
+  c.update(fakeFeatures(), 1 / 60, 0);
+  c.selectScene('tunnel');
+  assert.equal(c.state.sceneId, 'title');
+  assert.equal(c.state.pending.id, 'tunnel');
+  c.update(fakeFeatures(), 1 / 60, 0.2);
+  assert.equal(c.state.sceneId, 'title');
+  c.update(fakeFeatures({ onsetFlags: 1, kick: 0.9 }), 1 / 60, 0.3);
+  assert.equal(c.state.sceneId, 'tunnel');
+  c.selectScene('glitch');
+  c.update(fakeFeatures(), 1 / 60, 1.4); // 1 秒経過で強制
+  assert.equal(c.state.sceneId, 'glitch');
+  c.selectScene('aurora', { immediate: true });
+  assert.equal(c.state.sceneId, 'aurora');
+});
+
+test('コントローラ：曲送り・曲名表示・終演・戻る', () => {
+  const s = Object.assign({}, VJ.defaultSettings, { auto: false, setlistText: 'A | 2 | fire\nB | 4,5\n@end おわり' });
+  const c = new VJ.ShowController(s);
+  c.update(fakeFeatures(), 1 / 60, 10);
+  c.nextSong();
+  assert.equal(c.state.sceneId, 'tunnel');
+  assert.equal(c.state.paletteIdx, 3);
+  assert.equal(c.state.text.main, 'A');
+  c.update(fakeFeatures(), 1 / 60, 10.5);
+  assert.ok(c.textAlpha() > 0.99);
+  c.nextSong();
+  assert.equal(c.state.sceneId, 'aurora');
+  c.nextSong();
+  assert.equal(c.state.endState, true);
+  assert.equal(c.state.sceneId, 'title');
+  assert.equal(c.titleText(), 'おわり');
+  c.prevSong();
+  assert.equal(c.currentSong().title, 'B');
+  c.prevSong(); c.prevSong();
+  assert.equal(c.state.songIdx, -1);
+  assert.equal(c.titleText(), 'MOMOSAI BAND');
+});
+
+test('コントローラ：ストロボもフラッシュ制限を超えない・暗転はフェード', () => {
+  const s = Object.assign({}, VJ.defaultSettings, { auto: false, autoFlash: true });
+  const c = new VJ.ShowController(s);
+  c.setStrobe(true);
+  let t = 0, flashes = 0, prev = 0;
+  for (let i = 0; i < 120; i++) {
+    t += 1 / 60;
+    const f = fakeFeatures({ onsetFlags: i % 4 === 0 ? 1 | 8 : 0, kick: 1 });
+    c.update(f, 1 / 60, t);
+    if (c.state.flash > prev + 0.2) flashes++;
+    prev = c.state.flash;
+  }
+  assert.ok(flashes <= 6, `flashes in 2s: ${flashes}`);
+  c.setBlackout(true);
+  c.update(fakeFeatures(), 0.25, t + 0.25);
+  assert.ok(c.state.black > 0.4 && c.state.black < 0.6);
+  c.update(fakeFeatures(), 0.3, t + 0.55);
+  assert.equal(c.state.black, 1);
+});
+
+test('オート：一定時間後のアクセントで切替・無音でタイトル・強打で復帰', () => {
+  const s = Object.assign({}, VJ.defaultSettings, { auto: true, setlistText: '' });
+  const c = new VJ.ShowController(s);
+  c._applyScene('ripple');
+  let t = 0;
+  const step = (f) => { t += 1 / 60; c.update(fakeFeatures(f), 1 / 60, t); };
+  for (let i = 0; i < 60 * 10; i++) step();
+  step({ onsetFlags: 8, accent: 1 });
+  assert.equal(c.state.sceneId, 'ripple', '24 秒未満では切り替えない');
+  for (let i = 0; i < 60 * 20; i++) step();
+  step({ onsetFlags: 8, accent: 1 });
+  assert.notEqual(c.state.sceneId, 'ripple');
+  const before = c.state.sceneId;
+  for (let i = 0; i < 60 * 9; i++) step({ active: false, silenceSec: i / 60, level: 0 });
+  assert.equal(c.state.sceneId, 'title');
+  step({ onsetFlags: 1, kick: 0.9 });
+  assert.equal(c.state.sceneId, before);
+});
+
+test('光過敏判定ヘルパー：3Hz 以下は通り、5Hz の点滅は検出', () => {
+  const fps = 60;
+  const sq = (hz) => Array.from({ length: fps * 3 }, (_, i) => (Math.floor((i / fps) * hz * 2) % 2 ? 0.6 : 0.05));
+  assert.ok(maxFlashesPerSecond(sq(2), fps) <= 3);
+  assert.ok(maxFlashesPerSecond(sq(5), fps) >= 4);
+  assert.equal(transitions([0, 0.05, 0.02, 0.06]).length, 0);
+});

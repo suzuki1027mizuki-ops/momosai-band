@@ -375,17 +375,20 @@
 
     _waveform(latest) {
       const cfg = this.cfg, wl = cfg.waveLen, out = this.features.waveform;
-      const end = latest.length - wl;
+      const D = 4; // 4 サンプル平均で間引く（約 43ms 分を表示。低い音でも数周期見えて形がなめらか）
+      const span = wl * D;
+      const end = latest.length - span;
       // 立ち上がりのゼロ交差でトリガ（オシロスコープ風に揃える）
       let start = end;
-      const lim = Math.max(1, end - 1024);
+      const lim = Math.max(1, end - 2048);
       for (let i = end; i > lim; i--) {
         if (latest[i - 1] < 0 && latest[i] >= 0) { start = i; break; }
       }
       const rmsRef = dbToLin(this.agc[0].ref);
-      const g = this.active ? 1 / (rmsRef * 3 + 1e-6) : 0;
+      const g = this.active ? 1 / (rmsRef * 3 + 1e-6) / D : 0;
       for (let i = 0; i < wl; i++) {
-        const v = latest[start + i] * g;
+        const j = start + i * D;
+        const v = (latest[j] + latest[j + 1] + latest[j + 2] + latest[j + 3]) * g;
         out[i] = v > 1 ? 1 : v < -1 ? -1 : v;
       }
     }
