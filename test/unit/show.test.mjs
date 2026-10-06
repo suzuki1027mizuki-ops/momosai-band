@@ -136,3 +136,32 @@ test('光過敏判定ヘルパー：3Hz 以下は通り、5Hz の点滅は検出
   assert.ok(maxFlashesPerSecond(sq(5), fps) >= 4);
   assert.equal(transitions([0, 0.05, 0.02, 0.06]).length, 0);
 });
+
+test('MIDI：ノートでシーン・フラッシュ・暗転・曲送り、CC で明るさと感度', () => {
+  const s = Object.assign({}, VJ.defaultSettings, { auto: false, setlistText: 'A | 3' });
+  const c = new VJ.ShowController(s);
+  c.update(fakeFeatures(), 1 / 60, 5);
+  assert.ok(VJ.midi.handle(c, [0x90, 37, 100]));
+  assert.equal(c.state.sceneId, 'tunnel');
+  assert.ok(VJ.midi.handle(c, [0x90, 44, 100]));
+  assert.equal(c.state.blackout, true);
+  assert.ok(VJ.midi.handle(c, [0x90, 46, 100]));
+  assert.equal(c.currentSong().title, 'A');
+  assert.ok(VJ.midi.handle(c, [0x90, 43, 100]));
+  assert.ok(c.state.flash > 0.8);
+  assert.ok(VJ.midi.handle(c, [0xb0, 1, 0]));
+  assert.equal(c.state.master, 0.2);
+  assert.ok(VJ.midi.handle(c, [0xb0, 2, 127]));
+  assert.equal(c.state.sens, 5);
+  assert.equal(VJ.midi.handle(c, [0x80, 37, 0]), false); // ノートオフは無視
+  c.lock();
+  assert.equal(VJ.midi.handle(c, [0x90, 36, 100]), false); // ロック中は暗転以外無視
+  assert.equal(c.state.sceneId, 'horizon');
+});
+
+test('キー割り当て：数字・テンキーがすべてのシーンに対応', () => {
+  const ids = new Set(Object.values(VJ.keys.SCENE_KEYS));
+  for (const s of VJ.scenes.list) assert.ok(ids.has(s.id), s.id);
+  assert.equal(VJ.keys.SCENE_KEYS.Numpad3, 'horizon');
+  assert.equal(VJ.keys.SCENE_KEYS.Digit0, 'title');
+});

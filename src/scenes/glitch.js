@@ -25,7 +25,7 @@ vec3 layer(vec2 uv) {
   float row = floor(ry);
   float h = hash12(vec2(row, u_seed));
   // 盛り上がりで空の帯が減る
-  float kindF = h * mix(7.0, 5.0, u_intensity);
+  float kindF = h * mix(8.0, 5.5, u_intensity);
   int kind = int(kindF);
   float x = uv.x + u_scroll * (hash11(row + u_seed * 3.1) - 0.5) * 0.5;
   vec3 c = pal(h * 3.0 + u_seed * 0.07) * 0.9;
@@ -57,7 +57,7 @@ void main() {
   float bh = hash12(blk + floor(u_time * 18.0) + u_seed);
   float sh = bh > 1.0 - 0.3 * u_high ? (hash12(blk * 1.7 + u_seed) - 0.5) * 0.12 * u_high : 0.0;
   vec2 us = uv + vec2(sh, 0.0);
-  float ca = 0.003 + 0.012 * u_high;
+  float ca = 0.0015 + 0.005 * u_high;
   vec3 col;
   col.r = layer(us + vec2(ca, 0.0)).r;
   col.g = layer(us).g;

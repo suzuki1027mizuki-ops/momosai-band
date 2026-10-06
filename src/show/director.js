@@ -42,6 +42,8 @@
         return null;
       }
       if (!f.active) return null;
+      // タイトル（開演前・MC・終演）は操作者が離れるまで維持する
+      if (st.sceneId === 'title') return null;
       const since = now - this.lastSwitch;
       const trigger = (since >= this.opts.switchSec && (f.onsetFlags & (8 | 16)))
         || (since >= this.opts.kickFallbackSec && (f.onsetFlags & 1) && f.kick >= 0.5);

@@ -78,6 +78,7 @@
     };
     help.addEventListener('click', () => { help.hidden = true; });
 
+    app.onAction = () => VJ.panel.save();
     VJ.hud.init(document.getElementById('hud'));
     VJ.guard.install();
     VJ.keys.install(app);
@@ -144,6 +145,7 @@
           if (samples === 'demo') samples = VJ.synth.demoSong(sr).samples;
           else if (o.song) samples = VJ.synth.song(Object.assign({ sampleRate: sr }, o.song)).samples;
           else if (Array.isArray(samples)) samples = Float32Array.from(samples);
+          if (o.offset) samples = samples.subarray(Math.round(o.offset * sr));
           if (o.seconds) samples = samples.subarray(0, Math.round(o.seconds * sr));
           const settings = Object.assign({}, app.settings, o.settings || {});
           const show = new VJ.ShowController(settings);

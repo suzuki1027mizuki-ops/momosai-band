@@ -77,7 +77,6 @@
     specRangeDb: 48,
     waveLen: 512,
     historyLen: 8,
-    analyserSize: 8192,
   };
 
   VJ.flashConfig = {

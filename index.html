@@ -154,6 +154,10 @@ table.setlist th { color: var(--muted); font-weight: normal; }
     <span id="custom-colors"></span>
   </div>
   <div class="row">
+    <button id="btn-midi">MIDI コントローラを使う</button>
+    <span class="hint" id="midi-status">パッドのノート 36〜41＝シーン1〜6、43＝フラッシュ、44＝暗転</span>
+  </div>
+  <div class="row">
     <label><input type="checkbox" id="opt-desync"> 低遅延描画（desynchronized・要再読み込み）</label>
   </div>
   <div class="row">
@@ -204,6 +208,7 @@ table.setlist th { color: var(--muted); font-weight: normal; }
 <script src="src/ui/keys.js"></script>
 <script src="src/ui/hud.js"></script>
 <script src="src/ui/guard.js"></script>
+<script src="src/ui/midi.js"></script>
 <script src="src/ui/panel.js"></script>
 <script src="src/main.js"></script>
 </body>

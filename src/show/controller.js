@@ -281,7 +281,14 @@
       fr.master = s.master;
       fr.impact = s.impact;
       const ta = this.textAlpha();
-      fr.text = ta > 0 && getText ? { tex: getText(s.text.main, s.text.sub).tex, alpha: ta } : null;
+      if (ta > 0 && getText) {
+        const t = fr._text || (fr._text = { tex: null, alpha: 0 });
+        t.tex = getText(s.text.main, s.text.sub).tex;
+        t.alpha = ta;
+        fr.text = t;
+      } else {
+        fr.text = null;
+      }
       fr.titleTex = s.sceneId === 'title' && getText ? getText(this.titleText(), '').tex : null;
       fr.latSq = this.settings.latencySquare ? s.latSq : -1;
       fr.vignette = 0.6;

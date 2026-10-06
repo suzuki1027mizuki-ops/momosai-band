@@ -42,24 +42,28 @@ void main() {
     }
   } else {
     float dy = hz - uv.y;
-    float z = 0.075 / dy;                      // 奥行き
-    float x = (uv.x - cx) * z * 1.1;
-    float zz = z + u_travel * 1.6;
+    float z = 0.075 / dy;                      // 奥行き（画面下 ≈ 0.19、地平線で ∞）
+    float x = (uv.x - cx) * z * 28.0;
+    float zz = (z + u_travel * 0.9) * 4.0;
     float fx = fract(x), fz = fract(zz);
     float lx = 1.0 - smoothstep(0.0, fwidth(x) * 1.6, min(fx, 1.0 - fx));
     float lz = 1.0 - smoothstep(0.0, fwidth(zz) * 1.6, min(fz, 1.0 - fz));
+    // 地平線付近で線が細かくなりすぎる部分は薄める（モアレ・ちらつき防止）
+    lx *= clamp(1.2 - fwidth(x) * 2.5, 0.0, 1.0);
+    lz *= clamp(1.2 - fwidth(zz) * 2.5, 0.0, 1.0);
     float grid = max(lx, lz);
-    col = u_pal[2] * 0.04 + lineC * grid * 0.85;
-    // キック：光の帯が奥から手前へ
+    col = u_pal[2] * 0.035 + lineC * grid * 0.85;
+    // キック：光の帯が奥から手前へ（遠近に合わせて幅も変える）
     float glow = 0.0;
     for (int i = 0; i < 8; i++) {
       vec2 ev = u_kickEv[i];
-      if (ev.x > 1.2) continue;
-      float pos = 5.0 - ev.x * 9.0;
+      if (ev.x > 1.0) continue;
+      float pos = 6.0 * exp(-ev.x * 5.0);
       if (pos < 0.2) continue;
-      glow += exp(-pow((z - pos) * 1.6, 2.0)) * ev.y * exp(-ev.x * 0.8);
+      float dz = (z - pos) / (0.18 * pos);
+      glow += exp(-dz * dz) * ev.y * exp(-ev.x * 1.5);
     }
-    col += lineC * glow * (0.25 + 0.75 * grid);
+    col += lineC * glow * (0.12 + 0.88 * grid);
     // 地平線付近のもや
     col = mix(col, u_pal[1] * 0.5, exp(-dy * 30.0) * 0.8);
   }

@@ -56,7 +56,7 @@
         `遅延   base ${ms(d.baseLatency)}  out ${ms(d.outputLatency)}  track ${ms(d.trackLatency)}  塊 ${d.chunk}/${d.chunkMax}`,
         `整合   一致 ${d.align}  不一致 ${d.alignMiss}  飛び ${d.gaps}  再起動 ${d.restarts}  再接続 ${d.reconnects}`,
         `安全   フラッシュ却下 ${app.show.limiter.denied}  エラー ${app.errors}  ${r.failed.length ? 'シェーダ失敗: ' + r.failed.join(',') : ''}`,
-        `保護   スリープ防止 ${VJ.guard.wakeLockOk ? 'ON' : 'OFF'}  Esc取込 ${VJ.guard.kbLockOk ? 'ON' : 'OFF'}`,
+        `保護   スリープ防止 ${VJ.guard.wakeLockOk ? 'ON' : 'OFF'}  Esc取込 ${VJ.guard.kbLockOk ? 'ON' : 'OFF'}  MIDI ${VJ.midi && VJ.midi.inputs.length ? VJ.midi.inputs.join(',') : '—'}`,
       ];
       hud.el.textContent = lines.join('\n');
     },

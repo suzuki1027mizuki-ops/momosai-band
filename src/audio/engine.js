@@ -13,7 +13,7 @@
 (function (VJ) {
   'use strict';
 
-  const N = 8192; // Analyser の長さ（48kHz で約 170ms 分の余裕）
+  const N = 32768; // Analyser の長さ（48kHz で約 0.68 秒分。描画が一瞬止まっても取りこぼさない）
   const K = 32; // 位置合わせに使う末尾サンプル数
   const Q = 128; // レンダー量子
 

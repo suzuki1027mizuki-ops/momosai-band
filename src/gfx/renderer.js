@@ -138,10 +138,16 @@
       }
       this.lastFrameT = now;
       if (this.opts.fixedScale || this.frame < 60) return;
-      // 想定間隔 = 直近の 10 パーセンタイル（60/120/144Hz どれでも）
-      const arr = Array.from(this.intervals).filter((x) => x > 0).sort((a, b) => a - b);
-      if (arr.length < 30) return;
-      const vsync = Math.max(6.5, Math.min(34, arr[Math.floor(arr.length * 0.1)]));
+      // 想定間隔 = 直近の 10 パーセンタイル（60/120/144Hz どれでも）。計算は 60 フレームに 1 回
+      if (!this.vsync || this.frame % 60 === 0) {
+        const arr = (this._sorted || (this._sorted = new Float32Array(this.intervals.length)));
+        arr.set(this.intervals);
+        arr.sort();
+        const n0 = arr.findIndex((x) => x > 0);
+        if (n0 < 0 || arr.length - n0 < 30) return;
+        this.vsync = Math.max(6.5, Math.min(34, arr[n0 + Math.floor((arr.length - n0) * 0.1)]));
+      }
+      const vsync = this.vsync;
       const last = this.intervals[(this.intIdx + this.intervals.length - 1) % this.intervals.length];
       if (last > vsync * 1.5) { this.slowTimes.push(now); this.lastSlow = now; }
       while (this.slowTimes.length && now - this.slowTimes[0] > 500) this.slowTimes.shift();

@@ -13,6 +13,8 @@
     /** now（秒）に光らせてよいか。よければ記録して true */
     allow(now) {
       const t = this.times;
+      // 同じフレーム（同じ時刻）の演出は 1 回の明滅として扱う（自動フラッシュ＋反転 など）
+      if (t.length && t[t.length - 1] === now) return true;
       while (t.length && now - t[0] >= 1.0) t.shift();
       if (t.length >= this.cfg.maxPerSec || (t.length && now - t[t.length - 1] < this.cfg.minGap)) {
         this.denied++;

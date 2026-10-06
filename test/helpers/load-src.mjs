@@ -11,7 +11,7 @@ export function scriptList() {
   return [...html.matchAll(/<script\s+src="([^"]+)"/g)].map((m) => m[1]);
 }
 
-const DEFAULT_INCLUDE = ['src/core/', 'src/dsp/', 'src/audio/synth.js', 'src/show/', 'src/scenes/'];
+const DEFAULT_INCLUDE = ['src/core/', 'src/dsp/', 'src/audio/synth.js', 'src/show/', 'src/scenes/', 'src/ui/midi.js', 'src/ui/keys.js'];
 
 export function loadVJ(include = DEFAULT_INCLUDE) {
   delete globalThis.VJ;

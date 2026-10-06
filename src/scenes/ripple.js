@@ -53,7 +53,7 @@ void main() {
   vec2 q = (p + disp) / s;
   vec2 cell = fract(q) - 0.5;
   float hot = min(ringSum, 1.0);
-  float dotR = 0.09 + 0.09 * u_hat + 0.22 * hot + 0.04 * idle();
+  float dotR = 0.09 + 0.06 * u_hat + 0.22 * hot + 0.04 * idle();
   float dotv = smoothstep(dotR, dotR - 0.07, length(cell));
   vec3 dotCol = mix(u_pal[0], u_pal[1], hash12(floor(q)));
   col += dotv * dotCol * (0.3 + 0.55 * hot + 0.12 * u_intensity + 0.08 * idle());

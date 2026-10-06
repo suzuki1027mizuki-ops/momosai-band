@@ -72,6 +72,12 @@
         panel.replaceSettings(VJ.storage.reset());
       });
 
+      $('btn-midi').addEventListener('click', async () => {
+        const ok = await VJ.midi.init(app);
+        $('midi-status').textContent = ok
+          ? (VJ.midi.inputs.length ? '接続中：' + VJ.midi.inputs.join(', ') : 'MIDI 機器が見つかりません（つなぐと自動で認識）')
+          : 'この環境では MIDI を使えません';
+      });
       $('btn-show').addEventListener('click', () => panel.startShow());
       $('panel-close').addEventListener('click', () => panel.toggle(false));
 
@@ -108,10 +114,11 @@
         opts.push(`<option value="${esc(d.deviceId)}">${esc(d.label || `入力デバイス ${i + 1}（開始すると名前が出ます）`)}</option>`);
       });
       sel.innerHTML = opts.join('');
-      // 保存されたデバイス（ID → 名前の順で探す）
-      let pick = devs.find((d) => d.deviceId === s.deviceId);
-      if (!pick && s.deviceLabel) pick = devs.find((d) => d.label === s.deviceLabel);
+      // 保存されたデバイス（ID → 名前の順で探す）。「既定」は先頭の選択肢に対応
+      let pick = devs.find((d) => d.deviceId === s.deviceId && d.deviceId !== 'default');
+      if (!pick && s.deviceLabel) pick = devs.find((d) => d.label === s.deviceLabel && d.deviceId !== 'default');
       sel.value = pick ? pick.deviceId : '';
+      if (sel.selectedIndex < 0) sel.value = '';
     },
 
     async startAudio() {
