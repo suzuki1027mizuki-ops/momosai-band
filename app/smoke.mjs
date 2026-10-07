@@ -13,7 +13,7 @@ const cmd = useXvfb ? 'xvfb-run' : args.shift();
 const wav = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../test/fixtures/drums.wav');
 const env = { ...process.env, MOMOSAI_SMOKE: '1' };
 if (fs.existsSync(wav)) env.MOMOSAI_FAKE_WAV = wav;
-const r = spawnSync(cmd, useXvfb ? ['-a', ...args] : args, { env, encoding: 'utf8', timeout: 120000 });
+const r = spawnSync(cmd, useXvfb ? ['-a', ...args] : args, { env, encoding: 'utf8', timeout: 200000 });
 const out = (r.stdout || '') + (r.stderr || '');
 const line = out.split('\n').find((l) => l.startsWith('SMOKE '));
 if (!line) { console.log(out.slice(-3000)); console.log('自己診断の結果がありません'); process.exit(1); }

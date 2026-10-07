@@ -167,7 +167,7 @@ function smoke(win) {
     const ws = BrowserWindow.getAllWindows().map((w) => ({ pid: w.webContents.getOSProcessId(), visible: w.isVisible(), focused: w.isFocused() }));
     win.webContents.executeJavaScript('JSON.stringify({ stage: window.__smoke || "", beatAge: Date.now() - (window.__beat || 0), vis: document.visibilityState, focus: document.hasFocus() })', true).catch(() => '?')
       .then((stage) => done({ ok: false, error: 'timeout', stage, rtt: Date.now() - t0, windows: ws }));
-  }, 60000);
+  }, 150000);
   win.webContents.once('did-finish-load', async () => {
     try {
       const js = (code) => win.webContents.executeJavaScript(code, true);
@@ -190,27 +190,25 @@ function smoke(win) {
           failed: app.renderer.info().failed, net: VJ.net.status, pin: VJ.net.info && VJ.net.info.pin, params: VJ.params,
           visibility: document.visibilityState, focus: document.hasFocus(), raf: await new Promise((r) => { let n = 0; const t0 = performance.now(); const f = () => { n++; if (performance.now() - t0 < 1000) requestAnimationFrame(f); else r(n); }; requestAnimationFrame(f); }),
         };
-        window.__smoke = 'openOutput';
-        VJ.link.openOutput(app);
-        const tw = performance.now();
-        for (let i = 0; i < 100 && !(VJ.link.lastStatus && VJ.link.lastStatus.engineStatus === 'running' && VJ.link.lastStatus.io.net.status === 'on'); i++) {
-          const ls = VJ.link.lastStatus;
-          window.__smoke = 'openOutput i=' + i + ' t=' + Math.round(performance.now() - tw) + ' role=' + VJ.link.role + ' peer=' + !!VJ.link.peer
-            + ' closed=' + (VJ.link.peer && VJ.link.peer.closed) + ' st=' + (ls ? ls.engineStatus + '/' + (ls.io && ls.io.net.status) : '-');
-          await new Promise((r) => setTimeout(r, 100));
-        }
-        out.role = VJ.link.role;
-        out.outputStatus = VJ.link.lastStatus ? VJ.link.lastStatus.engineStatus : null;
-        out.outputNet = VJ.link.lastStatus && VJ.link.lastStatus.io ? VJ.link.lastStatus.io.net.status : null;
-        // 本番開始（離脱確認あり）のあとでも、操作側から出力ウィンドウを閉じて 1 画面に戻れる
-        window.__smoke = 'startShow';
-        await VJ.link.request({ t: 'cmd', target: 'ui', name: 'startShow', args: [] }).catch(() => {});
-        window.__smoke = 'closeOutput';
-        VJ.link.closeOutput();
-        for (let i = 0; i < 60 && VJ.link.role !== 'solo'; i++) await new Promise((r) => setTimeout(r, 100));
-        out.afterClose = VJ.link.role;
         return out;
       })()`);
+      // ここからは、待つのをこちら（メインプロセス）で行う。2 つのウィンドウは同じレンダラーのスレッドを使うので、
+      // ソフトウェア描画では出力ウィンドウの描画でページ側のタイマーが何十秒も遅れることがある
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const poll = async (expr, ms) => { const t = Date.now(); while (Date.now() - t < ms) { if (await js(expr)) return true; await sleep(200); } return false; };
+      const stage = (name) => js(`window.__smoke = ${JSON.stringify(name)}; true`);
+      await stage('openOutput');
+      await js('VJ.link.openOutput(VJ.app); true');
+      await poll("!!(VJ.link.lastStatus && VJ.link.lastStatus.engineStatus === 'running' && VJ.link.lastStatus.io.net.status === 'on')", 40000);
+      Object.assign(res, await js(`({ role: VJ.link.role, outputStatus: VJ.link.lastStatus ? VJ.link.lastStatus.engineStatus : null,
+        outputNet: VJ.link.lastStatus && VJ.link.lastStatus.io ? VJ.link.lastStatus.io.net.status : null })`));
+      // 本番開始（離脱確認あり）のあとでも、操作側から出力ウィンドウを閉じて 1 画面に戻れる
+      await stage('startShow');
+      await Promise.race([js("VJ.link.request({ t: 'cmd', target: 'ui', name: 'startShow', args: [] }).then(() => true, () => false)"), sleep(20000)]);
+      await stage('closeOutput');
+      await js('VJ.link.closeOutput(); true');
+      await poll("VJ.link.role === 'solo'", 20000);
+      res.afterClose = await js('VJ.link.role');
       res.windows = BrowserWindow.getAllWindows().length;
       // 2 つ目のウィンドウは、上の「閉じる」で閉じているはず
       res.ok2 = res.afterClose === 'solo' && res.windows === 1;
