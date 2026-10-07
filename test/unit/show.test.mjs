@@ -159,6 +159,46 @@ test('MIDI：ノートでシーン・フラッシュ・暗転・曲送り、CC �
   assert.equal(c.state.sceneId, 'horizon');
 });
 
+test('MIDI ラーン：学習した操作に割り当てが変わり、設定に保存される。CC のボタン・ストロボも使える', () => {
+  const s = Object.assign({}, VJ.defaultSettings, { auto: false, midiMap: {} });
+  const c = new VJ.ShowController(s);
+  c.update(fakeFeatures(), 1 / 60, 5);
+  // 学習中のメッセージは実行しない
+  let got = null;
+  VJ.midi.learn('scene:orb', (k) => { got = k; VJ.midi.assign(s, k, 'scene:orb'); });
+  assert.equal(VJ.midi.handle(c, [0x90, 37, 100], s), 'learned');
+  assert.equal(got, 'n37');
+  assert.equal(c.state.sceneId, 'title');
+  assert.equal(s.midiMap.n37, 'scene:orb');
+  assert.equal(s.midiMap.n36, 'scene:ripple', '他の既定の割り当ては残る');
+  assert.ok(VJ.midi.handle(c, [0x91, 37, 100], s), 'チャンネルは問わない');
+  assert.equal(c.state.sceneId, 'orb');
+  // 同じ操作を別のキーに学習し直すと、古いキーは外れる
+  VJ.midi.learn('scene:orb', (k) => VJ.midi.assign(s, k, 'scene:orb'));
+  VJ.midi.handle(c, [0xb0, 20, 127], s);
+  assert.equal(s.midiMap.c20, 'scene:orb');
+  assert.equal(s.midiMap.n37, undefined);
+  // CC のボタン：64 以上に上がった瞬間だけ
+  c.selectScene('tunnel', { immediate: true });
+  assert.equal(VJ.midi.handle(c, [0xb0, 20, 127], s), false, '押しっぱなしでは繰り返さない');
+  assert.equal(c.state.sceneId, 'tunnel');
+  VJ.midi.handle(c, [0xb0, 20, 0], s);
+  assert.ok(VJ.midi.handle(c, [0xb0, 20, 100], s));
+  assert.equal(c.state.sceneId, 'orb');
+  // ストロボ（押している間）
+  VJ.midi.assign(s, 'n50', 'strobe');
+  VJ.midi.handle(c, [0x90, 50, 100], s);
+  assert.equal(c.state.strobe, true);
+  VJ.midi.handle(c, [0x80, 50, 0], s);
+  assert.equal(c.state.strobe, false);
+  // 操作の一覧：全シーンと主な操作がある
+  const ids = VJ.midi.actions().map((a) => a.id);
+  for (const sc of VJ.scenes.list) if (!sc.hidden) assert.ok(ids.includes('scene:' + sc.id), sc.id);
+  for (const a of ['flash', 'blackout', 'nextSong', 'master', 'sens', 'tap']) assert.ok(ids.includes(a), a);
+  assert.equal(VJ.midi.keyLabel('n36'), 'ノート 36（C1）');
+  assert.equal(VJ.midi.keyLabel('c7'), 'CC 7');
+});
+
 test('キー割り当て：数字・Shift+数字・テンキーがすべてのシーンに対応', () => {
   const ids = new Set();
   for (const code of ['Digit', 'Numpad']) for (let d = 0; d <= 9; d++) for (const sh of [false, true]) ids.add(VJ.keys.sceneForKey(code + d, sh));

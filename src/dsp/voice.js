@@ -45,6 +45,7 @@
       this.midi = 0; // なめらかにした音程（MIDI 番号）
       this.center = 0; // 音程変化の検出用（ゆっくり追従）
       this.devRun = 0;
+      this.devStart = 0;
       this.lastOnsetStep = -1e9;
       this.steps = 0;
       // 話し声
@@ -66,8 +67,9 @@
      * @param hz 推定（無声は 0）
      * @param active 全体の音量がゲートを超えているか
      * @param amp この区間の RMS
+     * @param ap 周期性の低さ（0 に近いほどはっきりした音程）
      */
-    step(hz, active, amp) {
+    step(hz, active, amp, ap) {
       const cfg = this.cfg, out = this.out;
       out.noteOnset = false;
       this.steps++;
@@ -86,9 +88,12 @@
         if (!this.voiced) { this.midi = m; this.center = m; this.devRun = 0; }
         else {
           this.midi += (m - this.midi) * cfg.pitchSmooth;
-          // 音程の変わり目：中心から thr 半音以上ずれた状態が holdSteps 回続いた
+          // 音程の変わり目：中心から noteThr 半音以上ずれ、ずれた先の音程が noteHold 回そろって続いた
+          // （和音の中で推定が声部の間を行き来する・ビブラートの山、では出さない）
           const dev = m - this.center;
           if (Math.abs(dev) > cfg.noteThr) {
+            if (this.devRun > 0 && (Math.abs(m - this.devStart) > cfg.noteStable || ap > cfg.noteMaxAp)) this.devRun = 0;
+            if (this.devRun === 0) this.devStart = m;
             if (++this.devRun >= cfg.noteHold && this.steps - this.lastOnsetStep >= cfg.noteGap / this.stepSec) {
               out.noteOnset = true;
               out.strength = Math.min(0.9, 0.45 + 0.08 * Math.abs(dev));
@@ -139,8 +144,9 @@
       const minSteps = Math.round(cfg.speechMinSec / this.stepSec);
       let nAct = 0;
       for (let k = 0; k < n; k++) nAct += this.act[(this.idx - 1 - k + N) % N];
+      if (nAct < minSteps) return; // 判定に足りる音が無い（話の間の沈黙など）：今の状態を保つ
       let score = 0;
-      if (nAct >= minSteps) {
+      {
         // 古い → 新しい順に並べ直さず、末尾から数える
         const at = (k) => (this.idx - n + k + N) % N; // k = 0 が最古
         // lef：1 秒ごと
@@ -207,6 +213,10 @@
       return dst;
     }
   }
+
+  /** MIDI 番号 → 'C4' のような音名 */
+  const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  D.noteName = (m) => { const n = Math.round(m); return NAMES[((n % 12) + 12) % 12] + (Math.floor(n / 12) - 1); };
 
   D.VoiceAnalyzer = VoiceAnalyzer;
 })(globalThis.VJ = globalThis.VJ || {});

@@ -79,7 +79,7 @@ float idle() { return u_idle * (0.5 + 0.5 * sin(u_time * 1.3)); }
     byId: {},
     register(def) {
       def.feedback = !!def.feedback;
-      // 調整できる値（最大 4 つ → u_param.xyzw）。{ id, name, min, max, def, step }
+      // 調整できる値（最大 4 つ → シェーダの u_param.xyzw、update の fx.param[0..3]）。{ id, name, min, max, def, step }
       def.params = (def.params || []).slice(0, 4).map((p) => Object.assign({ min: 0, max: 1, def: 0.5, step: 0.01 }, p));
       def.cost = def.cost || 1;
       def.init = def.init || function () {};

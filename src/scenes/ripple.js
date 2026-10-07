@@ -4,6 +4,7 @@
   'use strict';
   VJ.scenes.register({
     id: 'ripple', key: '1', name: 'Ripple', nameJa: '波紋', aliases: ['波紋', 'はもん'], cost: 1,
+    params: [{ id: 'speed', name: '波の速さ', min: 0.5, max: 2, def: 1 }, { id: 'grid', name: '点の細かさ', min: 0.6, max: 1.6, def: 1 }],
     frag: `
 void main() {
   vec2 p = uvc();
@@ -16,7 +17,7 @@ void main() {
   vec3 ringCol = vec3(0.0);
   float ringSum = 0.0;
   vec2 disp = vec2(0.0);
-  float speed = 0.75 + 0.35 * u_level;
+  float speed = (0.75 + 0.35 * u_level) * u_param.x;
 
   // キック：中心から太いリング（ヒットごとに固定の色）
   for (int i = 0; i < 8; i++) {
@@ -49,7 +50,7 @@ void main() {
   }
 
   // 点の格子（リングの通過で屈折）
-  float s = mix(0.072, 0.046, u_intensity);
+  float s = mix(0.072, 0.046, u_intensity) / u_param.y;
   vec2 q = (p + disp) / s;
   vec2 cell = fract(q) - 0.5;
   float hot = min(ringSum, 1.0);

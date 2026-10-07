@@ -5,6 +5,7 @@
   const FOLDS = [4, 6, 8, 12];
   VJ.scenes.register({
     id: 'kaleido', key: '5', name: 'Kaleido', nameJa: '万華鏡', aliases: ['万華鏡', 'カレイド'], cost: 2, feedback: true,
+    params: [{ id: 'spin', name: '回転', min: 0, max: 2, def: 1 }, { id: 'trail', name: '残像', min: 0.5, max: 1.5, def: 1 }],
     init(st) { st.rot = 0; st.folds = 6; st.fresh = 0; st.dir = 1; },
     update(st, f, dt, fx) {
       const k = dt * 60;
@@ -14,13 +15,13 @@
       if (f.onsetFlags & 8) {
         if (fx.requestFlash(0, 'kaleido-reset')) { st.fresh = 0.85; st.dir = -st.dir; }
       }
-      st.rot += st.dir * (0.05 + 0.45 * f.level) * dt;
+      st.rot += st.dir * (0.05 + 0.45 * f.level) * dt * fx.param[0];
       return {
         u_rotK: st.rot,
-        u_spin: st.dir * (0.004 + 0.03 * f.level) * k,
+        u_spin: st.dir * (0.004 + 0.03 * f.level) * k * fx.param[0],
         u_zoom: 1 + (0.006 + 0.045 * f.kick) * k,
         u_folds: st.folds,
-        u_decay: Math.pow(0.86 + 0.1 * f.intensity, k),
+        u_decay: Math.pow(Math.min(0.975, 0.86 + 0.1 * f.intensity + (fx.param[1] - 1) * 0.08), k),
         u_fresh: st.fresh,
       };
     },

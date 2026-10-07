@@ -24,28 +24,28 @@
       if (!line || line.startsWith('#')) return;
       if (/^@band\b/i.test(line)) { out.band = line.replace(/^@band\s*/i, '').trim() || null; return; }
       if (/^@end\b/i.test(line)) { out.end = line.replace(/^@end\s*/i, '').trim() || null; return; }
-      if (line.startsWith('@')) { out.errors.push({ line: lineNo, msg: `不明な指定: ${line.split(/\s/)[0]}` }); return; }
+      if (line.startsWith('@')) { out.errors.push({ line: lineNo, msg: VJ.t('不明な指定: {0}', line.split(/\s/)[0]) }); return; }
       const parts = line.split('|').map((s) => s.trim());
       // 行頭の曲番号（「1.」「01)」「3 」など）を外す。「22才の別れ」のような曲名は残す
       const title = parts[0].replace(/^\d{1,3}\s*[.)．:：]\s*|^\d{1,3}\s+/, '').trim();
-      if (!title) { out.errors.push({ line: lineNo, msg: '曲名がありません' }); return; }
+      if (!title) { out.errors.push({ line: lineNo, msg: VJ.t('曲名がありません') }); return; }
       const song = { title, scenes: [], palette: null, notitle: false, line: lineNo };
       if (parts[1]) {
         for (const tok of parts[1].split(',')) {
           if (!tok.trim()) continue;
           const id = VJ.scenes.resolve(tok);
           if (id) song.scenes.push(id);
-          else out.errors.push({ line: lineNo, msg: `シーン「${tok.trim()}」は見つかりません（1〜6, 0 か名前）` });
+          else out.errors.push({ line: lineNo, msg: VJ.t('シーン「{0}」は見つかりません（1〜9・s1〜s9・0 か名前）', tok.trim()) });
         }
       }
       if (parts[2]) {
         const p = VJ.resolvePalette(parts[2]);
-        if (p === null) out.errors.push({ line: lineNo, msg: `パレット「${parts[2]}」は見つかりません` });
+        if (p === null) out.errors.push({ line: lineNo, msg: VJ.t('パレット「{0}」は見つかりません', parts[2]) });
         else song.palette = p;
       }
       for (const flag of parts.slice(3)) {
         if (/^notitle$/i.test(flag)) song.notitle = true;
-        else if (flag) out.errors.push({ line: lineNo, msg: `不明なオプション「${flag}」` });
+        else if (flag) out.errors.push({ line: lineNo, msg: VJ.t('不明なオプション「{0}」', flag) });
       }
       out.songs.push(song);
     });

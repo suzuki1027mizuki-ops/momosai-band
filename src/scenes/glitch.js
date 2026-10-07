@@ -5,6 +5,7 @@
   'use strict';
   VJ.scenes.register({
     id: 'glitch', key: '6', name: 'Glitch', nameJa: 'グリッチ', aliases: ['グリッチ'], cost: 1,
+    params: [{ id: 'shift', name: 'ずれの量', min: 0, max: 2, def: 1 }, { id: 'scroll', name: '流れる速さ', min: 0, max: 2.5, def: 1 }],
     init(st) { st.seed = 1; st.lastCut = -1; st.invert = 0; st.scroll = 0; },
     update(st, f, dt, fx) {
       if ((f.onsetFlags & 3) && f.time - st.lastCut >= 0.3) {
@@ -13,7 +14,7 @@
       }
       st.invert *= Math.exp(-dt / 0.06);
       if ((f.onsetFlags & 8) && fx.requestFlash(0, 'glitch-invert')) st.invert = 1;
-      st.scroll += (0.05 + 0.6 * f.level) * dt;
+      st.scroll += (0.05 + 0.6 * f.level) * dt * fx.param[1];
       return { u_seed: st.seed, u_invert: st.invert, u_scroll: st.scroll };
     },
     frag: `
@@ -55,9 +56,9 @@ void main() {
   // 高域：ブロック単位のずれ
   vec2 blk = floor(uv * vec2(14.0, 22.0));
   float bh = hash12(blk + floor(u_time * 18.0) + u_seed);
-  float sh = bh > 1.0 - 0.3 * u_high ? (hash12(blk * 1.7 + u_seed) - 0.5) * 0.12 * u_high : 0.0;
+  float sh = bh > 1.0 - 0.3 * u_high ? (hash12(blk * 1.7 + u_seed) - 0.5) * 0.12 * u_high * u_param.x : 0.0;
   vec2 us = uv + vec2(sh, 0.0);
-  float ca = 0.0015 + 0.005 * u_high;
+  float ca = (0.0015 + 0.005 * u_high) * u_param.x;
   vec3 col;
   col.r = layer(us + vec2(ca, 0.0)).r;
   col.g = layer(us).g;

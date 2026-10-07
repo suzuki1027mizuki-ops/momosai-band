@@ -4,6 +4,7 @@
   'use strict';
   VJ.scenes.register({
     id: 'title', key: '0', name: 'Title', nameJa: 'タイトル', aliases: ['タイトル', 'バンド名'], cost: 1,
+    params: [{ id: 'size', name: '文字の大きさ', min: 0.6, max: 1.3, def: 1 }, { id: 'bg', name: '背景の明るさ', min: 0, max: 2.5, def: 1 }],
     frag: `
 vec4 txt(vec2 uv) {
   vec2 t = (uv - u_titleRect.xy) / u_titleRect.zw;
@@ -16,9 +17,9 @@ void main() {
   float tt = u_time * 0.05;
   float n = vnoise(p * 1.8 + tt);
   vec3 bg = mix(u_pal[2], u_pal[0], 0.5 + 0.5 * sin(p.x * 1.4 + tt * 3.0 + n * 2.5));
-  bg *= (0.08 + 0.05 * vnoise(p * 3.0 - tt * 2.0)) * (0.8 + 0.25 * u_level);
+  bg *= (0.08 + 0.05 * vnoise(p * 3.0 - tt * 2.0)) * (0.8 + 0.25 * u_level) * u_param.y;
 
-  float s = 1.0 + 0.03 * u_kick + 0.012 * idle();
+  float s = (1.0 + 0.03 * u_kick + 0.012 * idle()) * u_param.x;
   vec2 tu = (uv - 0.5) / s + 0.5;
   vec4 tx = txt(tu);
   float ca = 0.0035 * u_hat;

@@ -55,7 +55,7 @@
     _ensureContext() {
       if (this.ctx && this.ctx.state !== 'closed') return this.ctx;
       const AC = globalThis.AudioContext || globalThis.webkitAudioContext;
-      if (!AC) throw new Error('このブラウザは Web Audio に対応していません');
+      if (!AC) throw new Error(VJ.t('このブラウザは Web Audio に対応していません'));
       const ctx = (this.ctx = new AC({ latencyHint: 'interactive' }));
       const an = (this.analyser = ctx.createAnalyser());
       an.fftSize = N;
@@ -104,8 +104,8 @@
           this._startBuffer(ab, true);
         } else if (this.opts.source === 'file') {
           const files = this.opts.files && this.opts.files.length ? this.opts.files
-            : this.opts.fileData ? [{ name: '音声ファイル', data: this.opts.fileData }] : [];
-          if (!files.length) throw new Error('音声ファイルを選んでください');
+            : this.opts.fileData ? [{ name: VJ.t('音声ファイル'), data: this.opts.fileData }] : [];
+          if (!files.length) throw new Error(VJ.t('音声ファイルを選んでください'));
           this.playlist = files;
           await this._playFile(0);
           return 0;
@@ -124,7 +124,7 @@
 
     async _startMic(deviceId) {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error('マイク入力が使えません（Chrome で開いてください）');
+        throw new Error(VJ.t('マイク入力が使えません（Chrome で開いてください）'));
       }
       const base = {
         echoCancellation: false, noiseSuppression: false, autoGainControl: false,
@@ -191,7 +191,7 @@
     /** PC で再生中の音（画面共有の音声）。映像は使わないが、止めると共有自体が終わる環境があるので最小設定で残す */
     async _startDisplay() {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-        throw new Error('この環境では「PC で再生中の音」を使えません（Chrome / Edge で開いてください）');
+        throw new Error(VJ.t('この環境では「PC で再生中の音」を使えません（Chrome / Edge で開いてください）'));
       }
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: { frameRate: 1, width: { max: 320 }, height: { max: 240 } },
@@ -201,7 +201,7 @@
       const track = stream.getAudioTracks()[0];
       if (!track) {
         for (const t of stream.getTracks()) t.stop();
-        const e = new Error('音声が共有されていません。共有の画面で「システム音声を共有」（タブの場合は「タブの音声も共有」）をオンにしてから選び直してください。');
+        const e = new Error(VJ.t('音声が共有されていません。共有の画面で「システム音声を共有」（タブの場合は「タブの音声も共有」）をオンにしてから選び直してください。'));
         e.name = 'NoAudioShared';
         throw e;
       }
@@ -209,7 +209,7 @@
       this.stream = stream;
       const st = track.getSettings ? track.getSettings() : {};
       this.trackSettings = st;
-      this.opts.deviceLabel = track.label || '画面共有の音声';
+      this.opts.deviceLabel = track.label || VJ.t('画面共有の音声');
       track.onended = () => this._displayEnded();
       this.srcNode = this.ctx.createMediaStreamSource(stream);
       this.channels = st.channelCount || 2;
@@ -218,7 +218,7 @@
 
     _displayEnded() {
       if (this.opts.source !== 'display' || this.status === 'idle') return;
-      this._set('lost', '画面共有が終了しました。もう一度「▶ 開始」を押して共有し直してください。');
+      this._set('lost', VJ.t('画面共有が終了しました。もう一度「▶ 開始」を押して共有し直してください。'));
     }
 
     _startBuffer(audioBuffer, loop, when) {
@@ -292,7 +292,7 @@
 
     _lost() {
       if (this.opts.source !== 'mic') return;
-      this._set('lost', '入力デバイスが切断されました。再接続を試みています…');
+      this._set('lost', VJ.t('入力デバイスが切断されました。再接続を試みています…'));
       this._scheduleReconnect(300);
     }
 
@@ -316,9 +316,9 @@
         this._stopSource();
         await this._startMic(id);
         this.diag.reconnects++;
-        this._set('running', '再接続しました');
+        this._set('running', VJ.t('再接続しました'));
       } catch (e) {
-        this._set('lost', '入力デバイスが見つかりません。接続を確認してください（自動で再試行中）');
+        this._set('lost', VJ.t('入力デバイスが見つかりません。接続を確認してください（自動で再試行中）'));
         this._scheduleReconnect(1000);
       } finally {
         this._reconnecting = false;
@@ -424,7 +424,7 @@
       if (ctx.currentTime !== w.t) { w.t = ctx.currentTime; w.perf = perfNow; return; }
       if (perfNow - w.perf > 1500 && !this._restarting) {
         w.perf = perfNow;
-        this.restart('音声処理が停止したため再起動しました');
+        this.restart(VJ.t('音声処理が停止したため再起動しました'));
       }
     }
 
@@ -455,8 +455,8 @@
         outputLatency: ctx && ctx.outputLatency !== undefined ? ctx.outputLatency : null,
         trackLatency: this.trackSettings && this.trackSettings.latency !== undefined ? this.trackSettings.latency : null,
         channels: this.channels,
-        device: this.opts.source === 'file' ? (this.nowPlaying || '音声ファイル') : this.opts.source === 'demo' ? 'デモ音源' + ({ sing: '（歌）', speech: '（話し声）' }[this.opts.demo] || '')
-          : this.opts.deviceLabel || (this.opts.source === 'mic' ? '既定のデバイス' : this.opts.source),
+        device: this.opts.source === 'file' ? (this.nowPlaying || VJ.t('音声ファイル')) : this.opts.source === 'demo' ? VJ.t('デモ音源') + ({ sing: VJ.t('（歌）'), speech: VJ.t('（話し声）') }[this.opts.demo] || '')
+          : this.opts.deviceLabel || (this.opts.source === 'mic' ? VJ.t('既定のデバイス') : this.opts.source),
         chunk: this.diag.chunk,
         chunkMax: this.diag.chunkMax,
         align: this.diag.align,
@@ -471,15 +471,15 @@
   function describeError(e) {
     const name = (e && e.name) || '';
     if (name === 'NoAudioShared') return e.message;
-    if ((name === 'NotAllowedError' || name === 'AbortError') && e && /display|screen|share/i.test(String(e.message))) return '画面共有がキャンセルされました。もう一度「▶ 開始」を押して、共有する画面（またはタブ）と音声を選んでください。';
+    if ((name === 'NotAllowedError' || name === 'AbortError') && e && /display|screen|share/i.test(String(e.message))) return VJ.t('画面共有がキャンセルされました。もう一度「▶ 開始」を押して、共有する画面（またはタブ）と音声を選んでください。');
     if (name === 'NotAllowedError' || name === 'SecurityError') {
-      return 'マイクの使用が許可されていません。アドレスバー左のアイコン →「マイク」を「許可」にしてから、もう一度お試しください。'
-        + '（Mac: システム設定 > プライバシーとセキュリティ > マイク で Chrome を許可 / Windows: 設定 > プライバシー > マイク でデスクトップアプリのアクセスを許可）';
+      return VJ.t('マイクの使用が許可されていません。アドレスバー左のアイコン →「マイク」を「許可」にしてから、もう一度お試しください。')
+        + VJ.t('（Mac: システム設定 > プライバシーとセキュリティ > マイク で Chrome を許可 / Windows: 設定 > プライバシー > マイク でデスクトップアプリのアクセスを許可）');
     }
-    if (name === 'NotFoundError' || name === 'OverconstrainedError') return '入力デバイスが見つかりません。オーディオインターフェースやマイクの接続を確認してください。';
-    if (name === 'NotReadableError' || name === 'AbortError') return '入力デバイスを開けません。ほかのアプリ（Zoom・DAW など）がデバイスを使っていないか確認して、閉じてから再試行してください。';
-    if (name === 'NotSupportedError' || name === 'TypeError') return 'この環境ではマイクを使えません。Chrome で開き直してください（file:// で開いている場合は start-windows.bat / start-mac.command から起動）。';
-    if (name === 'EncodingError') return '音声ファイルを読み込めません（mp3 / wav / m4a などを選んでください）。';
+    if (name === 'NotFoundError' || name === 'OverconstrainedError') return VJ.t('入力デバイスが見つかりません。オーディオインターフェースやマイクの接続を確認してください。');
+    if (name === 'NotReadableError' || name === 'AbortError') return VJ.t('入力デバイスを開けません。ほかのアプリ（Zoom・DAW など）がデバイスを使っていないか確認して、閉じてから再試行してください。');
+    if (name === 'NotSupportedError' || name === 'TypeError') return VJ.t('この環境ではマイクを使えません。Chrome で開き直してください（file:// で開いている場合は start-windows.bat / start-mac.command から起動）。');
+    if (name === 'EncodingError') return VJ.t('音声ファイルを読み込めません（mp3 / wav / m4a などを選んでください）。');
     return (e && e.message) || String(e);
   }
 

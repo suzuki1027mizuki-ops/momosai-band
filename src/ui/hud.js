@@ -46,26 +46,28 @@
       const lamp = (k, c) => (perfNow - L[k] < 300 ? `[${c}]` : ` ${c.toLowerCase()} `);
       const song = app.show.currentSong();
       const prof = VJ.profileById(app.settings.profile);
+      const t = VJ.t, on = (v) => (v ? 'ON' : 'OFF');
       const lines = [
         `MOMOSAI VJ ${VJ.version}  ${VJ.buildTime}`,
-        `シーン  ${pad(s.sceneId, 8)} ${s.pending ? '→ ' + s.pending.id + '（待機）' : ''}`,
-        `パレット ${VJ.palettes[s.paletteIdx].name}   オート ${s.auto ? 'ON' : 'OFF'}   ロック ${s.locked ? 'ON' : 'OFF'}   暗転 ${s.blackout ? 'ON' : 'OFF'}`,
-        `曲     ${song ? 'M' + (s.songIdx + 1) + ' ' + song.title : s.endState ? '（終演）' : '（開演前）'}`,
-        `感度 ${s.sens > 0 ? '+' : ''}${s.sens}   明るさ ${Math.round(s.master * 100)}%   動き ${Math.round(app.show.react() * 100)}%   タイプ ${prof.name}`,
+        t('シーン  {0} {1}', pad(s.sceneId, 8), s.pending ? '→ ' + s.pending.id + t('（待機）') : ''),
+        t('パレット {0}   オート {1}   ロック {2}   暗転 {3}', t(VJ.palettes[s.paletteIdx].name), on(s.auto), on(s.locked), on(s.blackout)),
+        t('曲     {0}', song ? 'M' + (s.songIdx + 1) + ' ' + song.title : s.endState ? t('（終演）') : t('（開演前）')),
+        t('感度 {0}   明るさ {1}%   動き {2}%   タイプ {3}', (s.sens > 0 ? '+' : '') + s.sens, Math.round(s.master * 100), Math.round(app.show.react() * 100), VJ.profileName(prof)),
         '',
-        `入力   ${d.status}  ${d.device}  ${d.channels}ch  ${d.sampleRate}Hz`,
-        `メーター L ${m.l.toFixed(1)}dB  R ${m.mono ? '—' : m.r.toFixed(1) + 'dB'}  ${performance.now() - m.clip < 2000 ? '⚠ クリップ' : ''}`,
-        `ヒット ${lamp('k', 'K')}${lamp('s', 'S')}${lamp('h', 'H')}${lamp('a', 'A')}${lamp('b', 'B')}  K${f.kickN} S${f.snareN} H${f.hatN} A${f.accentN} I${f.impactN}`,
-        `テンポ ${f.bpm ? f.bpm.toFixed(1) + ' BPM' : '—'}  確度 ${(f.beatConf || 0).toFixed(2)}${f.tempoManual ? '  （タップ）' : ''}   ${f.melodic ? 'ドラムなしモード' : 'ドラムモード'}`,
+        t('入力   {0}  {1}  {2}ch  {3}Hz', d.status, d.device, d.channels, d.sampleRate),
+        t('メーター L {0}dB  R {1}  {2}', m.l.toFixed(1), m.mono ? '—' : m.r.toFixed(1) + 'dB', performance.now() - m.clip < 2000 ? t('⚠ クリップ') : ''),
+        t('ヒット {0}  K{1} S{2} H{3} A{4} I{5}', lamp('k', 'K') + lamp('s', 'S') + lamp('h', 'H') + lamp('a', 'A') + lamp('b', 'B'), f.kickN, f.snareN, f.hatN, f.accentN, f.impactN),
+        t('テンポ {0}  確度 {1}{2}   {3}', f.bpm ? f.bpm.toFixed(1) + ' BPM' : '—', (f.beatConf || 0).toFixed(2), f.tempoManual ? t('  （タップ）') : '', f.melodic ? t('ドラムなしモード') : t('ドラムモード')),
+        t('声     {0}  有声 {1}  話し声 {2} {3}  音程変化 {4}', f.voiced > 0.5 && f.note ? pad(VJ.dsp.noteName(f.note), 4) + Math.round(f.pitchHz) + 'Hz' : '—       ', bar(f.voiced || 0, 6), f.speech ? t('検出中') : '—', bar(f.speechScore || 0, 6), f.noteN || 0),
         `level ${bar(f.level)} low ${bar(f.low, 8)} mid ${bar(f.mid, 8)} high ${bar(f.high, 8)}`,
-        `盛上り ${bar(f.intensity)} ${f.active ? '' : '（無音）'}`,
+        t('盛上り {0} {1}', bar(f.intensity), f.active ? '' : t('（無音）')),
         '',
-        `描画   ${r.fps.toFixed(0)}fps  倍率 ${r.scale.toFixed(2)}  ${r.sceneSize.join('x')} → ${r.size.join('x')}`,
-        `GPU    ${(r.gpu || '').slice(0, 60)}${r.software ? '  ⚠ ソフトウェア描画' : ''}`,
-        `遅延   base ${ms(d.baseLatency)}  out ${ms(d.outputLatency)}  track ${ms(d.trackLatency)}  塊 ${d.chunk}/${d.chunkMax}`,
-        `整合   一致 ${d.align}  不一致 ${d.alignMiss}  飛び ${d.gaps}  再起動 ${d.restarts}  再接続 ${d.reconnects}`,
-        `安全   フラッシュ却下 ${app.show.limiter.denied}  エラー ${app.errors}  ${r.failed.length ? 'シェーダ失敗: ' + r.failed.join(',') : ''}`,
-        `保護   スリープ防止 ${VJ.guard.wakeLockOk ? 'ON' : 'OFF'}  Esc取込 ${VJ.guard.kbLockOk ? 'ON' : 'OFF'}  MIDI ${VJ.midi && VJ.midi.inputs.length ? VJ.midi.inputs.join(',') : '—'}  画面 ${VJ.link ? VJ.link.role : 'solo'}`,
+        t('描画   {0}fps  倍率 {1}  {2} → {3}', r.fps.toFixed(0), r.scale.toFixed(2), r.sceneSize.join('x'), r.size.join('x')),
+        `GPU    ${(r.gpu || '').slice(0, 60)}${r.software ? t('  ⚠ ソフトウェア描画') : ''}`,
+        t('遅延   base {0}  out {1}  track {2}  塊 {3}/{4}', ms(d.baseLatency), ms(d.outputLatency), ms(d.trackLatency), d.chunk, d.chunkMax),
+        t('整合   一致 {0}  不一致 {1}  飛び {2}  再起動 {3}  再接続 {4}', d.align, d.alignMiss, d.gaps, d.restarts, d.reconnects),
+        t('安全   フラッシュ却下 {0}  エラー {1}  {2}', app.show.limiter.denied, app.errors, r.failed.length ? t('シェーダ失敗: ') + r.failed.join(',') : ''),
+        t('保護   スリープ防止 {0}  Esc取込 {1}  MIDI {2}  画面 {3}', on(VJ.guard.wakeLockOk), on(VJ.guard.kbLockOk), VJ.midi && VJ.midi.inputs.length ? VJ.midi.inputs.join(',') : '—', VJ.link ? VJ.link.role : 'solo'),
       ];
       return lines.join('\n');
     },

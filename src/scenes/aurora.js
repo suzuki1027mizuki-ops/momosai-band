@@ -4,13 +4,14 @@
   'use strict';
   VJ.scenes.register({
     id: 'aurora', key: '4', name: 'Aurora', nameJa: 'オーロラ', aliases: ['オーロラ'], cost: 4,
+    params: [{ id: 'speed', name: '流れの速さ', min: 0.3, max: 2.5, def: 1 }, { id: 'warp', name: 'うねり', min: 0.3, max: 1.8, def: 1 }],
     init(st) { st.flow = 0; st.low = 0; st.lvl = 0; },
-    update(st, f, dt) {
+    update(st, f, dt, fx) {
       // 光過敏対策：明るさや模様の歪みはビートごとに跳ねないよう、ゆっくり追従させた値を使う
       const k = Math.min(1, dt / 0.4);
       st.low += (f.low - st.low) * k;
       st.lvl += (f.level - st.lvl) * k;
-      st.flow += (0.04 + 0.22 * f.mid + 0.05 * st.lvl) * dt;
+      st.flow += (0.04 + 0.22 * f.mid + 0.05 * st.lvl) * dt * fx.param[0];
       return { u_flow: st.flow, u_lowS: st.low, u_lvlS: st.lvl };
     },
     frag: `
@@ -21,7 +22,7 @@ void main() {
   int oct = 3 + int(u_quality * 2.0 + 0.5);
   float t = u_flow;
   vec2 q = vec2(fbm(p + vec2(0.0, t * 0.6), oct), fbm(p + vec2(5.2, 1.3) - t * 0.4, oct));
-  float warp = 1.6 + 2.2 * u_lowS;
+  float warp = (1.6 + 2.2 * u_lowS) * u_param.y;
   vec2 r = vec2(fbm(p + warp * q + vec2(1.7, 9.2) + t * 0.3, oct), fbm(p + warp * q + vec2(8.3, 2.8) - t * 0.2, oct));
   float f = fbm(p + warp * r, oct);
 

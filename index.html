@@ -93,6 +93,11 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 #logo-preview { max-height: 60px; max-width: 200px; background: #222; border-radius: 4px; }
 #auto-scenes label { font-size: 13px; }
 .warnbox.resume { background: #0d2a1a; border-color: var(--ok); color: #c8ffd8; }
+.midimap { display: grid; grid-template-columns: 1fr auto auto; gap: 2px 8px; align-items: center; font-size: 12.5px; max-height: 260px; overflow-y: auto; }
+.midimap .k { font-family: var(--mono); color: var(--muted); }
+.midimap button { padding: 1px 8px; font-size: 12px; }
+.midimap button.wait { border-color: var(--accent2); color: var(--accent2); }
+.sp-row { display: grid; grid-template-columns: 7em 1fr 3.5em; align-items: center; gap: 6px; margin: 4px 0; }
 body.remote-mode #stage { opacity: 0.25; }
 #remote { position: fixed; left: 16px; top: 16px; max-width: max(260px, calc(100vw - min(440px, 100vw) - 40px)); display: flex; z-index: 10; }
 #remote .box { background: var(--panel); border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; max-width: 640px; }
@@ -111,6 +116,7 @@ body.remote-mode #stage { opacity: 0.25; }
     <span class="ver" id="ver"></span>
     <button class="close" id="panel-close" title="閉じる（M で開く）">×</button>
   </header>
+  <div class="row" data-i18n-skip><span>言語 / Language</span><select id="opt-lang"><option value="auto">自動 / Auto</option><option value="ja">日本語</option><option value="en">English</option></select></div>
   <div id="warnings"></div>
   <div id="resume-box" hidden>
     <div class="warnbox resume"><span id="resume-text"></span> <button id="btn-resume">前回の続きから再開</button> <button id="btn-resume-no">いいえ</button></div>
@@ -123,11 +129,18 @@ body.remote-mode #stage { opacity: 0.25; }
     <label><input type="radio" name="src" value="demo"> デモ音源</label>
     <label><input type="radio" name="src" value="file"> 音声ファイル</label>
   </div>
+  <div class="row" id="demo-opts" hidden>
+    <select id="demo-kind">
+      <option value="band">バンド演奏（約 75 秒）</option>
+      <option value="sing">歌（アカペラの合成音声）</option>
+      <option value="speech">話し声（司会の合成音声）</option>
+    </select>
+  </div>
   <div class="row" id="mic-opts">
     <select id="device"><option value="">（既定のデバイス）</option></select>
     <button id="btn-refresh" title="デバイス一覧を更新">↻</button>
   </div>
-  <div class="hint" id="display-opts" hidden>YouTube・音楽アプリ・DJ ソフトなど PC で流している音に反応します。開始すると共有する画面を聞かれるので、<b>「システム音声を共有」</b>（タブなら「タブの音声も共有」）をオンにして選んでください。Mac は Chrome のタブの音だけ使えます。</div>
+  <div class="hint" id="display-opts" hidden data-i18n-html>YouTube・音楽アプリ・DJ ソフトなど PC で流している音に反応します。開始すると共有する画面を聞かれるので、<b>「システム音声を共有」</b>（タブなら「タブの音声も共有」）をオンにして選んでください。Mac は Chrome のタブの音だけ使えます。</div>
   <div class="row" id="file-opts" hidden>
     <input type="file" id="file" multiple accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac">
     <button id="btn-skip" title="次の曲（複数選んだとき）" hidden>次の曲 ▶▶</button>
@@ -157,11 +170,12 @@ body.remote-mode #stage { opacity: 0.25; }
     <span>テンポ</span><b id="bpm-view" class="bpm">— BPM</b><span class="hint" id="mode-view"></span>
     <button id="btn-tap" title="拍に合わせて 3 回以上（Enter キーでも）">タップ</button>
   </div>
+  <div class="row"><span>声</span><b id="voice-view" class="bpm">—</b><span class="hint" id="speech-view"></span></div>
 
   <h2>③ バンド名・セットリスト・文字</h2>
   <div class="row"><input type="text" id="band" placeholder="バンド名"></div>
   <textarea id="setlist" spellcheck="false"></textarea>
-  <div class="hint">1 行 1 曲：<code>曲名 | シーン | パレット</code>。シーンは 1〜9（カンマで複数→オートで順番に）。<code>@end</code> で終演の文字。→ キーで次の曲。</div>
+  <div class="hint" data-i18n-html>1 行 1 曲：<code>曲名 | シーン | パレット</code>。シーンは 1〜9・Shift の段は s1〜s9、または名前（カンマで複数→オートで順番に）。<code>@end</code> で終演の文字。→ キーで次の曲。</div>
   <div id="setlist-preview"></div>
   <details>
     <summary>ロゴ画像・テロップ・開演カウントダウン</summary>
@@ -217,6 +231,19 @@ body.remote-mode #stage { opacity: 0.25; }
   <div class="row">
     <label><input type="checkbox" id="opt-noflash"> フラッシュを一切使わない（光に配慮が必要な会場）</label>
   </div>
+  <div class="row">
+    <label><input type="checkbox" id="opt-speechtitle"> MC（話し声）のあいだはタイトルにする（オート ON のとき）</label>
+  </div>
+  <div class="row">
+    <span>シーンの切り替え</span>
+    <select id="opt-xfade">
+      <option value="-1">音楽のタイプに合わせる</option>
+      <option value="0">カット（すぐ）</option>
+      <option value="0.5">0.5 秒でフェード</option>
+      <option value="1">1 秒でフェード</option>
+      <option value="2">2 秒でフェード</option>
+    </select>
+  </div>
   <div class="row"><span>感度</span><input type="range" id="opt-sens" min="-5" max="5" step="1"><span id="opt-sens-v"></span></div>
   <div class="row"><span>動きの大きさ</span><input type="range" id="opt-react" min="0.3" max="1.5" step="0.05"><span id="opt-react-v"></span></div>
   <div class="row"><span>明るさ</span><input type="range" id="opt-master" min="0.2" max="1" step="0.1"><span id="opt-master-v"></span></div>
@@ -224,6 +251,12 @@ body.remote-mode #stage { opacity: 0.25; }
     <span>パレット</span><select id="opt-palette"></select>
     <span id="custom-colors"></span>
   </div>
+  <details id="scene-adjust">
+    <summary>シーンごとの調整（量・大きさ・速さなど）</summary>
+    <div class="row"><select id="sp-scene"></select><label><input type="checkbox" id="sp-follow" checked> 表示中のシーンに合わせる</label></div>
+    <div id="sp-params"></div>
+    <div class="row"><button id="sp-reset">このシーンを既定に戻す</button></div>
+  </details>
   <details>
     <summary>詳しい設定</summary>
     <div class="row"><span>オートで使うシーン</span></div>
@@ -247,8 +280,14 @@ body.remote-mode #stage { opacity: 0.25; }
     </div>
     <div class="row">
       <button id="btn-midi">MIDI コントローラを使う</button>
-      <span class="hint" id="midi-status">パッドのノート 36〜41＝シーン1〜6、43＝フラッシュ、44＝暗転</span>
+      <span class="hint" id="midi-status">パッドのノート 36〜41＝シーン1〜6、43＝フラッシュ、44＝暗転（下で変えられます）</span>
     </div>
+    <details id="midi-map-box">
+      <summary>MIDI の割り当てを変える（学習）</summary>
+      <div class="hint">「学習」を押してから、割り当てたいパッド・ボタン・つまみを動かします。</div>
+      <div id="midi-map" class="midimap"></div>
+      <div class="row"><button id="btn-midi-default">既定の割り当てに戻す</button></div>
+    </details>
     <div class="row">
       <button id="btn-export">設定を書き出し</button>
       <button id="btn-import">設定を読み込み</button>
@@ -259,14 +298,59 @@ body.remote-mode #stage { opacity: 0.25; }
 
   <h2>⑥ 本番</h2>
   <button class="big" id="btn-show">ショー開始（全画面）</button>
-  <div class="hint">全画面・スリープ防止・Esc 長押しでのみ解除、がまとめて有効になります。<b>H</b> でキー一覧、<b>M</b> でこのパネル。</div>
+  <div class="hint" data-i18n-html>全画面・スリープ防止・Esc 長押しでのみ解除、がまとめて有効になります。<b>H</b> でキー一覧、<b>M</b> でこのパネル。</div>
   <div class="keys" id="keys-mini"></div>
+
+  <h2>⑦ 外部連携（スマホ・OSC・照明）</h2>
+  <div class="hint" data-i18n-html>スマホからの操作・OSC・Art-Net には「ブリッジ」が要ります。単体アプリには入っています。ブラウザ版は <code>bridge</code> フォルダの起動ファイル（Node.js が必要）で起動します。</div>
+  <div class="row"><label><input type="checkbox" id="net-on"> ブリッジにつなぐ</label><input type="text" id="net-url" spellcheck="false" style="flex: 1; width: auto"></div>
+  <div class="status" id="net-status">つないでいません</div>
+  <details>
+    <summary>OSC（照明卓・TouchDesigner・Resolume など）</summary>
+    <div class="hint" data-i18n-html>受信：ブリッジの UDP <b id="osc-in">9000</b> 番。<code>/vj/scene 3</code>・<code>/vj/flash</code>・<code>/vj/blackout 1</code>・<code>/vj/next</code>・<code>/vj/master 0.8</code> など（手順書参照）</div>
+    <div class="row"><label><input type="checkbox" id="osc-on"> 音の特徴量を送る</label></div>
+    <div class="row"><span>送り先</span><input type="text" id="osc-host" spellcheck="false" style="width: 10em"><span>ポート</span><input type="number" id="osc-port" min="1" max="65535" style="width: 6em">
+      <select id="osc-rate"><option value="30">30 回/秒</option><option value="60">60 回/秒</option><option value="15">15 回/秒</option></select></div>
+  </details>
+  <details>
+    <summary>照明（DMX）</summary>
+    <div class="row">
+      <label><input type="checkbox" id="dmx-on"> 照明を映像に合わせて光らせる</label>
+    </div>
+    <div class="row">
+      <span>出力</span>
+      <select id="dmx-out">
+        <option value="artnet">Art-Net（LAN・ブリッジ経由）</option>
+        <option value="enttec">USB-DMX（Enttec DMX USB Pro 互換）</option>
+        <option value="opendmx">USB-DMX（Open DMX 互換）</option>
+      </select>
+    </div>
+    <div class="row" id="dmx-art"><span>送り先 IP</span><input type="text" id="dmx-host" spellcheck="false" style="width: 10em"><span>ユニバース</span><input type="number" id="dmx-uni" min="0" max="32767" style="width: 5em"></div>
+    <div class="row" id="dmx-usb" hidden><button id="dmx-port">USB-DMX を選ぶ</button></div>
+    <div class="row">
+      <span>灯体</span>
+      <select id="dmx-type">
+        <option value="drgb">調光+RGB（4ch）</option>
+        <option value="rgb">RGB（3ch）</option>
+        <option value="rgbw">RGBW（4ch）</option>
+        <option value="drgbw">調光+RGBW（5ch）</option>
+        <option value="dim">調光のみ（1ch）</option>
+      </select>
+      <input type="number" id="dmx-count" min="1" max="128" style="width: 4.5em"><span>台</span>
+      <span>先頭の番地</span><input type="number" id="dmx-start" min="1" max="512" style="width: 4.5em">
+    </div>
+    <div class="row"><span>明るさの上限</span><input type="range" id="dmx-max" min="0" max="1" step="0.05"><span id="dmx-max-v"></span></div>
+    <div class="row"><span>キックで光る強さ</span><input type="range" id="dmx-pulse" min="0" max="1" step="0.05"><span id="dmx-pulse-v"></span></div>
+    <div class="row"><label><input type="checkbox" id="dmx-flash"> フラッシュで照明も白く光らせる</label></div>
+    <div class="hint">色は映像のパレットの 4 色を順に。キックで 1 台ずつ順に強く光ります（1 秒に 3 回まで）。暗転・明るさは映像と同じ。</div>
+    <div class="status" id="dmx-status"></div>
+  </details>
 </div>
 
 <div id="remote" hidden>
   <div class="box">
     <h3>出力ウィンドウで表示中</h3>
-    <p class="hint">映像は出力ウィンドウに出ています。キー操作とこのパネルはそのまま使えます。出力ウィンドウはプロジェクター側へ移動して<b>ダブルクリック</b>（または F）で全画面に。閉じるとこの画面に戻ります。</p>
+    <p class="hint" data-i18n-html>映像は出力ウィンドウに出ています。キー操作とこのパネルはそのまま使えます。出力ウィンドウはプロジェクター側へ移動して<b>ダブルクリック</b>（または F）で全画面に。閉じるとこの画面に戻ります。</p>
     <pre id="remote-status"></pre>
     <button id="btn-output-close">出力ウィンドウを閉じる</button>
   </div>
@@ -280,6 +364,9 @@ body.remote-mode #stage { opacity: 0.25; }
 
 <script src="src/core/ns.js"></script>
 <script src="src/core/config.js"></script>
+<script src="src/core/compat.js"></script>
+<script src="src/core/i18n.js"></script>
+<script src="src/core/i18n-en.js"></script>
 <script src="src/core/storage.js"></script>
 <script src="src/core/profiles.js"></script>
 <script src="src/dsp/biquad.js"></script>
@@ -328,6 +415,8 @@ body.remote-mode #stage { opacity: 0.25; }
 <script src="src/ui/guard.js"></script>
 <script src="src/ui/midi.js"></script>
 <script src="src/ui/link.js"></script>
+<script src="src/io/net.js"></script>
+<script src="src/io/dmx.js"></script>
 <script src="src/ui/panel.js"></script>
 <script src="src/main.js"></script>
 </body>

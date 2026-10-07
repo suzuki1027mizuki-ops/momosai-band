@@ -29,8 +29,8 @@
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible' && guard.showing) guard.requestWakeLock();
       });
-      document.addEventListener('fullscreenchange', () => {
-        if (document.fullscreenElement) guard.lockKeys();
+      VJ.compat.onFullscreenChange(() => {
+        if (VJ.compat.fullscreenElement()) guard.lockKeys();
       });
     },
 
@@ -60,7 +60,7 @@
 
     async enterFullscreen() {
       try {
-        if (!document.fullscreenElement) await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+        if (!VJ.compat.fullscreenElement()) await VJ.compat.requestFullscreen(document.documentElement);
         await guard.lockKeys();
         return true;
       } catch (e) {

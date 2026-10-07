@@ -1,0 +1,56 @@
+{
+  "name": "momosai-vj-app",
+  "productName": "MOMOSAI VJ",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MOMOSAI VJ の単体アプリ版（Electron）。マイクの許可確認なし・出力ウィンドウの自動全画面・PC の音の取り込み・ブリッジ内蔵。",
+  "main": "main.cjs",
+  "scripts": {
+    "prepare-web": "node prepare.mjs",
+    "start": "node prepare.mjs && electron .",
+    "smoke": "node prepare.mjs && node smoke.mjs",
+    "dist:win": "node prepare.mjs && electron-builder --win portable nsis",
+    "dist:mac": "node prepare.mjs && electron-builder --mac dmg",
+    "dist:linux": "node prepare.mjs && electron-builder --linux AppImage"
+  },
+  "devDependencies": {
+    "electron": "44.6.0",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "jp.momosai.vj",
+    "productName": "MOMOSAI VJ",
+    "files": [
+      "main.cjs",
+      "web/**"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": [
+        "portable",
+        "nsis"
+      ]
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.entertainment",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "音に合わせて映像を動かすためにマイク（ライン入力）を使います。"
+      }
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "license": "MIT"
+}

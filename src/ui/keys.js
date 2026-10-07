@@ -16,6 +16,7 @@
 
   const HOLD = { KeyL: 1500, KeyR: 2000 };
 
+  // [キー, 説明]（表示するときに VJ.t で訳す）
   const KEY_HELP = [
     ['1〜9', 'シーン切替（次のビートで。もう一度押すとすぐ）'], ['Shift+1〜9', 'シーン 2 段目（声の輪・メロディ線・花火 など）'], ['0', 'タイトル（バンド名）'],
     ['→ / ←', '次の曲 / 前の曲（曲名を表示）'], ['Space', 'フラッシュ'], ['S（押している間）', 'ストロボ'],
@@ -74,17 +75,17 @@
 
       if (show.state.locked) {
         if (code === 'KeyB') { show.toggleBlackout(); e.preventDefault(); }
-        else if (code !== 'KeyL') ui.toast('ロック中（L 長押しで解除 / B は暗転）', 'warn');
+        else if (code !== 'KeyL') ui.toast(VJ.t('ロック中（L 長押しで解除 / B は暗転）'), 'warn');
         return;
       }
 
       let handled = true;
       const sceneId = sceneForKey(code, shift);
-      if (/^(?:Digit|Numpad)\d$/.test(code) && !sceneId) ui.toast('このキーにはシーンがありません', 'warn');
+      if (/^(?:Digit|Numpad)\d$/.test(code) && !sceneId) ui.toast(VJ.t('このキーにはシーンがありません'), 'warn');
       else if (sceneId) show.selectScene(sceneId, { immediate: code.endsWith('0') });
       else if (code === 'ArrowRight') show.nextSong();
       else if (code === 'ArrowLeft') show.prevSong();
-      else if (code === 'Space') show.flash(0.85, 'key') || ui.toast('フラッシュ制限中（光過敏対策）', 'warn');
+      else if (code === 'Space') show.flash(0.85, 'key') || ui.toast(VJ.t('フラッシュ制限中（光過敏対策）'), 'warn');
       else if (code === 'KeyS') show.setStrobe(true);
       else if (code === 'KeyB') show.toggleBlackout();
       else if (code === 'KeyC') show.cyclePalette(shift ? -1 : 1);
@@ -102,7 +103,7 @@
       else if (code === 'KeyH') ui.toggleHelp();
       else if (code === 'KeyM') ui.togglePanel();
       else if (code === 'KeyL') show.lock();
-      else if (code === 'KeyR') ui.toast('R を 2 秒長押しでソフトリセット');
+      else if (code === 'KeyR') ui.toast(VJ.t('R を 2 秒長押しでソフトリセット'));
       else if (code === 'Escape') ui.closeOverlays();
       else handled = false;
       if (handled) { e.preventDefault(); if (app.onAction) app.onAction(code); }

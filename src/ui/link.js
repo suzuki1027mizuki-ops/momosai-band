@@ -86,8 +86,8 @@
       msg.id = id;
       return new Promise((resolve, reject) => {
         link.pending.set(id, { resolve, reject });
-        if (!link.send(msg)) { link.pending.delete(id); reject(new Error('出力ウィンドウがありません')); }
-        setTimeout(() => { if (link.pending.has(id)) { link.pending.delete(id); reject(new Error('出力ウィンドウから応答がありません')); } }, 60000);
+        if (!link.send(msg)) { link.pending.delete(id); reject(new Error(VJ.t('出力ウィンドウがありません'))); }
+        setTimeout(() => { if (link.pending.has(id)) { link.pending.delete(id); reject(new Error(VJ.t('出力ウィンドウから応答がありません'))); } }, 60000);
       });
     },
 
@@ -98,7 +98,7 @@
       const base = location.href.replace(/[?#].*$/, '');
       const keep = ['test', 'scale', 'pr', 'desync'].filter((k) => VJ.params[k] !== undefined).map((k) => `&${k}=${encodeURIComponent(VJ.params[k])}`).join('');
       const w = window.open(base + '?role=output' + keep, 'momosai-vj-output', 'popup,width=960,height=540');
-      if (!w) { app.ui.toast('出力ウィンドウを開けませんでした（ポップアップのブロックを解除してください）', 'warn'); return; }
+      if (!w) { app.ui.toast(VJ.t('出力ウィンドウを開けませんでした（ポップアップのブロックを解除してください）'), 'warn'); return; }
       link.adopt(app, w, true);
       // 画面が 2 つあれば、もう一方（プロジェクター）へ移す（「ウィンドウの管理」の許可が必要）
       if (window.getScreenDetails) {
@@ -118,6 +118,10 @@
       const local = { show: app.show, engine: app.engine, wasRunning: fresh && app.engine.running, opts: Object.assign({}, app.engine.opts), session: app.show.session(), fresh };
       link.local = local;
       if (local.engine.status !== 'idle') local.engine.stop(); // 開始途中（自動開始など）も止める
+      // ブリッジ・USB-DMX は出力ウィンドウが受け持つ（両方からつなぐと操作が 2 回になる）
+      VJ.net._close();
+      VJ.net.url = '';
+      VJ.dmx.closeSerial();
       const resume = document.getElementById('resume-box');
       if (resume) resume.hidden = true; // 出力側が本番の状態を持っているので、古い「前回の続き」は出さない
       app.paused = true;
@@ -127,7 +131,7 @@
       VJ.panel.bindEngine();
       document.getElementById('remote').hidden = false;
       document.body.classList.add('remote-mode');
-      document.getElementById('btn-output').textContent = '出力ウィンドウを前面に';
+      document.getElementById('btn-output').textContent = VJ.t('出力ウィンドウを前面に');
       document.getElementById('btn-output-stop').hidden = false;
       clearInterval(link._poll);
       link._poll = setInterval(() => { if (link.peer && link.peer.closed) link.closeOutput(true); }, 500);
@@ -136,7 +140,7 @@
         link.request({ t: 'cmd', target: 'app', name: 'getSettings', args: [] })
           .then((ns) => { if (ns && typeof ns === 'object') VJ.panel.replaceSettings(ns); })
           .catch(() => {});
-        app.ui.toast('出力ウィンドウに再接続しました');
+        app.ui.toast(VJ.t('出力ウィンドウに再接続しました'));
       }
     },
 
@@ -155,13 +159,15 @@
       link.peer = null;
       link.role = 'solo';
       app.paused = false;
+      VJ.net.apply(app);
+      VJ.dmx.apply(app);
       document.getElementById('remote').hidden = true;
       document.body.classList.remove('remote-mode');
-      document.getElementById('btn-output').textContent = '出力ウィンドウを開く（2 画面）';
+      document.getElementById('btn-output').textContent = VJ.t('出力ウィンドウを開く（2 画面）');
       document.getElementById('btn-output-stop').hidden = true;
       VJ.panel.renderStatus(app.engine.status, '');
-      app.ui.toast('出力ウィンドウを閉じました（この画面に戻しました。音声は ▶ 開始 で再開）');
-      for (const p of link.pending.values()) p.reject(new Error('出力ウィンドウが閉じられました'));
+      app.ui.toast(VJ.t('出力ウィンドウを閉じました（この画面に戻しました。音声は ▶ 開始 で再開）'));
+      for (const p of link.pending.values()) p.reject(new Error(VJ.t('出力ウィンドウが閉じられました')));
       link.pending.clear();
     },
 
@@ -226,12 +232,13 @@
       const songs = link.app.show.setlist.songs;
       const song = s.songIdx >= 0 && !s.endState ? songs[s.songIdx] : null;
       const sc = VJ.scenes.byId[s.sceneId];
+      const t = VJ.t;
       const lines = [
-        `シーン  ${sc ? sc.key + ' ' + sc.nameJa : s.sceneId}${s.pending ? '（次のビートで切替待ち）' : ''}`,
-        `曲     ${song ? 'M' + (s.songIdx + 1) + ' ' + song.title : s.endState ? '（終演）' : '（開演前）'}`,
-        `テンポ  ${f.bpm && f.beatConf > 0.2 ? Math.round(f.bpm) + ' BPM' : '—'}   ${f.melodic ? 'ドラムの無い曲として反応中' : ''}`,
-        `状態   オート ${s.auto ? 'ON' : 'OFF'}  暗転 ${s.blackout ? 'ON' : 'OFF'}  ロック ${s.locked ? 'ON' : 'OFF'}  パレット ${VJ.palettes[s.paletteIdx] ? VJ.palettes[s.paletteIdx].name : ''}`,
-        `出力   ${d.fps ? d.fps.toFixed(0) + 'fps' : ''}  ${d.size ? d.size.join('x') : ''}  ${d.fullscreen ? '全画面' : '全画面ではありません（出力ウィンドウをダブルクリック）'}`,
+        t('シーン  {0}{1}', sc ? sc.key + ' ' + VJ.sceneName(sc) : s.sceneId, s.pending ? t('（次のビートで切替待ち）') : ''),
+        t('曲     {0}', song ? 'M' + (s.songIdx + 1) + ' ' + song.title : s.endState ? t('（終演）') : t('（開演前）')),
+        t('テンポ  {0}   {1}', f.bpm && f.beatConf > 0.2 ? Math.round(f.bpm) + ' BPM' : '—', f.melodic ? t('ドラムの無い曲として反応中') : ''),
+        t('状態   オート {0}  暗転 {1}  ロック {2}  パレット {3}', s.auto ? 'ON' : 'OFF', s.blackout ? 'ON' : 'OFF', s.locked ? 'ON' : 'OFF', VJ.palettes[s.paletteIdx] ? t(VJ.palettes[s.paletteIdx].name) : ''),
+        t('出力   {0}  {1}  {2}', d.fps ? d.fps.toFixed(0) + 'fps' : '', d.size ? d.size.join('x') : '', d.fullscreen ? t('全画面') : t('全画面ではありません（出力ウィンドウをダブルクリック）')),
       ];
       document.getElementById('remote-status').textContent = lines.join('\n');
       if (VJ.hud.visible && d.hud) VJ.hud.el.textContent = d.hud;
@@ -268,7 +275,8 @@
           hits,
           f: { bpm: f.bpm, beatConf: f.beatConf, melodic: f.melodic, tempoManual: f.tempoManual, active: f.active },
           patch: { paletteIdx: app.settings.paletteIdx, sensitivity: app.settings.sensitivity, master: app.settings.master, auto: app.settings.auto },
-          fps: r.fps, size: r.size, fullscreen: !!document.fullscreenElement,
+          fps: r.fps, size: r.size, fullscreen: !!VJ.compat.fullscreenElement(),
+          io: { net: VJ.net.state(), dmx: VJ.dmx.state() },
           hud: VJ.hud.text ? VJ.hud.text(app, f, performance.now()) : '',
         });
         hits = 0;
@@ -291,6 +299,7 @@
         else if (d.target === 'engine') value = await app.engine[d.name](...(d.args || []));
         else if (d.target === 'app') value = await app[d.name](...(d.args || []));
         else if (d.target === 'ui') value = await app.ui[d.name](...(d.args || []));
+        else if (d.target === 'dmx' && (d.name === 'openGranted' || d.name === 'closeSerial')) value = await VJ.dmx[d.name]();
         if (value && typeof value === 'object' && !Array.isArray(value)) value = JSON.parse(JSON.stringify(value));
         if (Array.isArray(value)) value = value.map((x) => (x && typeof x.toJSON === 'function' ? x.toJSON() : x));
       } catch (e) {

@@ -6,3 +6,6 @@ test/fixtures/*.json
 dist/.vj-profile/
 .DS_Store
 Thumbs.db
+app/node_modules/
+app/web/
+app/release/

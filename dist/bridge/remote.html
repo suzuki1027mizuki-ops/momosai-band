@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#07070d">
+<title>MOMOSAI VJ リモコン</title>
+<style>
+:root { --bg: #07070d; --card: #12121e; --line: #2a2a40; --text: #e8e8f4; --muted: #9a9ab4; --accent: #00e5ff; --accent2: #ff2ec8; --warn: #ffb020; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.4 "Hiragino Sans", "Yu Gothic UI", "Meiryo", system-ui, sans-serif; }
+body { padding: 10px 12px calc(16px + env(safe-area-inset-bottom)); user-select: none; -webkit-user-select: none; }
+h1 { font-size: 16px; margin: 4px 0 8px; letter-spacing: 0.08em; background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.status { font-size: 13px; color: var(--muted); background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; margin-bottom: 10px; min-height: 2.8em; white-space: pre-line; }
+.status.bad { color: var(--warn); border-color: var(--warn); }
+h2 { font-size: 12px; color: var(--accent); margin: 14px 0 6px; letter-spacing: 0.05em; }
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.grid.two { grid-template-columns: repeat(2, 1fr); }
+.grid.four { grid-template-columns: repeat(4, 1fr); }
+button { font: inherit; color: var(--text); background: var(--card); border: 1px solid #3a3a58; border-radius: 10px; padding: 14px 6px; min-height: 54px; touch-action: manipulation; }
+button:active { transform: scale(0.97); }
+button.on { border-color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); }
+button.big { font-size: 18px; font-weight: 800; }
+button.flash { background: linear-gradient(90deg, #00b8d0, #c8109c); border: 0; color: #fff; }
+button.black.on { background: #000; color: var(--warn); border-color: var(--warn); box-shadow: none; }
+button small { display: block; color: var(--muted); font-size: 11px; }
+.row { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+.row span { min-width: 4.5em; color: var(--muted); font-size: 13px; }
+input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); }
+#login { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; z-index: 5; }
+#login input { font-size: 32px; letter-spacing: 0.4em; width: 7em; text-align: center; background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+#login p { color: var(--muted); text-align: center; margin: 0; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div id="login">
+  <h1>MOMOSAI VJ</h1>
+  <p id="login-msg" data-en="Enter the 4-digit PIN shown in panel ⑦ on the VJ PC">VJ の PC の設定パネル ⑦ に出ている暗証番号（4 けた）を入れてください</p>
+  <input id="pin" type="tel" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="0000">
+  <button id="btn-login" class="big flash" style="width: 12em" data-en="Connect">つなぐ</button>
+</div>
+
+<h1>MOMOSAI VJ リモコン</h1>
+<div class="status" id="status" data-en="Connecting…">接続中…</div>
+
+<div class="grid two">
+  <button class="big flash" data-cmd="flash" data-en="Flash">フラッシュ</button>
+  <button class="big black" id="btn-black" data-cmd="blackout" data-en="Blackout">暗転</button>
+</div>
+
+<h2 data-en="Songs">曲</h2>
+<div class="grid">
+  <button data-cmd="prev" data-en="◀ Prev">◀ 前の曲</button>
+  <button data-cmd="tap" data-en-html="Tap<small>tempo</small>">タップ<small>テンポ</small></button>
+  <button data-cmd="next" data-en="Next ▶">次の曲 ▶</button>
+</div>
+
+<h2 data-en="Scenes">シーン</h2>
+<div class="grid" id="scenes"></div>
+
+<h2 data-en="Captions & more">テロップ・そのほか</h2>
+<div class="grid four">
+  <button data-cmd="msg" data-arg="0">Q</button>
+  <button data-cmd="msg" data-arg="1">W</button>
+  <button data-cmd="msg" data-arg="2">E</button>
+  <button data-cmd="palette" data-en="Color">色</button>
+</div>
+<div class="grid two" style="margin-top: 8px">
+  <button id="btn-auto" data-cmd="auto">オート</button>
+  <button id="btn-strobe" data-en-html="Strobe<small>while held</small>">ストロボ<small>押している間</small></button>
+</div>
+
+<h2 data-en="Adjust">調整</h2>
+<div class="row"><span data-en="Brightness">明るさ</span><input type="range" id="master" min="0.2" max="1" step="0.05"></div>
+<div class="row"><span data-en="Sensitivity">感度</span><input type="range" id="sens" min="-5" max="5" step="1"></div>
+
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  let ws = null, authed = false, retry = null, st = null;
+  let pin = sessionStorage.getItem('vj-pin') || '';
+  // スマホの言語が日本語でなければ英語で表示
+  const EN = !/^ja/i.test(navigator.language || 'ja');
+  const L = (ja, en) => (EN ? en : ja);
+  if (EN) {
+    document.documentElement.lang = 'en';
+    document.title = 'MOMOSAI VJ Remote';
+    document.querySelector('body > h1').textContent = 'MOMOSAI VJ Remote';
+    for (const el of document.querySelectorAll('[data-en]')) el.textContent = el.dataset.en;
+    for (const el of document.querySelectorAll('[data-en-html]')) el.innerHTML = el.dataset.enHtml;
+  }
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  function setStatus(text, bad) { $('status').textContent = text; $('status').className = 'status' + (bad ? ' bad' : ''); }
+
+  function connect() {
+    clearTimeout(retry);
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(proto + '//' + location.host + '/phone');
+    ws.onopen = () => { if (pin) ws.send(JSON.stringify({ t: 'auth', pin })); else $('login').hidden = false; };
+    ws.onmessage = (e) => {
+      let m;
+      try { m = JSON.parse(e.data); } catch (err) { return; }
+      if (m.t === 'auth') {
+        authed = !!m.ok;
+        $('login').hidden = authed;
+        if (authed) { sessionStorage.setItem('vj-pin', pin); setStatus(L('接続しました。VJ の状態を待っています…', 'Connected. Waiting for the VJ…')); }
+        else { sessionStorage.removeItem('vj-pin'); pin = ''; $('login-msg').textContent = m.locked ? L('失敗が多すぎます。VJ の PC でブリッジを起動し直してください', 'Too many attempts. Restart the bridge on the VJ PC.') : L('暗証番号が違います', 'Wrong PIN'); }
+      } else if (m.t === 'status') {
+        st = m.s;
+        render();
+      }
+    };
+    ws.onclose = () => {
+      authed = false;
+      setStatus(L('VJ の PC とつながっていません。再接続します…', 'Not connected to the VJ PC. Reconnecting…'), true);
+      retry = setTimeout(connect, 1500);
+    };
+  }
+
+  function send(name, args) {
+    if (!ws || ws.readyState !== 1 || !authed) return;
+    ws.send(JSON.stringify({ t: 'cmd', name, args: args || [] }));
+    if (navigator.vibrate) navigator.vibrate(15);
+  }
+
+  function render() {
+    if (!st) return;
+    const lines = [];
+    lines.push(st.connected === false ? L('VJ 本体が接続されていません', 'The VJ is not connected') : L('シーン：', 'Scene: ') + (st.sceneName || st.scene || '—') + (st.pending ? L('（次の拍で）', ' (on the next beat)') : ''));
+    lines.push(L('曲：', 'Song: ') + (st.song || '—') + '　' + (st.bpm ? Math.round(st.bpm) + ' BPM' : '') + (st.speech ? L('　話し声', '  speech') : ''));
+    setStatus(lines.join('\n'), st.connected === false);
+    $('btn-black').classList.toggle('on', !!st.blackout);
+    $('btn-auto').classList.toggle('on', !!st.auto);
+    $('btn-auto').textContent = L('オート ', 'Auto ') + (st.auto ? 'ON' : 'OFF');
+    if (document.activeElement !== $('master') && typeof st.master === 'number') $('master').value = st.master;
+    if (document.activeElement !== $('sens') && typeof st.sens === 'number') $('sens').value = st.sens;
+    const list = Array.isArray(st.scenes) ? st.scenes : [];
+    const sig = list.map((s) => s.id).join(',');
+    if ($('scenes').dataset.sig !== sig) {
+      $('scenes').dataset.sig = sig;
+      $('scenes').innerHTML = list.map((s) => `<button data-scene="${esc(s.id)}">${esc(s.name)}<small>${esc(s.key)}</small></button>`).join('');
+    }
+    $('scenes').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.scene === st.scene));
+  }
+
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.id === 'btn-login') {
+      pin = $('pin').value.replace(/\D/g, '');
+      if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'auth', pin }));
+      return;
+    }
+    if (b.dataset.scene) send('scene', [b.dataset.scene]);
+    else if (b.dataset.cmd === 'msg') send('msg', [+b.dataset.arg]);
+    else if (b.dataset.cmd === 'palette') send('palette', []);
+    else if (b.dataset.cmd) send(b.dataset.cmd, []);
+  });
+  $('pin').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btn-login').click(); });
+  const strobe = $('btn-strobe');
+  strobe.addEventListener('pointerdown', (e) => { e.preventDefault(); send('strobe', [true]); });
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) strobe.addEventListener(ev, () => send('strobe', [false]));
+  let mt = 0;
+  $('master').addEventListener('input', () => { const now = Date.now(); if (now - mt > 80) { mt = now; send('master', [+$('master').value]); } });
+  $('master').addEventListener('change', () => send('master', [+$('master').value]));
+  $('sens').addEventListener('change', () => send('sens', [+$('sens').value]));
+  connect();
+})();
+</script>
+</body>
+</html>

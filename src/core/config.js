@@ -45,7 +45,25 @@
     lastSource: 'mic', // 前回の音声入力の種類
     sceneParams: {}, // シーンごとの調整値 { sceneId: [v0, v1, v2, v3] }
     speechTitle: false, // 話し声（MC）を検出したらタイトル画面にする
+    demoKind: 'band', // デモ音源の種類 band / sing / speech
+    lang: 'auto', // 表示の言語 auto / ja / en
+    crossfade: -1, // シーン切替のクロスフェード（秒）。0 = カット / -1 = 音楽のタイプに合わせる
+    midiMap: {}, // MIDI の割り当て（空なら既定）。{ 'n36': 'scene:ripple', 'c1': 'master', ... }
+    net: { enabled: false, url: 'ws://127.0.0.1:8787/vj' }, // ブリッジ（スマホ操作・OSC・Art-Net）
+    osc: { enabled: false, host: '127.0.0.1', port: 9001, rate: 30 }, // OSC で特徴量を送る
+    dmx: { enabled: false, out: 'artnet', host: '255.255.255.255', universe: 0, type: 'drgb', count: 4, start: 1, max: 1, pulse: 0.5, flash: true }, // 照明
   };
+
+  /** 英語で初めて開いたときのセットリストの見本 */
+  VJ.defaultSetlistEn = [
+    '@band MOMOSAI BAND',
+    '# Format: title | scenes (number or name, comma-separated) | palette',
+    '1. Opening | 1,2 | neon',
+    '2. Fast Tune | 2,6 | fire',
+    '3. Ballad | 4 | ocean',
+    '4. Last Song | 5,3 | sakura',
+    '@end Thank you!',
+  ].join('\n');
 
   /** 解析パラメータ（調整はテストで行う。UI には出さない） */
   VJ.dspConfig = {
@@ -78,10 +96,12 @@
     voice: {
       mode: 'off',
       pitchSmooth: 0.5, // 音程のなめらかさ（推定 1 回あたりの追従率）
-      noteThr: 0.9, noteHold: 3, noteGap: 0.1, centerFollow: 0.08, // 音程の変わり目：半音・回数・最短間隔（秒）・中心の追従率
+      // 音程の変わり目：ずれ（半音）・続く回数・その間の揺れの上限（半音）・周期性の上限・最短間隔（秒）・中心の追従率
+      // （合唱・和音は複数の声が混ざって周期性が下がる＝非周期性が大きいので出さない）
+      noteThr: 0.9, noteHold: 3, noteStable: 0.5, noteMaxAp: 0.06, noteGap: 0.1, centerFollow: 0.08,
       speechWindow: 4, speechEvery: 0.17, speechMinSec: 1.5, // 話し声の判定：窓（秒）・更新間隔・判定に要る有音の長さ
       speechTau: 0.6, speechOn: 0.55, speechOff: 0.25, // なめらかさ（秒）とヒステリシス
-      segmentGap: 1.0, speechHoldSilence: 8, // この秒数の無音で区間を区切る / 話し声の状態を解除
+      segmentGap: 1.0, speechHoldSilence: 4, // この秒数の無音で区間を区切る / 話し声の状態を解除（話の間はそれまで保つ）
       histLen: 128,
     },
     // 話し声（MC）を検出したら、自動フラッシュ・ブレイク明けの一撃・キメ・拍を止める

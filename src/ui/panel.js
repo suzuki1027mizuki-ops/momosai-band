@@ -6,6 +6,7 @@
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const OUT_DEFAULT = { rotate: 0, flipH: false, flipV: false, size: 1, x: 0, y: 0 };
+  const t = (...a) => VJ.t(...a);
 
   const panel = {
     app: null,
@@ -33,10 +34,21 @@
       });
       $('panel').addEventListener('pointerdown', () => { panel._pointer = true; });
       $('panel').addEventListener('keydown', () => { panel._pointer = false; });
-      $('ver').textContent = VJ.version.startsWith('__') ? '開発版（index.html）' : `v${VJ.version} ${VJ.buildTime}`;
+      $('ver').textContent = VJ.version.startsWith('__') ? t('開発版（index.html）') : `v${VJ.version} ${VJ.buildTime}`;
+
+      $('opt-lang').value = ['auto', 'ja', 'en'].includes(s.lang) ? s.lang : 'auto';
+      $('opt-lang').addEventListener('change', () => { s.lang = $('opt-lang').value; panel.setLang(s.lang); panel.applyShow(true); });
 
       // ① 入力
       document.querySelectorAll('input[name=src]').forEach((r) => r.addEventListener('change', panel._srcChanged));
+      // このブラウザで使えない入力は選べないようにする（Firefox・Safari は画面共有で音を取れない）
+      const feat = VJ.compat.features();
+      if (!feat.displayAudio) {
+        const r = document.querySelector('input[name=src][value=display]');
+        r.disabled = true;
+        r.parentElement.title = t('このブラウザでは使えません（Chrome / Edge / 単体アプリで使えます）');
+        r.parentElement.style.opacity = '0.5';
+      }
       $('btn-refresh').addEventListener('click', () => panel.refreshDevices());
       $('btn-start').addEventListener('click', () => panel.startAudio());
       $('device').addEventListener('change', () => {
@@ -48,6 +60,12 @@
       });
       $('file').addEventListener('change', () => { panel.files = Array.from($('file').files || []); });
       $('btn-skip').addEventListener('click', () => app.engine.skipFile(1));
+      $('demo-kind').value = ['band', 'sing', 'speech'].includes(s.demoKind) ? s.demoKind : 'band';
+      $('demo-kind').addEventListener('change', () => {
+        s.demoKind = $('demo-kind').value;
+        panel.save();
+        if (app.engine.running && app.engine.opts.source === 'demo') panel.startAudio();
+      });
       $('channel').value = s.channel;
       $('channel').addEventListener('change', () => { s.channel = $('channel').value; app.engine.setChannel(s.channel); panel.save(); });
       $('monitor').checked = s.monitor;
@@ -56,7 +74,7 @@
 
       // ② 音楽のタイプ・テンポ
       const prof = $('opt-profile');
-      prof.innerHTML = VJ.profiles.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+      prof.innerHTML = VJ.profiles.map((p) => `<option value="${p.id}">${esc(VJ.profileName(p))}</option>`).join('');
       prof.value = VJ.profileById(s.profile).id;
       prof.addEventListener('change', () => { s.profile = prof.value; panel.renderProfile(); panel.applyShow(true); });
       panel.renderProfile();
@@ -122,10 +140,14 @@
       bindCheck('opt-auto', 'auto');
       bindCheck('opt-autoflash', 'autoFlash');
       bindCheck('opt-noflash', 'noFlash');
+      bindCheck('opt-speechtitle', 'speechTitle');
+      $('opt-xfade').value = String(s.crossfade);
+      if ($('opt-xfade').selectedIndex < 0) $('opt-xfade').value = '-1';
+      $('opt-xfade').addEventListener('change', () => { s.crossfade = +$('opt-xfade').value; panel.applyShow(true); });
       bindCheck('opt-toast', 'toast');
       bindCheck('opt-latsq', 'latencySquare');
       bindCheck('opt-autostart', 'autoStart');
-      bindCheck('opt-desync', 'desynchronized', () => app.ui.toast('低遅延描画の切替は再読み込み後に有効になります'));
+      bindCheck('opt-desync', 'desynchronized', () => app.ui.toast(t('低遅延描画の切替は再読み込み後に有効になります')));
       const bindRange = (id, key, fmt) => {
         const el = $(id), v = $(id + '-v');
         el.value = s[key];
@@ -140,25 +162,39 @@
       $('opt-fps').value = String(s.fpsCap || 0);
       $('opt-fps').addEventListener('change', () => { s.fpsCap = +$('opt-fps').value; panel.applyShow(true); });
       const pal = $('opt-palette');
-      pal.innerHTML = VJ.palettes.map((p, i) => `<option value="${i}">${i + 1}. ${esc(p.name)}</option>`).join('');
+      pal.innerHTML = VJ.palettes.map((p, i) => `<option value="${i}">${i + 1}. ${esc(t(p.name))}</option>`).join('');
       pal.value = s.paletteIdx;
       pal.addEventListener('change', () => { app.show.setPalette(+pal.value); s.paletteIdx = +pal.value; panel.renderCustom(); panel.applyShow(true); });
       panel.renderCustom();
       panel.renderAutoScenes();
 
+      // シーンごとの調整
+      $('sp-scene').innerHTML = VJ.scenes.list.filter((d) => !d.hidden && d.params.length)
+        .map((d) => `<option value="${d.id}">${esc(d.key.replace('s', 'Shift+'))} ${esc(VJ.sceneName(d))}</option>`).join('');
+      $('sp-scene').addEventListener('change', () => { $('sp-follow').checked = false; panel.renderSceneParams(); });
+      $('sp-follow').addEventListener('change', () => panel.renderSceneParams());
+      $('sp-reset').addEventListener('click', () => {
+        delete s.sceneParams[$('sp-scene').value];
+        panel.renderSceneParams(true);
+        panel.applyShow(true);
+      });
+      panel.renderSceneParams(true);
+
+      // MIDI の割り当て
+      $('btn-midi-default').addEventListener('click', () => { s.midiMap = {}; VJ.midi.cancelLearn(); panel.renderMidiMap(); panel.save(); });
+      $('midi-map-box').addEventListener('toggle', () => { if ($('midi-map-box').open) { panel.renderMidiMap(); panel.enableMidi(); } else VJ.midi.cancelLearn(); });
+
       $('btn-export').addEventListener('click', panel.exportSettings);
       $('btn-import').addEventListener('click', () => $('import-file').click());
       $('import-file').addEventListener('change', panel.importSettings);
       $('btn-reset').addEventListener('click', () => {
-        if (!confirm('設定（セットリスト含む）を初期状態に戻しますか？')) return;
+        if (!confirm(t('設定（セットリスト含む）を初期状態に戻しますか？'))) return;
         panel.replaceSettings(VJ.storage.reset());
       });
-      $('btn-midi').addEventListener('click', async () => {
-        const ok = await VJ.midi.init(app);
-        $('midi-status').textContent = ok
-          ? (VJ.midi.inputs.length ? '接続中：' + VJ.midi.inputs.join(', ') : 'MIDI 機器が見つかりません（つなぐと自動で認識）')
-          : 'この環境では MIDI を使えません';
-      });
+      $('btn-midi').addEventListener('click', () => panel.enableMidi());
+
+      // ⑦ 外部連携
+      panel.bindIo();
 
       // ⑥ 本番・再開
       $('btn-show').addEventListener('click', () => panel.startShow());
@@ -167,12 +203,12 @@
       $('btn-resume-no').addEventListener('click', () => { $('resume-box').hidden = true; });
 
       // キー一覧
-      $('keys-full').innerHTML = VJ.keys.KEY_HELP.map(([k, d]) => `<kbd>${esc(k)}</kbd><span>${esc(d)}</span>`).join('');
-      $('keys-mini').innerHTML = VJ.keys.KEY_HELP.slice(0, 8).map(([k, d]) => `<kbd>${esc(k)}</kbd><span>${esc(d)}</span>`).join('');
+      panel.renderKeys();
 
       // 前回の音声入力の種類を選んでおく
       const last = s.lastSource;
-      if (last && document.querySelector(`input[name=src][value=${last}]`)) document.querySelector(`input[name=src][value=${last}]`).checked = true;
+      const lastR = last && document.querySelector(`input[name=src][value=${last}]`);
+      if (lastR && !lastR.disabled) lastR.checked = true;
       panel._srcChanged();
       panel.renderSetlist();
       panel.renderWarnings();
@@ -187,6 +223,7 @@
     _srcChanged() {
       const src = panel.source();
       $('mic-opts').hidden = src !== 'mic';
+      $('demo-opts').hidden = src !== 'demo';
       $('display-opts').hidden = src !== 'display';
       $('file-opts').hidden = src !== 'file';
       $('monitor-row').hidden = src === 'mic' || src === 'display';
@@ -201,10 +238,10 @@
       const sel = $('device'), s = panel.app.settings;
       let devs = [];
       try { devs = await panel.app.engine.listDevices(); } catch (e) { devs = []; }
-      const opts = ['<option value="">（既定のデバイス）</option>'];
+      const opts = [`<option value="">${esc(t('（既定のデバイス）'))}</option>`];
       devs.forEach((d, i) => {
         if (d.deviceId === 'default' || d.deviceId === '') return;
-        opts.push(`<option value="${esc(d.deviceId)}">${esc(d.label || `入力デバイス ${i + 1}（開始すると名前が出ます）`)}</option>`);
+        opts.push(`<option value="${esc(d.deviceId)}">${esc(d.label || t('入力デバイス {0}（開始すると名前が出ます）', i + 1))}</option>`);
       });
       sel.innerHTML = opts.join('');
       // 保存されたデバイス（ID → 名前の順で探す）。「既定」は先頭の選択肢に対応
@@ -218,9 +255,9 @@
     async startAudio(given) {
       const app = panel.app, s = app.settings;
       const src = given ? given.source : panel.source();
-      const opts = Object.assign({ source: src, deviceId: $('device').value || s.deviceId, deviceLabel: s.deviceLabel, channel: s.channel, monitor: s.monitor }, given || {});
+      const opts = Object.assign({ source: src, deviceId: $('device').value || s.deviceId, deviceLabel: s.deviceLabel, channel: s.channel, monitor: s.monitor, demo: s.demoKind }, given || {});
       if (src === 'file' && !opts.files) {
-        if (!panel.files.length) { panel.renderStatus('error', '音声ファイルを選んでください（複数選ぶと順番に再生）'); return false; }
+        if (!panel.files.length) { panel.renderStatus('error', t('音声ファイルを選んでください（複数選ぶと順番に再生）')); return false; }
         opts.files = [];
         for (const f of panel.files) opts.files.push({ name: f.name, data: await f.arrayBuffer() });
       }
@@ -234,7 +271,7 @@
           await panel.refreshDevices();
         }
         panel.save();
-        $('btn-start').textContent = '↻ 入力を切り替え / 再開始';
+        $('btn-start').textContent = t('↻ 入力を切り替え / 再開始');
         $('btn-skip').hidden = !(src === 'file' && opts.files && opts.files.length > 1);
         return true;
       } catch (e) {
@@ -249,11 +286,11 @@
       el.className = 'status ' + (st === 'running' ? 'ok' : st === 'error' ? 'bad' : st === 'idle' ? '' : 'warn');
       if (st === 'running') {
         const d = e.diagnostics();
-        el.textContent = `入力中：${d.device}（${d.sampleRate}Hz / ${d.channels}ch）${msg ? ' — ' + msg : ''}`;
-      } else if (st === 'starting') el.textContent = '開始中…（マイクや画面共有の許可を求められたら「許可」）';
-      else if (st === 'error') el.textContent = msg || 'エラー';
-      else if (st === 'lost' || st === 'reconnecting') el.textContent = msg || '再接続中…';
-      else el.textContent = 'まだ開始していません';
+        el.textContent = t('入力中：{0}（{1}Hz / {2}ch）', d.device, d.sampleRate, d.channels) + (msg ? ' — ' + msg : '');
+      } else if (st === 'starting') el.textContent = t('開始中…（マイクや画面共有の許可を求められたら「許可」）');
+      else if (st === 'error') el.textContent = msg || t('エラー');
+      else if (st === 'lost' || st === 'reconnecting') el.textContent = msg || t('再接続中…');
+      else el.textContent = t('まだ開始していません');
     },
 
     /** メーター・テンポ表示（20Hz） */
@@ -276,8 +313,13 @@
       $('lb').classList.toggle('on', perfNow - L.b < 120);
       if (perfNow - (panel._syncT || 0) > 500) { panel._syncT = perfNow; panel.syncFromSettings(); }
       if (f) {
-        $('bpm-view').textContent = f.bpm && f.beatConf > 0.2 ? `${Math.round(f.bpm)} BPM${f.tempoManual ? '（タップ）' : ''}` : '— BPM';
-        $('mode-view').textContent = !f.active ? '' : f.melodic ? 'ドラムの無い曲として反応中' : 'ドラムに反応中';
+        $('bpm-view').textContent = f.bpm && f.beatConf > 0.2 ? `${Math.round(f.bpm)} BPM${f.tempoManual ? t('（タップ）') : ''}` : '— BPM';
+        const vm = VJ.makeDspConfig(panel.app.settings).voice.mode;
+        $('mode-view').textContent = !f.active ? '' : t(f.speech ? '話し声に反応中' : vm === 'sing' ? '歌に反応中' : f.melodic ? 'ドラムの無い曲として反応中' : 'ドラムに反応中');
+        $('voice-view').textContent = f.voiced > 0.5 && f.note ? VJ.dsp.noteName(f.note) : '—';
+        $('speech-view').textContent = f.speech ? t('話し声（MC）を検出中：自動フラッシュ・テンポ切替を止めています') : '';
+        if ($('sp-follow').checked && panel.app.show.state && panel.app.show.state.sceneId !== panel._spScene) panel.renderSceneParams();
+        if (perfNow - (panel._ioT || 0) > 500) { panel._ioT = perfNow; panel.renderIo(); }
       }
     },
 
@@ -293,27 +335,28 @@
 
     renderProfile() {
       const p = VJ.profileById(panel.app.settings.profile);
-      $('profile-desc').textContent = p.desc;
+      $('profile-desc').textContent = VJ.profileDesc(p);
     },
 
     renderSetlist() {
       const p = panel.app.show.setlist;
-      const name = (id) => (VJ.scenes.byId[id] ? VJ.scenes.byId[id].key + ' ' + VJ.scenes.byId[id].nameJa : id);
+      const name = (id) => (VJ.scenes.byId[id] ? VJ.scenes.byId[id].key + ' ' + VJ.sceneName(VJ.scenes.byId[id]) : id);
       let html = '';
-      if (p.band) html += `<div class="hint">バンド名：<b>${esc(p.band)}</b>（@band が優先）</div>`;
+      // 曲名・バンド名は入力された文字なので訳さない（data-i18n-skip）
+      if (p.band) html += `<div class="hint">${esc(t('バンド名：'))}<b data-i18n-skip>${esc(p.band)}</b>${esc(t('（@band が優先）'))}</div>`;
       if (p.songs.length) {
-        html += '<table class="setlist"><tr><th>#</th><th>曲名</th><th>シーン</th><th>パレット</th></tr>';
+        html += `<table class="setlist"><tr><th>#</th><th>${esc(t('曲名'))}</th><th>${esc(t('シーン'))}</th><th>${esc(t('パレット'))}</th></tr>`;
         p.songs.forEach((s, i) => {
-          html += `<tr><td>M${i + 1}</td><td>${esc(s.title)}${s.notitle ? ' <span class="hint">(曲名なし)</span>' : ''}</td>`
-            + `<td>${s.scenes.length ? s.scenes.map(name).map(esc).join(' → ') : '<span class="hint">オート</span>'}</td>`
-            + `<td>${s.palette !== null ? esc(VJ.palettes[s.palette].name) : '<span class="hint">—</span>'}</td></tr>`;
+          html += `<tr><td>M${i + 1}</td><td><span data-i18n-skip>${esc(s.title)}</span>${s.notitle ? ` <span class="hint">${esc(t('(曲名なし)'))}</span>` : ''}</td>`
+            + `<td>${s.scenes.length ? s.scenes.map(name).map(esc).join(' → ') : `<span class="hint">${esc(t('オート'))}</span>`}</td>`
+            + `<td>${s.palette !== null ? esc(t(VJ.palettes[s.palette].name)) : '<span class="hint">—</span>'}</td></tr>`;
         });
         html += '</table>';
       } else {
-        html += '<div class="hint">曲が登録されていません（→ キーの曲送りは使えません）</div>';
+        html += `<div class="hint">${esc(t('曲が登録されていません（→ キーの曲送りは使えません）'))}</div>`;
       }
-      if (p.end) html += `<div class="hint">終演の文字：<b>${esc(p.end)}</b></div>`;
-      for (const e of p.errors) html += `<div class="err">${e.line} 行目：${esc(e.msg)}</div>`;
+      if (p.end) html += `<div class="hint">${esc(t('終演の文字：'))}<b data-i18n-skip>${esc(p.end)}</b></div>`;
+      for (const e of p.errors) html += `<div class="err">${esc(t('{0} 行目：{1}', e.line, e.msg))}</div>`;
       $('setlist-preview').innerHTML = html;
     },
 
@@ -332,10 +375,172 @@
       if (!s.autoScenes || typeof s.autoScenes !== 'object') s.autoScenes = {};
       const el = $('auto-scenes');
       el.innerHTML = VJ.scenes.list.filter((d) => !d.hidden && d.id !== 'title')
-        .map((d) => `<label><input type="checkbox" data-scene="${d.id}" ${s.autoScenes[d.id] === false ? '' : 'checked'}> ${d.key} ${esc(d.nameJa)}</label>`).join('');
+        .map((d) => `<label><input type="checkbox" data-scene="${d.id}" ${s.autoScenes[d.id] === false ? '' : 'checked'}> ${d.key} ${esc(VJ.sceneName(d))}</label>`).join('');
       el.querySelectorAll('input').forEach((inp) => inp.addEventListener('change', () => {
         s.autoScenes[inp.dataset.scene] = inp.checked;
         panel.applyShow(true);
+      }));
+    },
+
+    renderKeys() {
+      const row = ([k, d]) => `<kbd>${esc(t(k))}</kbd><span>${esc(t(d))}</span>`;
+      $('keys-full').innerHTML = VJ.keys.KEY_HELP.map(row).join('');
+      $('keys-mini').innerHTML = VJ.keys.KEY_HELP.slice(0, 8).map(row).join('');
+    },
+
+    /** 表示の言語を切り替える（作り直す部品も描き直す） */
+    setLang(setting) {
+      const app = panel.app;
+      VJ.i18n.setLang(VJ.i18n.resolve(setting));
+      const prof = $('opt-profile');
+      prof.innerHTML = VJ.profiles.map((p) => `<option value="${p.id}">${esc(VJ.profileName(p))}</option>`).join('');
+      prof.value = VJ.profileById(app.settings.profile).id;
+      const pal = $('opt-palette');
+      pal.innerHTML = VJ.palettes.map((p, i) => `<option value="${i}">${i + 1}. ${esc(t(p.name))}</option>`).join('');
+      pal.value = app.settings.paletteIdx;
+      const sp = $('sp-scene'), spv = sp.value;
+      sp.innerHTML = VJ.scenes.list.filter((d) => !d.hidden && d.params.length)
+        .map((d) => `<option value="${d.id}">${esc(d.key.replace('s', 'Shift+'))} ${esc(VJ.sceneName(d))}</option>`).join('');
+      sp.value = spv;
+      panel.renderProfile();
+      panel.renderSetlist();
+      panel.renderAutoScenes();
+      panel.renderSceneParams(true);
+      if ($('midi-map-box').open) panel.renderMidiMap();
+      panel.renderKeys();
+      panel.renderWarnings();
+      panel.renderIo();
+      panel.renderStatus(app.engine.status, app.engine.message);
+      $('ver').textContent = VJ.version.startsWith('__') ? t('開発版（index.html）') : `v${VJ.version} ${VJ.buildTime}`;
+      if (app.engine.running) $('btn-start').textContent = t('↻ 入力を切り替え / 再開始');
+      if (VJ.link.role === 'control') $('btn-output').textContent = t('出力ウィンドウを前面に');
+      VJ.i18n.translateDom(document.body);
+    },
+
+    /** ⑦ 外部連携（ブリッジ・OSC・DMX） */
+    bindIo() {
+      const s = panel.app.settings;
+      const sub = (k, def) => { if (!s[k] || typeof s[k] !== 'object') s[k] = Object.assign({}, def); return s[k]; };
+      const D = VJ.defaultSettings;
+      const changed = () => { panel.renderIo(); panel.applyShow(true); };
+      const bindIn = (id, obj, key, conv, ev) => {
+        const el = $(id);
+        const o = () => sub(obj, D[obj]);
+        if (el.type === 'checkbox') el.checked = !!o()[key]; else el.value = o()[key];
+        el.addEventListener(ev || 'change', () => { o()[key] = el.type === 'checkbox' ? el.checked : conv ? conv(el.value) : el.value; changed(); });
+      };
+      bindIn('net-on', 'net', 'enabled');
+      bindIn('net-url', 'net', 'url', (v) => v.trim());
+      bindIn('osc-on', 'osc', 'enabled');
+      bindIn('osc-host', 'osc', 'host', (v) => v.trim());
+      bindIn('osc-port', 'osc', 'port', (v) => Math.max(1, Math.min(65535, Math.round(+v) || 9001)));
+      bindIn('osc-rate', 'osc', 'rate', (v) => +v);
+      bindIn('dmx-on', 'dmx', 'enabled');
+      bindIn('dmx-out', 'dmx', 'out');
+      bindIn('dmx-host', 'dmx', 'host', (v) => v.trim());
+      bindIn('dmx-uni', 'dmx', 'universe', (v) => Math.max(0, Math.min(32767, Math.round(+v) || 0)));
+      bindIn('dmx-type', 'dmx', 'type');
+      bindIn('dmx-count', 'dmx', 'count', (v) => Math.max(1, Math.min(128, Math.round(+v) || 1)));
+      bindIn('dmx-start', 'dmx', 'start', (v) => Math.max(1, Math.min(512, Math.round(+v) || 1)));
+      bindIn('dmx-flash', 'dmx', 'flash');
+      for (const k of ['max', 'pulse']) {
+        const el = $('dmx-' + k), v = $('dmx-' + k + '-v');
+        el.value = sub('dmx', D.dmx)[k];
+        v.textContent = Math.round(el.value * 100) + '%';
+        el.addEventListener('input', () => { s.dmx[k] = +el.value; v.textContent = Math.round(el.value * 100) + '%'; panel.applyShow(); });
+      }
+      $('dmx-port').addEventListener('click', async () => {
+        try {
+          const port = await VJ.dmx.chooseSerial();
+          if (VJ.link.role === 'control') await VJ.link.request({ t: 'cmd', target: 'dmx', name: 'openGranted', args: [] });
+          else await VJ.dmx.openSerial(port);
+          panel.renderIo();
+        } catch (e) {
+          if (e && e.name !== 'NotFoundError') panel.app.ui.toast('USB-DMX: ' + e.message, 'warn');
+        }
+      });
+      panel.renderIo();
+    },
+
+    /** 外部連携の表示（ブリッジの暗証番号・スマホの URL・DMX の状態） */
+    renderIo() {
+      const s = panel.app.settings, d = s.dmx || {};
+      $('dmx-art').hidden = d.out !== 'artnet';
+      $('dmx-usb').hidden = d.out === 'artnet';
+      const io = VJ.link.role === 'control' ? (VJ.link.lastStatus && VJ.link.lastStatus.io) || {} : { net: VJ.net.state(), dmx: VJ.dmx.state() };
+      const n = io.net || { status: 'off' };
+      const el = $('net-status');
+      if (!(s.net && s.net.enabled)) { el.className = 'status'; el.textContent = t('つないでいません'); }
+      else if (n.status === 'on' && n.info) {
+        el.className = 'status ok';
+        el.textContent = t('ブリッジに接続中。スマホで {0} を開き、暗証番号 {1} を入力', n.info.urls.length ? n.info.urls.join(' / ') : t('（LAN に接続されていません）'), n.info.pin)
+          + t('（接続中のスマホ {0} 台・OSC 受信 {1} 番）', n.info.phones, n.info.oscPort);
+        if ($('osc-in')) $('osc-in').textContent = n.info.oscPort || '—';
+      } else {
+        el.className = 'status warn';
+        el.textContent = n.status === 'connecting' ? t('接続中…') : t('ブリッジが見つかりません（起動しているか、アドレスを確認）。2 秒ごとに再接続します');
+      }
+      const m = io.dmx || { status: 'off' };
+      const label = { off: t('使っていません'), on: t('送信中（{0} フレーム）', m.sent), 'wait-bridge': t('ブリッジにつながるのを待っています（Art-Net はブリッジ経由）'), 'no-port': t('「USB-DMX を選ぶ」を押してください'), error: t('エラー：') + (m.error || '') };
+      $('dmx-status').textContent = d.enabled ? label[m.status] || m.status : t('使っていません');
+      $('dmx-status').className = 'status ' + (!d.enabled ? '' : m.status === 'on' ? 'ok' : m.status === 'error' ? 'bad' : 'warn');
+    },
+
+    /** シーンごとの調整（スライダー）。force で値も作り直す */
+    renderSceneParams(force) {
+      const s = panel.app.settings, sel = $('sp-scene');
+      if ($('sp-follow').checked && panel.app.show.state) {
+        const cur = VJ.scenes.byId[panel.app.show.state.sceneId];
+        if (cur && cur.params.length) sel.value = cur.id;
+      }
+      const id = sel.value;
+      if (!force && id === panel._spScene && $('sp-params').childElementCount) return;
+      panel._spScene = $('sp-follow').checked && panel.app.show.state ? panel.app.show.state.sceneId : id;
+      const def = VJ.scenes.byId[id];
+      if (!def) { $('sp-params').innerHTML = ''; return; }
+      const vals = VJ.scenes.paramValues(def, s.sceneParams[id]);
+      $('sp-params').innerHTML = def.params.map((p, i) => `<div class="sp-row"><span>${esc(t(p.name))}</span>`
+        + `<input type="range" data-i="${i}" min="${p.min}" max="${p.max}" step="${p.step}" value="${vals[i]}"><span>${(+vals[i]).toFixed(2)}</span></div>`).join('');
+      $('sp-params').querySelectorAll('input').forEach((inp) => inp.addEventListener('input', () => {
+        const cur = Array.from(VJ.scenes.paramValues(def, s.sceneParams[id])).slice(0, def.params.length);
+        cur[+inp.dataset.i] = +inp.value;
+        s.sceneParams[id] = cur;
+        inp.nextElementSibling.textContent = (+inp.value).toFixed(2);
+        panel.applyShow();
+      }));
+    },
+
+    async enableMidi() {
+      const ok = await VJ.midi.init(panel.app);
+      VJ.midi.onchange = () => panel.renderMidiStatus(true);
+      panel.renderMidiStatus(ok);
+      return ok;
+    },
+
+    renderMidiStatus(ok) {
+      $('midi-status').textContent = ok
+        ? (VJ.midi.inputs.length ? t('接続中：') + VJ.midi.inputs.join(', ') : t('MIDI 機器が見つかりません（つなぐと自動で認識）'))
+        : t('この環境では MIDI を使えません');
+    },
+
+    /** MIDI の割り当て一覧（学習ボタン付き） */
+    renderMidiMap() {
+      const s = panel.app.settings, map = VJ.midi.map(s);
+      const keyOf = (id) => Object.keys(map).filter((k) => map[k] === id);
+      const learning = VJ.midi.learning && VJ.midi.learning.action;
+      $('midi-map').innerHTML = VJ.midi.actions().map((a) => `<span>${esc(a.name)}</span><span class="k">${esc(keyOf(a.id).map(VJ.midi.keyLabel).join(' / ') || '—')}</span>`
+        + `<button data-act="${esc(a.id)}" class="${learning === a.id ? 'wait' : ''}">${esc(learning === a.id ? t('待機中…') : t('学習'))}</button>`).join('');
+      $('midi-map').querySelectorAll('button').forEach((b) => b.addEventListener('click', async () => {
+        const act = b.dataset.act;
+        if (VJ.midi.learning && VJ.midi.learning.action === act) { VJ.midi.cancelLearn(); panel.renderMidiMap(); return; }
+        if (!(await panel.enableMidi())) return;
+        VJ.midi.learn(act, (key) => {
+          VJ.midi.assign(s, key, act);
+          panel.save();
+          panel.renderMidiMap();
+          panel.app.ui.toast(`MIDI: ${VJ.midi.keyLabel(key)} → ${VJ.midi.actions().find((x) => x.id === act).name}`);
+        });
+        panel.renderMidiMap();
       }));
     },
 
@@ -351,7 +556,7 @@
       if (!f) return;
       try {
         const url = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(f); });
-        const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('画像を読み込めません')); i.src = url; });
+        const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error(t('画像を読み込めません'))); i.src = url; });
         const k = Math.min(1, 1024 / Math.max(img.naturalWidth, img.naturalHeight));
         const c = document.createElement('canvas');
         c.width = Math.max(1, Math.round(img.naturalWidth * k));
@@ -364,7 +569,7 @@
         panel.renderLogo();
         panel.applyShow(true);
       } catch (err) {
-        panel.app.ui.toast('ロゴ画像を読み込めませんでした：' + err.message, 'warn');
+        panel.app.ui.toast(t('ロゴ画像を読み込めませんでした：') + err.message, 'warn');
       }
     },
 
@@ -381,14 +586,16 @@
 
     renderWarnings() {
       const app = panel.app, w = [];
-      const ua = navigator.userAgent;
-      if (!/Chrome\/|Chromium\/|Edg\//.test(ua) || /Firefox\//.test(ua)) w.push('Chrome か Microsoft Edge で開いてください（このブラウザでは正しく動かない可能性があります）。');
+      if (VJ.compat.browser !== 'chromium') {
+        const miss = VJ.compat.missing();
+        w.push(t('{0} でも動きますが、次の機能は使えません：{1}。本番は Chrome か Microsoft Edge（または単体アプリ）がおすすめです。', VJ.compat.name, miss.join(t('・')) || t('なし')));
+      }
       const r = app.renderer.info();
-      if (r.software) w.push('GPU が使われていません（ソフトウェア描画）。Chrome の 設定 → システム →「グラフィック アクセラレーションが使用可能な場合は使用する」を ON にして再起動してください。');
-      if (r.failed.length) w.push('一部のシーンを読み込めませんでした（自動的に飛ばします）：' + r.failed.join(', '));
+      if (r.software) w.push(t('GPU が使われていません（ソフトウェア描画）。Chrome の 設定 → システム →「グラフィック アクセラレーションが使用可能な場合は使用する」を ON にして再起動してください。'));
+      if (r.failed.length) w.push(t('一部のシーンを読み込めませんでした（自動的に飛ばします）：') + r.failed.join(', '));
       try {
         if (location.protocol === 'file:' && /[^\x00-\x7f]/.test(decodeURIComponent(location.pathname))) {
-          w.push('フォルダ名に日本語などが含まれています。念のため C:\\momosai-vj のような英数字だけの場所に置くのがおすすめです。');
+          w.push(t('フォルダ名に日本語などが含まれています。念のため C:\\momosai-vj のような英数字だけの場所に置くのがおすすめです。'));
         }
       } catch (e) { /* noop */ }
       $('warnings').innerHTML = w.map((x) => `<div class="warnbox">⚠ ${esc(x)}</div>`).join('');
@@ -399,13 +606,13 @@
       panel._resume = sess;
       const songs = panel.app.show.setlist.songs;
       const song = sess.songIdx >= 0 && songs[sess.songIdx];
-      $('resume-text').textContent = song ? `前回は M${sess.songIdx + 1}「${song.title}」まで進んでいました。` : sess.endState ? '前回は終演まで進んでいました。' : '前回の状態が残っています。';
+      $('resume-text').textContent = song ? t('前回は M{0}「{1}」まで進んでいました。', sess.songIdx + 1, song.title) : sess.endState ? t('前回は終演まで進んでいました。') : t('前回の状態が残っています。');
       $('resume-box').hidden = false;
     },
 
     async startShow() {
       const app = panel.app;
-      const warn = (e) => { app.ui.toast('ショー開始に失敗しました：' + ((e && e.message) || e), 'warn'); };
+      const warn = (e) => { app.ui.toast(t('ショー開始に失敗しました：') + ((e && e.message) || e), 'warn'); };
       // 全画面はクリック直後でないと許可されないので、ふつうは先に。
       // ただし「PC で再生中の音」は画面共有の開始にもクリック直後が必要なので、そちらを先にする
       const displayFirst = !app.engine.running && panel.source() === 'display';
@@ -414,12 +621,12 @@
       panel.toggle(false);
       if (!app.engine.running) {
         const ok = await panel.startAudio();
-        if (!ok) { panel.toggle(true); app.ui.toast('音声入力を開始できませんでした（パネルの表示を確認）', 'warn'); }
+        if (!ok) { panel.toggle(true); app.ui.toast(t('音声入力を開始できませんでした（パネルの表示を確認）'), 'warn'); }
       }
       if (displayFirst) shown = Promise.resolve().then(() => app.ui.startShow()).catch(warn);
       await shown;
-      if (VJ.link.role === 'solo' && !document.fullscreenElement) app.ui.toast('F キーで全画面にできます', 'warn');
-      else app.ui.toast('ショー開始 — H でキー一覧 / M で設定');
+      if (VJ.link.role === 'solo' && !VJ.compat.fullscreenElement()) app.ui.toast(t('F キーで全画面にできます'), 'warn');
+      else app.ui.toast(t('ショー開始 — H でキー一覧 / M で設定'));
     },
 
     toggle(force) {
@@ -432,7 +639,7 @@
       if (VJ.link && VJ.link.role === 'output') return; // 出力ウィンドウは保存しない（操作側が保存する）
       clearTimeout(panel._saveT);
       panel._saveT = setTimeout(() => {
-        if (!VJ.storage.save(panel.app.settings)) panel.app.ui.toast('設定を保存できませんでした（ロゴ画像が大きすぎる可能性があります）', 'warn');
+        if (!VJ.storage.save(panel.app.settings)) panel.app.ui.toast(t('設定を保存できませんでした（ロゴ画像が大きすぎる可能性があります）'), 'warn');
       }, 300);
     },
 
@@ -451,9 +658,9 @@
       if (!f) return;
       try {
         panel.replaceSettings(VJ.storage.fromJSON(await f.text()));
-        panel.app.ui.toast('設定を読み込みました');
+        panel.app.ui.toast(t('設定を読み込みました'));
       } catch (err) {
-        alert('設定ファイルを読み込めませんでした：' + err.message);
+        alert(t('設定ファイルを読み込めませんでした：') + err.message);
       }
       e.target.value = '';
     },
@@ -470,7 +677,12 @@
       $('opt-profile').value = VJ.profileById(s.profile).id;
       panel.renderProfile();
       for (const [id, key] of [['opt-auto', 'auto'], ['opt-autoflash', 'autoFlash'], ['opt-noflash', 'noFlash'], ['opt-toast', 'toast'],
-        ['opt-latsq', 'latencySquare'], ['opt-autostart', 'autoStart'], ['opt-desync', 'desynchronized']]) $(id).checked = !!s[key];
+        ['opt-latsq', 'latencySquare'], ['opt-autostart', 'autoStart'], ['opt-desync', 'desynchronized'], ['opt-speechtitle', 'speechTitle']]) $(id).checked = !!s[key];
+      $('opt-xfade').value = String(s.crossfade);
+      if ($('opt-xfade').selectedIndex < 0) $('opt-xfade').value = '-1';
+      $('demo-kind').value = ['band', 'sing', 'speech'].includes(s.demoKind) ? s.demoKind : 'band';
+      $('opt-lang').value = ['auto', 'ja', 'en'].includes(s.lang) ? s.lang : 'auto';
+      if (VJ.i18n.resolve(s.lang) !== VJ.i18n.lang) panel.setLang(s.lang);
       for (const [id, key] of [['opt-sens', 'sensitivity'], ['opt-react', 'react'], ['opt-master', 'master'], ['opt-scale', 'maxScale'], ['opt-gate', 'gateDb']]) {
         $(id).value = s[key];
         $(id).dispatchEvent(new Event('input'));
@@ -484,6 +696,16 @@
       $('opt-countdown').value = s.countdownTo || '';
       panel.renderCustom();
       panel.renderAutoScenes();
+      panel.renderSceneParams(true);
+      if ($('midi-map-box').open) panel.renderMidiMap();
+      for (const [id, o, k] of [['net-on', 'net', 'enabled'], ['net-url', 'net', 'url'], ['osc-on', 'osc', 'enabled'], ['osc-host', 'osc', 'host'], ['osc-port', 'osc', 'port'], ['osc-rate', 'osc', 'rate'],
+        ['dmx-on', 'dmx', 'enabled'], ['dmx-out', 'dmx', 'out'], ['dmx-host', 'dmx', 'host'], ['dmx-uni', 'dmx', 'universe'], ['dmx-type', 'dmx', 'type'], ['dmx-count', 'dmx', 'count'],
+        ['dmx-start', 'dmx', 'start'], ['dmx-flash', 'dmx', 'flash'], ['dmx-max', 'dmx', 'max'], ['dmx-pulse', 'dmx', 'pulse']]) {
+        const v = (s[o] || {})[k];
+        if ($(id).type === 'checkbox') $(id).checked = !!v; else $(id).value = v === undefined ? '' : v;
+      }
+      for (const k of ['max', 'pulse']) $('dmx-' + k + '-v').textContent = Math.round($('dmx-' + k).value * 100) + '%';
+      panel.renderIo();
       panel.renderLogo();
       panel.syncOutputUi();
       panel.applyShow(true);

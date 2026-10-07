@@ -1,4 +1,4 @@
-/* 仕上げパス：表示の調整（位置・サイズ・回転・反転）→ シーンの拡大 + インパクト（色収差＋ズーム）
+/* 仕上げパス：表示の調整（位置・サイズ・回転・反転）→ シーンの拡大（切替中は前のシーンと混ぜる）+ インパクト（色収差＋ズーム）
  * + 曲名 + テロップ + ロゴの透かし + フラッシュ + 明るさ + 暗転 + 周辺減光 + ディザ + 遅延計測用の四角。
  * 「論理座標」はシーン・文字の座標（回転後の画面）、「物理座標」は実際のキャンバスの画素。 */
 (function (VJ) {
@@ -7,6 +7,8 @@
 precision highp float;
 out vec4 outColor;
 uniform sampler2D u_scene;
+uniform sampler2D u_scene2;  // クロスフェード中の前のシーン
+uniform float u_mix;         // 前のシーンの割合（0 = 今のシーンだけ）
 uniform sampler2D u_text;
 uniform sampler2D u_text2;
 uniform sampler2D u_logo;
@@ -28,6 +30,12 @@ vec4 sampleRect(sampler2D t, vec4 rect, vec2 uv) {
   return texture(t, clamp(q, 0.0, 1.0)) * inside;
 }
 
+vec3 sceneAt(vec2 p) {
+  vec3 a = texture(u_scene, p).rgb;
+  if (u_mix > 0.001) a = mix(a, texture(u_scene2, p).rgb, u_mix);
+  return a;
+}
+
 void main() {
   vec2 px = gl_FragCoord.xy;
   // 物理 → 表示エリア内の 0..1
@@ -46,9 +54,9 @@ void main() {
     // インパクト：明るさを変えずに色収差とズーム（フラッシュ制限の対象外で安全）
     vec2 uz = 0.5 + c * (1.0 - 0.03 * u_impact);
     float ca = 0.008 * u_impact;
-    col.r = texture(u_scene, uz + c * ca).r;
-    col.g = texture(u_scene, uz).g;
-    col.b = texture(u_scene, uz - c * ca).b;
+    col.r = sceneAt(uz + c * ca).r;
+    col.g = sceneAt(uz).g;
+    col.b = sceneAt(uz - c * ca).b;
 
     // 周辺減光はシーンにだけ（文字やロゴは隅でも暗くしない）
     float aspect = u_lres.x / u_lres.y;

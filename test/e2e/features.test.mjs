@@ -98,8 +98,13 @@ test('テストパターン（G）とタップテンポ（Enter）・数字 7〜
   assert.equal(await page.evaluate(() => VJ.app.show.state.sceneId), 'test');
   await page.keyboard.press('KeyG');
   assert.notEqual(await page.evaluate(() => VJ.app.show.state.sceneId), 'test');
+  // 同じ数字をもう一度押すとすぐ切り替わる。Shift+数字は 2 段目のシーン
   for (const [key, id] of [['Digit7', 'eq'], ['Digit8', 'stars'], ['Digit9', 'scope']]) {
-    await page.keyboard.down('Shift'); await page.keyboard.press(key); await page.keyboard.up('Shift');
+    await page.keyboard.press(key); await page.keyboard.press(key);
+    assert.equal(await page.evaluate(() => VJ.app.show.state.sceneId), id);
+  }
+  for (const [key, id] of [['Digit1', 'orb'], ['Digit5', 'waves'], ['Digit9', 'voiceprint']]) {
+    await page.keyboard.down('Shift'); await page.keyboard.press(key); await page.keyboard.press(key); await page.keyboard.up('Shift');
     assert.equal(await page.evaluate(() => VJ.app.show.state.sceneId), id);
   }
   for (let i = 0; i < 4; i++) { await page.keyboard.press('Enter'); await page.waitForTimeout(500); }
@@ -183,7 +188,7 @@ test('出力ウィンドウ（2 画面）：操作側のキーで出力側が切
   await ctrl.waitForFunction(() => /入力中/.test(document.getElementById('audio-status').textContent), null, { timeout: 10000 });
   // キー操作
   await ctrl.evaluate(() => VJ.panel.toggle(false));
-  await ctrl.keyboard.down('Shift'); await ctrl.keyboard.press('Digit7'); await ctrl.keyboard.up('Shift');
+  await ctrl.keyboard.press('Digit7'); await ctrl.keyboard.press('Digit7');
   await out.waitForFunction(() => VJ.app.show.state.sceneId === 'eq', null, { timeout: 5000 });
   await ctrl.keyboard.press('KeyB');
   await out.waitForFunction(() => VJ.app.show.state.blackout === true, null, { timeout: 5000 });
@@ -207,14 +212,14 @@ test('チェックボックスやスライダーを触った直後でもショ�
   // マウスでチェックボックスを押した直後：数字も Space もショーに効く
   await page.click('#opt-latsq');
   await page.waitForTimeout(50);
-  await page.keyboard.down('Shift'); await page.keyboard.press('Digit3'); await page.keyboard.up('Shift');
+  await page.keyboard.press('Digit3'); await page.keyboard.press('Digit3');
   assert.equal(await page.evaluate(() => VJ.app.show.state.sceneId), 'horizon');
   const before = await page.evaluate(() => VJ.app.settings.latencySquare);
   await page.keyboard.press('Space');
   assert.equal(await page.evaluate(() => VJ.app.settings.latencySquare), before, 'Space はチェックボックスを切り替えない');
   // スライダーを触った直後：数字キーはショーに、矢印キーはスライダーに
   await page.click('#opt-react');
-  await page.keyboard.down('Shift'); await page.keyboard.press('Digit4'); await page.keyboard.up('Shift');
+  await page.keyboard.press('Digit4'); await page.keyboard.press('Digit4');
   assert.equal(await page.evaluate(() => VJ.app.show.state.sceneId), 'aurora');
   const song0 = await page.evaluate(() => VJ.app.show.state.songIdx);
   const v0 = await page.evaluate(() => +document.getElementById('opt-react').value);
@@ -238,7 +243,7 @@ test('2 画面のとき操作ウィンドウを再読み込みしても、出力
   await ctrl.reload();
   await ctrl.waitForFunction(() => window.VJ && VJ.link && VJ.link.role === 'control', null, { timeout: 15000 });
   await ctrl.evaluate(() => VJ.panel.toggle(false));
-  await ctrl.keyboard.down('Shift'); await ctrl.keyboard.press('Digit8'); await ctrl.keyboard.up('Shift');
+  await ctrl.keyboard.press('Digit8'); await ctrl.keyboard.press('Digit8');
   await out.waitForFunction(() => VJ.app.show.state.sceneId === 'stars', null, { timeout: 5000 });
   await out.close();
   await ctrl.close();

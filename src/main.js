@@ -12,6 +12,10 @@
 
   function boot() {
     const settings = VJ.storage.load();
+    // 単体アプリ：内蔵のブリッジ（同じ PC）に自動でつなぐ
+    if (VJ.params.bridge && /^ws:\/\/127\.0\.0\.1:\d+\/vj$/.test(VJ.params.bridge)) {
+      settings.net = Object.assign({}, settings.net, { url: VJ.params.bridge, enabled: true });
+    }
     const app = (VJ.app = { settings, errors: 0, errorsInRow: 0, paused: false, frameNo: 0, onFrame: null });
     const canvas = document.getElementById('stage');
     try {
@@ -22,7 +26,7 @@
         pixelRatio: +VJ.params.pr || 0,
       });
     } catch (e) {
-      fatal('映像を初期化できませんでした：' + e.message);
+      fatal(VJ.t('映像を初期化できませんでした：') + e.message);
       return;
     }
     app.engine = new VJ.AudioEngine();
@@ -51,6 +55,8 @@
       app.renderer.setOutput(s.output);
       app.renderer.setLogo(s.logo);
       app.renderer.setMaxScale(s.maxScale);
+      if (!app.paused) { VJ.net.apply(app); VJ.dmx.apply(app); }
+      if (link.role === 'output' && VJ.i18n.resolve(s.lang) !== VJ.i18n.lang) VJ.i18n.setLang(VJ.i18n.resolve(s.lang));
     };
     app.startAudio = async (opts) => {
       if (remote()) return link.request({ t: 'cmd', target: 'app', name: 'startAudio', args: [opts] });
@@ -88,31 +94,31 @@
       toggleHud: () => VJ.hud.toggle(),
       toggleHelp: () => { help.hidden = !help.hidden; },
       togglePanel: () => {
-        if (link.role === 'output') { toast('設定は元の（操作）ウィンドウで行ってください'); return; }
+        if (link.role === 'output') { toast(VJ.t('設定は元の（操作）ウィンドウで行ってください')); return; }
         VJ.panel.toggle();
       },
       closeOverlays: () => { help.hidden = true; VJ.hud.toggle(false); if (link.role !== 'output') VJ.panel.toggle(false); },
       enterFullscreen: () => {
-        if (remote()) { toast('全画面は出力ウィンドウをダブルクリック（または出力ウィンドウで F）'); return false; }
+        if (remote()) { toast(VJ.t('全画面は出力ウィンドウをダブルクリック（または出力ウィンドウで F）')); return false; }
         return VJ.guard.enterFullscreen();
       },
       startShow: async () => {
         if (remote()) return link.request({ t: 'cmd', target: 'ui', name: 'startShow', args: [] });
         await VJ.guard.startShow();
-        if (link.role === 'output' && !document.fullscreenElement) document.getElementById('out-hint').hidden = false;
+        if (link.role === 'output' && !VJ.compat.fullscreenElement()) document.getElementById('out-hint').hidden = false;
         return true;
       },
       softReset: async () => {
         if (remote()) return link.request({ t: 'cmd', target: 'ui', name: 'softReset', args: [] });
-        toast('ソフトリセット中…');
+        toast(VJ.t('ソフトリセット中…'));
         try {
           if (app.engine.status !== 'idle') await app.engine.restart();
           app.renderer._initGL();
           app.extractor = null;
           app.ensureExtractor();
-          toast('ソフトリセット完了');
+          toast(VJ.t('ソフトリセット完了'));
         } catch (e) {
-          toast('リセット失敗：' + e.message, 'warn');
+          toast(VJ.t('リセット失敗：') + e.message, 'warn');
         }
         return true;
       },
@@ -123,7 +129,11 @@
     VJ.hud.init(document.getElementById('hud'));
     VJ.guard.install();
     VJ.keys.install(app);
+    VJ.i18n.lang = VJ.i18n.resolve(settings.lang);
+    if (VJ.i18n.lang === 'en' && VJ.storage.isFresh()) settings.setlistText = VJ.defaultSetlistEn;
     VJ.panel.init(app);
+    VJ.i18n.setLang(VJ.i18n.lang);
+    VJ.i18n.observe(document.body);
     app.applySettings();
     if (VJ.params.test) VJ.testing = makeTesting(app);
 
@@ -142,7 +152,7 @@
           await VJ.panel.startAudio({ source: settings.lastSource });
           const ctx = app.engine.ctx;
           if (ctx && ctx.state !== 'running') {
-            toast('画面をクリックすると音声入力が始まります', 'warn');
+            toast(VJ.t('画面をクリックすると音声入力が始まります'), 'warn');
             const go = () => { ctx.resume(); window.removeEventListener('pointerdown', go); window.removeEventListener('keydown', go); };
             window.addEventListener('pointerdown', go);
             window.addEventListener('keydown', go);
@@ -180,6 +190,8 @@
         }
         app.lastFeatures = f;
         if (app.onFeatures) app.onFeatures(f);
+        VJ.net.frame(app, f, ts);
+        VJ.dmx.tick(app, f, ts);
         if (app.onFrame) app.onFrame(ts, engine.ctx ? engine.ctx.currentTime : 0, f);
         app.errorsInRow = 0;
         // 次の曲名のテクスチャを先に作っておく（曲頭での引っかかり防止）
@@ -194,7 +206,7 @@
         if (globalThis.console) console.error(e);
         if (app.errorsInRow >= 3 && app.show.state.sceneId !== 'title') {
           app.show._applyScene('title');
-          toast('エラーのためタイトルに切り替えました', 'warn');
+          toast(VJ.t('エラーのためタイトルに切り替えました'), 'warn');
           app.errorsInRow = 0;
         }
       }

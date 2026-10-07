@@ -4,9 +4,10 @@
   'use strict';
   VJ.scenes.register({
     id: 'stars', key: '8', name: 'Stars', nameJa: '星空', aliases: ['星空', 'スター', 'ワープ'], cost: 1.5,
+    params: [{ id: 'speed', name: '進む速さ', min: 0.2, max: 2.5, def: 1 }, { id: 'amount', name: '星の量', min: 0.4, max: 1.8, def: 1 }],
     init(st) { st.fly = 0; },
-    update(st, f, dt) {
-      st.fly += (0.05 + 0.45 * f.level + 0.1 * f.intensity) * dt;
+    update(st, f, dt, fx) {
+      st.fly += (0.05 + 0.45 * f.level + 0.1 * f.intensity) * dt * fx.param[0];
       return { u_fly: st.fly };
     },
     frag: `
@@ -33,7 +34,7 @@ void main() {
   // 星雲（暗め）
   float n = vnoise(p * 2.2 + vec2(u_fly * 0.05, 0.0)) * vnoise(p * 4.0 - u_time * 0.02);
   vec3 col = (u_pal[2] * 0.12 + u_pal[1] * 0.05) * n * (0.7 + 0.25 * u_beat + 0.15 * u_intensity);
-  float density = 0.25 + 0.35 * u_intensity;
+  float density = (0.25 + 0.35 * u_intensity) * u_param.y;
   for (int i = 0; i < 4; i++) {
     float fi = float(i);
     float depth = fract(fi / 4.0 + u_fly * 0.25);

@@ -5,7 +5,8 @@ import { launch, openApp, DIST, saveDataUrl } from '../helpers/browser.mjs';
 import { regionFlashes } from '../helpers/flash.mjs';
 
 let browser, page, errors;
-const SCENES = ['title', 'ripple', 'tunnel', 'horizon', 'aurora', 'kaleido', 'glitch', 'eq', 'stars', 'scope'];
+const SCENES = ['title', 'ripple', 'tunnel', 'horizon', 'aurora', 'kaleido', 'glitch', 'eq', 'stars', 'scope',
+  'orb', 'melody', 'fireworks', 'bokeh', 'waves', 'smoke', 'circle', 'petals', 'voiceprint'];
 const BAND = { bpm: 140, seed: 5, sections: [{ bars: 4, drums: '8beat', bass: true, guitar: 'chug' }, { bars: 1, drums: 'none', gain: 0 }, { bars: 8, drums: 'four', bass: true, guitar: 'chord', crash: true }, { bars: 4, drums: 'roll' }] };
 
 before(async () => {

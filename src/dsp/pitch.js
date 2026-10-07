@@ -3,7 +3,9 @@
  * 128 サンプルごとに push() し、約 10ms ごとに推定する。
  *   1. 2kHz の低域通過 → 約 12kHz に間引き（計算量を 1/16 にする）
  *   2. 直近 W + τmax サンプルで差分関数 d(τ) → 累積平均で正規化した d'(τ)
- *   3. d'(τ) が閾値を下回る最初の谷（無ければ最小値）を周期とし、放物線補間
+ *   3. d'(τ) の最小の谷とほぼ同じ深さの谷のうち、いちばん短い τ を周期とする
+ *      （YIN の「固定の閾値を下回る最初の谷」だと、母音のフォルマントと重なった 3 倍音などを拾うことがある）
+ *   4. 放物線補間
  * 窓は約 36ms なので、ピッチの遅れは 20ms 前後（キック検出は別系統なので影響しない）。 */
 (function (VJ) {
   'use strict';
@@ -20,8 +22,8 @@
       this.dec = Math.max(1, Math.round(sr / 12000));
       this.srd = sr / this.dec;
       this.lp = D.BUTTER_Q[4].map((q) => new D.Biquad('lowpass', Math.min(c.lowpass, this.srd * 0.4), q, sr));
-      this.tauMin = Math.max(2, Math.floor(this.srd / c.fmax));
-      this.tauMax = Math.ceil(this.srd / c.fmin);
+      this.tauMin = Math.max(2, Math.floor(this.srd / c.fmax) - 1);
+      this.tauMax = Math.ceil(this.srd / c.fmin) + 2;
       this.W = Math.max(this.tauMax, Math.round(this.srd * 0.022));
       this.N = this.W + this.tauMax + 2;
       this.ring = new Float32Array(this.N * 2); // 末尾 N サンプルを連続で読めるように 2 倍の長さ
@@ -81,18 +83,13 @@
         cum += s;
         d[t] = cum > 0 ? (s * t) / cum : 1;
       }
-      // 閾値を下回る最初の谷
-      let best = -1;
-      for (let t = tMin; t <= tMax; t++) {
-        if (d[t] < this.cfg.thr) {
-          while (t + 1 <= tMax && d[t + 1] < d[t]) t++;
-          best = t;
-          break;
-        }
-      }
-      if (best < 0) {
-        let m = Infinity;
-        for (let t = tMin; t <= tMax; t++) if (d[t] < m) { m = d[t]; best = t; }
+      // 最小の谷
+      let best = tMin, m = Infinity;
+      for (let t = tMin; t <= tMax; t++) if (d[t] < m) { m = d[t]; best = t; }
+      // 最小とほぼ同じ深さの谷のうち、いちばん短い周期を選ぶ（最小の谷は本当の周期の整数倍のことがある）
+      const lim = Math.min(this.cfg.thr, m * 1.5 + 0.05);
+      for (let t = tMin + 1; t < tMax; t++) {
+        if (d[t] <= lim && d[t] <= d[t - 1] && d[t] <= d[t + 1]) { best = t; break; }
       }
       const ap = d[best];
       this.aperiodic = ap;

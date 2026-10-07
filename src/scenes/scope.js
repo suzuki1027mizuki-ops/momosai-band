@@ -5,12 +5,13 @@
   'use strict';
   VJ.scenes.register({
     id: 'scope', key: '9', name: 'Scope', nameJa: 'オシロ', aliases: ['オシロ', '波形', 'オシロスコープ'], cost: 1.5, feedback: true,
+    params: [{ id: 'width', name: '線の太さ', min: 0.5, max: 2, def: 1 }, { id: 'trail', name: '残像', min: 0.5, max: 1.5, def: 1 }],
     init(st) { st.lvl = 0; },
-    update(st, f, dt) {
+    update(st, f, dt, fx) {
       const k = dt * 60;
       // 光過敏対策：振れ幅はゆっくり追従させた音量で（ドラムのたびに画面の明るさが跳ねないように）
       st.lvl += (f.level - st.lvl) * Math.min(1, dt / 0.3);
-      return { u_decayS: Math.pow(0.86 + 0.04 * f.intensity, k), u_drift: 0.0015 * k, u_lvlS: st.lvl };
+      return { u_decayS: Math.pow(Math.min(0.96, 0.86 + 0.04 * f.intensity + (fx.param[1] - 1) * 0.08), k), u_drift: 0.0015 * k, u_lvlS: st.lvl };
     },
     frag: `
 uniform float u_decayS, u_drift, u_lvlS;
@@ -21,7 +22,7 @@ float lineAt(vec2 uv, float amp, float off) {
   float y = 0.5 + off + amp * w;
   float slope = amp * (wave(uv.x + e) - wave(uv.x - e)) / (2.0 * e) * (u_res.y / u_res.x);
   float d = abs(uv.y - y) * u_res.y / sqrt(1.0 + slope * slope);
-  float th = 1.5 + 1.5 * u_kick + 0.8 * u_lvlS;
+  float th = (1.5 + 1.5 * u_kick + 0.8 * u_lvlS) * u_param.x;
   return smoothstep(th + 1.0, th * 0.4, d);
 }
 

@@ -33,6 +33,10 @@ export async function launch(opts = {}) {
   if (opts.wav) args.push(`--use-file-for-fake-audio-capture=${opts.wav}`);
   // --allow-file-access-from-files は付けない（file:// 特有の問題を隠さないため）
   const browser = await chromium.launch({ args, ignoreDefaultArgs: ['--mute-audio'] });
+  // テストは日本語の表示で確かめる（表示の言語は「自動」= ブラウザの言語に従うため）
+  const ctx0 = browser.newContext.bind(browser), page0 = browser.newPage.bind(browser);
+  browser.newContext = (o) => ctx0(Object.assign({ locale: 'ja-JP' }, o || {}));
+  browser.newPage = (o) => page0(Object.assign({ locale: 'ja-JP' }, o || {}));
   return browser;
 }
 

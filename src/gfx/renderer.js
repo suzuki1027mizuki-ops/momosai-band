@@ -28,7 +28,6 @@
       this.waveBytes = new Uint8Array(512);
       this.pitchBytes = new Uint8Array(128);
       this.noParam = new Float32Array([0.5, 0.5, 0.5, 0.5]);
-      this.feedbackScene = null;
       this.output = { rotate: 0, flipH: false, flipV: false, size: 1, x: 0, y: 0 };
       this.logo = null; // { tex, aspect }
       this.logoUrl = '';
@@ -46,7 +45,7 @@
         powerPreference: 'high-performance', desynchronized: !!this.opts.desynchronized,
       };
       const gl = this.canvas.getContext('webgl2', attrs);
-      if (!gl) throw new Error('WebGL2 が使えません。Chrome の設定で「ハードウェア アクセラレーション」を有効にしてください。');
+      if (!gl) throw new Error(VJ.t('WebGL2 が使えません。Chrome の設定で「ハードウェア アクセラレーション」を有効にしてください。'));
       this.gl = gl;
       this.hdr = !!gl.getExtension('EXT_color_buffer_float');
       this.parallel = gl.getExtension('KHR_parallel_shader_compile');
@@ -67,9 +66,8 @@
       if (this.text) this.text.reset(gl); else this.text = new G.TextLayer(gl);
       this.logo = null;
       if (this.logoUrl) { const u = this.logoUrl; this.logoUrl = ''; this.setLogo(u); }
-      this.targets = null;
+      this.slots = null;
       this.tw = 0; this.th = 0;
-      this.feedbackScene = null;
       this._compileAll();
     }
 
@@ -96,7 +94,7 @@
         }
       }
       this.post = this.programs.__post;
-      if (!this.post) throw new Error('仕上げシェーダのコンパイルに失敗しました: ' + this.failed.__post);
+      if (!this.post) throw new Error(VJ.t('仕上げシェーダのコンパイルに失敗しました: ') + this.failed.__post);
       // 準備描画（初回描画時のドライバ側コンパイルを先に済ませる）
       const warm = G.target(gl, 16, 16, this.hdr);
       for (const def of VJ.scenes.list) {
@@ -141,12 +139,12 @@
       this.lh = rot90 ? aw : ah;
       const s = this.scale;
       const tw = Math.max(16, Math.round(this.lw * s)), th = Math.max(16, Math.round(this.lh * s));
-      if (!this.targets || tw !== this.tw || th !== this.th) {
+      if (!this.slots || tw !== this.tw || th !== this.th) {
         const gl = this.gl;
-        if (this.targets) for (const t of this.targets) G.disposeTarget(gl, t);
-        this.targets = [G.target(gl, tw, th, this.hdr), G.target(gl, tw, th, this.hdr)];
+        if (this.slots) for (const sl of this.slots) for (const t of sl.targets) G.disposeTarget(gl, t);
+        // 描画先 2 組（それぞれ前フレーム用と 2 枚）。切替のクロスフェード中は、今のシーンと前のシーンが別の組を使う
+        this.slots = [0, 1].map(() => ({ targets: [G.target(gl, tw, th, this.hdr), G.target(gl, tw, th, this.hdr)], ping: 0, id: null, last: -9 }));
         this.tw = tw; this.th = th;
-        this.ping = 0;
       }
     }
 
@@ -257,7 +255,8 @@
     /**
      * 1 フレーム描画。
      * fr: { scene, uniforms, f, time, dt, sceneTime, pal(Float32Array 12), travel, idle, quality,
-     *       flash, flashColor[3], black, master, impact, text:{tex,alpha}|null, titleTex, latSq, vignette }
+     *       flash, flashColor[3], black, master, impact, text:{tex,alpha}|null, titleTex, latSq, vignette,
+     *       param(Float32Array 4), xfade: { scene, uniforms, param, sceneTime, mix } | null（切替のクロスフェード中） }
      */
     render(fr, now) {
       if (this.lost) return false;
@@ -269,24 +268,55 @@
       this._upload(f);
 
       let def = fr.scene;
-      let p = this.programs[def.id];
-      if (!p) { def = VJ.scenes.byId.title; p = this.programs.title; }
-      if (!p) return false;
-
-      // 前フレーム再利用のシーンに切り替わったら残像を消す
-      if (def.feedback && this.feedbackScene !== def.id) {
-        for (const t of this.targets) { gl.bindFramebuffer(gl.FRAMEBUFFER, t.fb); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT); }
+      if (!this.programs[def.id]) def = VJ.scenes.byId.title;
+      if (!this.programs[def.id]) return false;
+      const x = fr.xfade && fr.xfade.mix > 0.001 && this.programs[fr.xfade.scene.id] && fr.xfade.scene.id !== def.id ? fr.xfade : null;
+      const main = this._slot(def, x ? x.scene.id : null);
+      const dst = this._drawScene(main, def, fr, fr.uniforms, fr.param, fr.sceneTime);
+      let dst2 = null;
+      if (x) {
+        const other = this._slot(x.scene, def.id);
+        dst2 = this._drawScene(other, x.scene, fr, x.uniforms, x.param, x.sceneTime);
       }
-      this.feedbackScene = def.feedback ? def.id : null;
 
-      const src = this.targets[this.ping], dst = this.targets[1 - this.ping];
+      // 仕上げ
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+      const q = this.post.use();
+      q.tex('u_scene2', dst2 ? dst2.tex : this.texBlank);
+      q.set('u_mix', dst2 ? x.mix : 0);
+      return this._post(q, dst, fr);
+    }
+
+    /** シーンの描画先の組（同じシーンが使っていた組か、avoid でない方）。前フレーム再利用のシーンは、
+     *  続けて描いていなかった組なら残像を消す */
+    _slot(def, avoid) {
+      let sl = this.slots.find((s) => s.id === def.id);
+      if (!sl) {
+        const free = (s) => avoid === null || s.id !== avoid;
+        sl = this.slots.find((s) => free(s) && s.last < this.frame - 1) || this.slots.find(free);
+        sl.id = def.id;
+        sl.last = -9;
+      }
+      if (def.feedback && sl.last !== this.frame - 1) {
+        const gl = this.gl;
+        for (const t of sl.targets) { gl.bindFramebuffer(gl.FRAMEBUFFER, t.fb); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT); }
+      }
+      sl.last = this.frame;
+      return sl;
+    }
+
+    /** 1 シーンを描画先の組に描く。描いたターゲットを返す */
+    _drawScene(sl, def, fr, uniforms, param, sceneTime) {
+      const gl = this.gl, f = fr.f, p = this.programs[def.id];
+      const src = sl.targets[sl.ping], dst = sl.targets[1 - sl.ping];
       gl.bindFramebuffer(gl.FRAMEBUFFER, dst.fb);
       gl.viewport(0, 0, dst.w, dst.h);
       p.use();
       p.set('u_res', [dst.w, dst.h]);
       p.set('u_time', fr.time);
       p.set('u_dt', fr.dt);
-      p.set('u_sceneTime', fr.sceneTime);
+      p.set('u_sceneTime', sceneTime);
       // 描画倍率が下がっている（GPU が苦しい）ときは重いシーンの細部も減らす
       const quality = Math.max(0, Math.min(1, (this.scale - 0.4) / 0.35));
       p.set('u_quality', fr.quality === undefined ? quality : Math.min(quality, fr.quality));
@@ -306,7 +336,7 @@
       p.set('u_pitchClass', f.pitchClass || 0);
       p.set('u_speech', f.speech ? 1 : 0);
       p.set('u_noteN', (f.noteN || 0) % 4096);
-      p.set('u_param', fr.param || this.noParam);
+      p.set('u_param', param || this.noParam);
       p.tex('u_pitchHist', this.texPitch);
       p.set('u_pal', fr.pal);
       p.tex('u_spec', this.texSpec);
@@ -320,15 +350,14 @@
         p.tex('u_title', fr.titleTex || this.texBlank);
         if (p.has('u_titleRect')) p.set('u_titleRect', this.textRect(0.78, 0.52));
       }
-      if (fr.uniforms) for (const k in fr.uniforms) p.set(k, fr.uniforms[k]);
+      if (uniforms) for (const k in uniforms) p.set(k, uniforms[k]);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
-      this.ping = 1 - this.ping;
+      sl.ping = 1 - sl.ping;
+      return dst;
+    }
 
-      // 仕上げ
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-      gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-      const q = this.post.use();
-      const o = this.output;
+    _post(q, dst, fr) {
+      const gl = this.gl, o = this.output;
       q.set('u_res', [this.canvas.width, this.canvas.height]);
       q.set('u_area', this.area);
       q.set('u_rot', o.rotate / 90);

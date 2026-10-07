@@ -4,7 +4,14 @@
   'use strict';
   VJ.scenes.register({
     id: 'horizon', key: '3', name: 'Horizon', nameJa: '地平線', aliases: ['地平線', 'シンセウェーブ'], cost: 1.5,
+    params: [{ id: 'speed', name: '進む速さ', min: 0.3, max: 2, def: 1 }, { id: 'mount', name: '山の高さ', min: 0, max: 2, def: 1 }],
+    init(st) { st.z = 0; },
+    update(st, f, dt, fx) {
+      st.z += (0.15 + 0.85 * f.level) * dt * fx.param[0];
+      return { u_z: st.z };
+    },
     frag: `
+uniform float u_z;
 void main() {
   float A = u_res.x / u_res.y;
   vec2 uv = gl_FragCoord.xy / u_res.y;        // x: 0..A, y: 0..1
@@ -35,7 +42,7 @@ void main() {
     // スペクトルの山脈（中央が低音、外側へ高音）
     float x = abs(uv.x - cx) / cx;
     float m = specS(0.04 + x * 0.75);
-    float mh = hz + 0.015 + m * 0.17 * (0.45 + 0.75 * x) + 0.01 * sin(x * 40.0) * m;
+    float mh = hz + 0.015 + (m * 0.17 * (0.45 + 0.75 * x) + 0.01 * sin(x * 40.0) * m) * u_param.y;
     if (uv.y < mh) {
       col = u_pal[2] * 0.06 + vec3(0.01);
       col += lineC * smoothstep(0.006, 0.0, mh - uv.y) * (0.6 + 0.6 * m);
@@ -44,7 +51,7 @@ void main() {
     float dy = hz - uv.y;
     float z = 0.075 / dy;                      // 奥行き（画面下 ≈ 0.19、地平線で ∞）
     float x = (uv.x - cx) * z * 28.0;
-    float zz = (z + u_travel * 0.9) * 4.0;
+    float zz = (z + u_z * 0.9) * 4.0;
     float fx = fract(x), fz = fract(zz);
     float lx = 1.0 - smoothstep(0.0, fwidth(x) * 1.6, min(fx, 1.0 - fx));
     float lz = 1.0 - smoothstep(0.0, fwidth(zz) * 1.6, min(fz, 1.0 - fz));

@@ -37,6 +37,12 @@ const copy = (from, to, mode) => {
 };
 copy('launcher/start-windows.bat', 'start-windows.bat');
 copy('launcher/start-mac.command', 'start-mac.command', 0o755);
+// ブリッジ（スマホ操作・OSC・Art-Net。Node.js で動かす）
+fs.mkdirSync(path.join(DIST, 'bridge'), { recursive: true });
+copy('bridge/server.mjs', 'bridge/server.mjs');
+copy('bridge/remote.html', 'bridge/remote.html');
+copy('launcher/start-bridge-windows.bat', 'start-bridge-windows.bat');
+copy('launcher/start-bridge-mac.command', 'start-bridge-mac.command', 0o755);
 if (fs.existsSync(path.join(ROOT, 'docs/MANUAL-ja.html'))) copy('docs/MANUAL-ja.html', 'MANUAL-ja.html');
 
 const kb = (fs.statSync(path.join(DIST, 'momosai-vj.html')).size / 1024).toFixed(0);

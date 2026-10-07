@@ -28,6 +28,7 @@
       this.buf = new Float32Array(Math.ceil(sec * sr));
       this.rnd = rng(seed);
       this.onsets = [];
+      this.notes = [];
     }
 
     /** 子音（雑音・破裂）。長さ（秒）を返す */
@@ -87,7 +88,7 @@
       return this;
     }
 
-    result() { return { samples: this.norm().room().buf, onsets: this.onsets.slice().sort((a, b) => a - b), sampleRate: this.sr }; }
+    result() { return { samples: this.norm().room().buf, onsets: this.onsets.slice().sort((a, b) => a - b), notes: this.notes, sampleRate: this.sr }; }
   }
 
   /** 歌（アカペラ）。onsets = 音符の頭。legato: 子音なしで音程だけ変わる音の割合 */
@@ -103,6 +104,7 @@
       const hz = midiToHz((female ? 64 : 52) + scale[deg]);
       if (r() < 0.1) { t += len; prevEnd = -1; continue; } // 休符
       v.onsets.push(t);
+      v.notes.push({ t, dur: len, midi: (female ? 64 : 52) + scale[deg] });
       const leg = prevEnd > 0 && r() < legato; // 前の音から切らずに音程だけ変える
       const c = leg ? '' : CONS[Math.floor(r() * CONS.length)];
       const cl = leg ? 0 : v.consonant(t, c, 0.8);

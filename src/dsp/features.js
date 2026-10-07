@@ -179,6 +179,7 @@
       this.fullFilter.reset();
       const mute = Math.ceil(0.05 / this.hopSec);
       for (const d of this.det) d.resync(mute);
+      this.pitch.reset();
     }
 
     /** サンプルを投入。長さは任意（端数は持ち越し）。 */
@@ -286,13 +287,14 @@
       if (this.pitch.push(buf, off, hop)) {
         const amp = Math.sqrt(this.voiceE / cfg.pitch.every);
         this.voiceE = 0;
-        const ev = this.voice.step(this.pitch.hz, active, amp);
+        const ev = this.voice.step(this.pitch.hz, active, amp, this.pitch.aperiodic);
         if (ev.noteOnset) {
           this.flagsAcc |= FLAG.note;
           this.features.noteN++;
           if (this.onsetLog) this.onsetLog.push({ type: 'note', sample: sampleEnd, strength: ev.strength });
-          // 歌のモード：音量の山が無い音程の変わり目（レガート・合唱）もキックとして使う
-          if (this.voiceMode === 'sing' && this.melMode && sampleEnd - this.lastMelSample >= 0.1 * this.sr) {
+          // 歌のモード：音量の山が無い音程の変わり目（レガート）もキックとして使う
+          // （子音のある音は音量の立ち上がりで既に反応しているので、その直後は重ねない）
+          if (this.voiceMode === 'sing' && this.melMode && sampleEnd - this.lastMelSample >= 0.25 * this.sr) {
             this.lastKickDrum = false;
             this._onset('kick', sampleEnd, ev.strength);
             this.lastMelSample = sampleEnd;
