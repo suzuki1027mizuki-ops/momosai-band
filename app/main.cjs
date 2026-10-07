@@ -163,8 +163,10 @@ function smoke(win) {
   };
   // 時間切れのときは、どこで止まったか（window.__smoke）も出す
   const timer = setTimeout(() => {
-    win.webContents.executeJavaScript('window.__smoke || ""', true).catch(() => '?')
-      .then((stage) => done({ ok: false, error: 'timeout', stage }));
+    const t0 = Date.now();
+    const ws = BrowserWindow.getAllWindows().map((w) => ({ pid: w.webContents.getOSProcessId(), visible: w.isVisible(), focused: w.isFocused() }));
+    win.webContents.executeJavaScript('JSON.stringify({ stage: window.__smoke || "", beatAge: Date.now() - (window.__beat || 0), vis: document.visibilityState, focus: document.hasFocus() })', true).catch(() => '?')
+      .then((stage) => done({ ok: false, error: 'timeout', stage, rtt: Date.now() - t0, windows: ws }));
   }, 60000);
   win.webContents.once('did-finish-load', async () => {
     try {
@@ -178,6 +180,7 @@ function smoke(win) {
       const res = await js(`(async () => {
         const app = VJ.app;
         window.__smoke = 'startAudio';
+        setInterval(() => { window.__beat = Date.now(); }, 200);
         await VJ.panel.startAudio({ source: 'mic' });
         window.__smoke = 'frames';
         const f0 = app.frameNo;
