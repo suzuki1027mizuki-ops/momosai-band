@@ -217,6 +217,8 @@
           const sr = o.sampleRate || 48000;
           let samples = o.samples;
           if (samples === 'demo') samples = VJ.synth.demoSong(sr).samples;
+          else if (samples === 'demo-sing' || samples === 'demo-speech') samples = VJ.voiceSynth.demo(samples.slice(5), sr).samples;
+          else if (o.voice) samples = VJ.voiceSynth[o.voice.kind](Object.assign({ sr }, o.voice)).samples;
           else if (o.song) samples = VJ.synth.song(Object.assign({ sampleRate: sr }, o.song)).samples;
           else if (Array.isArray(samples)) samples = Float32Array.from(samples);
           if (o.offset) samples = samples.subarray(Math.round(o.offset * sr));
@@ -256,6 +258,8 @@
           res.kickN = fx.features.kickN;
           res.bpm = fx.features.bpm;
           res.melodic = fx.features.melodic;
+          res.speech = fx.features.speech;
+          res.noteN = fx.features.noteN;
           return res;
         } finally {
           app.renderer.setOutput(app.settings.output);

@@ -286,7 +286,7 @@ body.remote-mode #stage { opacity: 0.25; }
   'use strict';
 
   VJ.version = '1.0.0';
-  VJ.buildTime = '2026-10-06 #6cfcc5f';
+  VJ.buildTime = '2026-10-07 #b90aa55';
 
   const LN10_20 = Math.LN10 / 20;
 
@@ -418,6 +418,8 @@ body.remote-mode #stage { opacity: 0.25; }
     output: { rotate: 0, flipH: false, flipV: false, size: 1, x: 0, y: 0 }, // 表示の調整
     autoStart: false, // 起動したら前回の入力で自動的に開始
     lastSource: 'mic', // 前回の音声入力の種類
+    sceneParams: {}, // シーンごとの調整値 { sceneId: [v0, v1, v2, v3] }
+    speechTitle: false, // 話し声（MC）を検出したらタイトル画面にする
   };
 
   /** 解析パラメータ（調整はテストで行う。UI には出さない） */
@@ -444,6 +446,21 @@ body.remote-mode #stage { opacity: 0.25; }
     melodic: { W: 2, L: 4, R: 6, K: 1.5, minRise: 2.5, refractory: 0.12, relDb: 16, peakFall: 3 },
     melodicMode: 'auto', // auto: ドラムが無ければ自動で切替 / on: 常に / off: 使わない
     drumRatioDb: -2, // キック時に 低域 ÷ 中域 がこれより大きければドラムとみなす
+    // 声：ピッチ推定（YIN）
+    pitch: { fmin: 70, fmax: 1100, every: 4, thr: 0.15, maxAperiodic: 0.3, lowpass: 2000 },
+    // 声の扱い。mode: off（楽器と同じ）/ sing（歌：音程の変わり目にも反応・子音をドラム扱いしない）
+    //                 / speech（話し声：子音をドラム扱いしない）
+    voice: {
+      mode: 'off',
+      pitchSmooth: 0.5, // 音程のなめらかさ（推定 1 回あたりの追従率）
+      noteThr: 0.9, noteHold: 3, noteGap: 0.1, centerFollow: 0.08, // 音程の変わり目：半音・回数・最短間隔（秒）・中心の追従率
+      speechWindow: 4, speechEvery: 0.17, speechMinSec: 1.5, // 話し声の判定：窓（秒）・更新間隔・判定に要る有音の長さ
+      speechTau: 0.6, speechOn: 0.55, speechOff: 0.25, // なめらかさ（秒）とヒステリシス
+      segmentGap: 1.0, speechHoldSilence: 8, // この秒数の無音で区間を区切る / 話し声の状態を解除
+      histLen: 128,
+    },
+    // 話し声（MC）を検出したら、自動フラッシュ・ブレイク明けの一撃・キメ・拍を止める
+    speechGuard: true,
     // テンポ推定に使う帯域ごとの重み（立ち上がりの強さの和）
     tempoWeights: [1.0, 0.5, 0.5, 0.8, 0.4],
     kickSnareHops: 5, // スネア検出からこのホップ数以内のキック候補は…
@@ -451,7 +468,7 @@ body.remote-mode #stage { opacity: 0.25; }
     statTau: 1.0, // flux の平均・分散の時定数
     gateDb: 10, // ノイズフロア + gateDb を超えたら有効
     // アクセント（キメ）：3 帯域以上が同時に立ち上がり、かつ全帯域の音量が「直近のピーク + loudDb」を超えた
-    accent: { zMin: 1.5, minBands: 3, windowHops: 6, minLevel: 0.5, refractory: 0.25, loudDb: 3, peakFall: 2, lagHops: 16 },
+    accent: { zMin: 1.5, minBands: 3, edgeBands: [0, 4], windowHops: 6, minLevel: 0.5, refractory: 0.25, loudDb: 3, peakFall: 2, lagHops: 16 },
     // 自動正規化（連続値のみ）
     agc: { rangeDb: 24, attack: 0.3, release: 8, warmRelease: 1.0, warmSec: 6, initDb: -40, floorMarginDb: 20 },
     noiseFloor: { rise: 20, fall: 0.5, initDb: -100, capBelowRefDb: 20 },
@@ -586,6 +603,24 @@ body.remote-mode #stage { opacity: 0.25; }
         accent: { loudDb: 4 },
       },
       show: { switchSec: 45, kickFallbackSec: 60, autoFlash: false, react: 0.7, tiers: { low: ['aurora', 'stars'], mid: ['aurora', 'stars', 'scope'], high: ['horizon', 'scope', 'kaleido'] } },
+    },
+    {
+      id: 'voice', name: '歌（アカペラ・弾き語りの歌・カラオケ）',
+      desc: '声の高さで色が変わり、音程が変わるたびに反応。子音（サ行・タ行など）をドラムとして扱いません。',
+      dsp: {
+        melodicMode: 'on', voice: { mode: 'sing' },
+        env: { level: 0.2, low: 0.25, mid: 0.18, high: 0.1 }, peak: { kick: 0.25, snare: 0.2 },
+      },
+      show: { switchSec: 30, kickFallbackSec: 45, autoFlash: false, react: 0.85, tiers: { low: ['orb', 'bokeh', 'aurora', 'melody'], mid: ['melody', 'orb', 'waves', 'smoke', 'petals'], high: ['melody', 'circle', 'fireworks', 'kaleido'] } },
+    },
+    {
+      id: 'speech', name: '司会・スピーチ・朗読',
+      desc: '話し声に合わせてやさしく動きます。フラッシュ・テンポに合わせた切替は使いません。',
+      dsp: {
+        melodicMode: 'on', voice: { mode: 'speech' }, melodic: { K: 1.8, minRise: 3, refractory: 0.15 },
+        env: { level: 0.3, low: 0.35, mid: 0.25, high: 0.15 }, peak: { kick: 0.35, snare: 0.3, hat: 0.15, accent: 0.5 },
+      },
+      show: { switchSec: 60, kickFallbackSec: 90, autoFlash: false, react: 0.6, noTempo: true, tiers: { low: ['orb', 'bokeh', 'aurora'], mid: ['orb', 'voiceprint', 'bokeh', 'waves'], high: ['orb', 'voiceprint', 'waves', 'stars'] } },
     },
   ];
   VJ.profiles.DEFAULT_TIERS = DEFAULT_TIERS;
@@ -1262,6 +1297,334 @@ body.remote-mode #stage { opacity: 0.25; }
   VJ.dsp.TempoTracker = TempoTracker;
 })(globalThis.VJ = globalThis.VJ || {});
 </script>
+<script>/* src/dsp/pitch.js */
+/* PitchTracker：声の高さ（基本周波数）を YIN で推定する。
+ *
+ * 128 サンプルごとに push() し、約 10ms ごとに推定する。
+ *   1. 2kHz の低域通過 → 約 12kHz に間引き（計算量を 1/16 にする）
+ *   2. 直近 W + τmax サンプルで差分関数 d(τ) → 累積平均で正規化した d'(τ)
+ *   3. d'(τ) が閾値を下回る最初の谷（無ければ最小値）を周期とし、放物線補間
+ * 窓は約 36ms なので、ピッチの遅れは 20ms 前後（キック検出は別系統なので影響しない）。 */
+(function (VJ) {
+  'use strict';
+  const D = VJ.dsp;
+
+  class PitchTracker {
+    /**
+     * @param sr  サンプルレート
+     * @param cfg { fmin, fmax, every（推定間隔のホップ数）, thr（谷の閾値）, maxAperiodic（これより大きいと無声） }
+     */
+    constructor(sr, cfg) {
+      const c = (this.cfg = Object.assign({ fmin: 70, fmax: 1100, every: 4, thr: 0.15, maxAperiodic: 0.3, lowpass: 2000 }, cfg || {}));
+      this.sr = sr;
+      this.dec = Math.max(1, Math.round(sr / 12000));
+      this.srd = sr / this.dec;
+      this.lp = D.BUTTER_Q[4].map((q) => new D.Biquad('lowpass', Math.min(c.lowpass, this.srd * 0.4), q, sr));
+      this.tauMin = Math.max(2, Math.floor(this.srd / c.fmax));
+      this.tauMax = Math.ceil(this.srd / c.fmin);
+      this.W = Math.max(this.tauMax, Math.round(this.srd * 0.022));
+      this.N = this.W + this.tauMax + 2;
+      this.ring = new Float32Array(this.N * 2); // 末尾 N サンプルを連続で読めるように 2 倍の長さ
+      this.ringPos = 0;
+      this.filled = 0;
+      this.decPhase = 0;
+      this.tmp = new Float32Array(1024);
+      this.d = new Float32Array(this.tauMax + 2);
+      this.hopN = 0;
+      // 結果
+      this.hz = 0; // 無声なら 0
+      this.aperiodic = 1; // 0 に近いほど周期的（声・楽器の音程がはっきりしている）
+      this.rms = 0;
+    }
+
+    reset() { for (const s of this.lp) s.reset(); this.filled = 0; this.hopN = 0; this.hz = 0; this.aperiodic = 1; }
+
+    /** @returns 推定を行ったら true */
+    push(input, off, n) {
+      const tmp = n <= this.tmp.length ? this.tmp : (this.tmp = new Float32Array(n));
+      for (let i = 0; i < n; i++) tmp[i] = input[off + i];
+      for (const s of this.lp) s.process(tmp, n);
+      const dec = this.dec, N = this.N, ring = this.ring;
+      let ph = this.decPhase;
+      for (let i = 0; i < n; i++) {
+        if (ph === 0) {
+          const v = tmp[i];
+          ring[this.ringPos] = v;
+          ring[this.ringPos + N] = v;
+          this.ringPos = (this.ringPos + 1) % N;
+          if (this.filled < N) this.filled++;
+        }
+        ph = (ph + 1) % dec;
+      }
+      this.decPhase = ph;
+      if (++this.hopN < this.cfg.every) return false;
+      this.hopN = 0;
+      if (this.filled < N) { this.hz = 0; this.aperiodic = 1; return true; }
+      this._estimate();
+      return true;
+    }
+
+    _estimate() {
+      const W = this.W, tMax = this.tauMax, tMin = this.tauMin, d = this.d, ring = this.ring;
+      const x0 = this.ringPos; // ring[x0 .. x0+N) が古い順
+      let e = 0;
+      for (let j = 0; j < W; j++) { const v = ring[x0 + j]; e += v * v; }
+      this.rms = Math.sqrt(e / W);
+      if (e < 1e-12) { this.hz = 0; this.aperiodic = 1; return; }
+      // 差分関数と累積平均正規化
+      d[0] = 1;
+      let cum = 0;
+      for (let t = 1; t <= tMax; t++) {
+        let s = 0;
+        const b = x0 + t;
+        for (let j = 0; j < W; j++) { const df = ring[x0 + j] - ring[b + j]; s += df * df; }
+        cum += s;
+        d[t] = cum > 0 ? (s * t) / cum : 1;
+      }
+      // 閾値を下回る最初の谷
+      let best = -1;
+      for (let t = tMin; t <= tMax; t++) {
+        if (d[t] < this.cfg.thr) {
+          while (t + 1 <= tMax && d[t + 1] < d[t]) t++;
+          best = t;
+          break;
+        }
+      }
+      if (best < 0) {
+        let m = Infinity;
+        for (let t = tMin; t <= tMax; t++) if (d[t] < m) { m = d[t]; best = t; }
+      }
+      const ap = d[best];
+      this.aperiodic = ap;
+      if (ap > this.cfg.maxAperiodic || best <= tMin || best >= tMax) { this.hz = 0; return; }
+      // 放物線補間
+      const a = d[best - 1], b = d[best], c = d[best + 1];
+      const den = a - 2 * b + c;
+      const shift = den > 1e-9 ? Math.max(-0.5, Math.min(0.5, (0.5 * (a - c)) / den)) : 0;
+      this.hz = this.srd / (best + shift);
+    }
+  }
+
+  /** Hz → MIDI ノート番号（小数） */
+  PitchTracker.hzToMidi = (hz) => 69 + 12 * Math.log2(hz / 440);
+
+  D.PitchTracker = PitchTracker;
+})(globalThis.VJ = globalThis.VJ || {});
+</script>
+<script>/* src/dsp/voice.js */
+/* VoiceAnalyzer：ピッチ推定（PitchTracker）の結果から、声に関する特徴を作る。
+ *
+ *  - 有声 / 無声（声帯が鳴っているか）と、なめらかにした音程
+ *  - 音程が変わった瞬間（レガートで音量が下がらない音の変わり目・合唱の和音の変わり目）
+ *  - 話し声らしさ（司会・MC の検出）
+ *
+ * 話し声の判定（約 4 秒の窓、0.17 秒ごとに更新）。実音声（朗読 3 本・読み上げ 3 本）と
+ * 音楽（器楽 6 曲・歌入り 1 曲・合成音源）で調べた、次の 4 つの手がかりの組み合わせ：
+ *   lef   1 秒ごとに「平均の半分より小さい音量のフレーム」の割合。話し声は音節・単語の間で
+ *         音量が落ちるので大きい（0.3〜0.45）。音楽は伸びる音・残響で小さい（0.05〜0.2）
+ *   flat  有声のところで、約 50ms の音程の幅が半音の半分未満の割合。歌や楽器は音程を保つので
+ *         大きい（0.65〜0.9）。話し声は抑揚で常に動くので小さい（0.3〜0.45）
+ *   range 有声のところの音程の幅（10〜90%）。和音の楽器・旋律は広い。話し声は 3〜10 半音
+ *   vr    有声の割合。打楽器だけ・拍手・ざわめきは小さい
+ *   run   有声が続く平均の長さ。話し声は音節ごとに切れる（0.1〜0.25 秒）。ロングトーンは長い */
+(function (VJ) {
+  'use strict';
+  const D = VJ.dsp;
+  const ramp = (x, a, b) => (x <= a ? 0 : x >= b ? 1 : (x - a) / (b - a));
+  const hzToMidi = (hz) => 69 + 12 * Math.log2(hz / 440);
+
+  class VoiceAnalyzer {
+    /**
+     * @param stepSec ピッチ推定の間隔（秒）
+     * @param cfg VJ.dspConfig.voice
+     */
+    constructor(stepSec, cfg) {
+      this.cfg = cfg;
+      this.stepSec = stepSec;
+      this.N = Math.ceil(cfg.speechWindow / stepSec);
+      this.act = new Uint8Array(this.N);
+      this.vo = new Uint8Array(this.N);
+      this.mid = new Float32Array(this.N);
+      this.amp = new Float32Array(this.N);
+      this.idx = 0;
+      this.count = 0; // 区間の始まりからの推定回数（N まで）
+      this.silentSteps = 0;
+      this.sorted = new Float32Array(this.N);
+      this.every = Math.max(1, Math.round(cfg.speechEvery / stepSec));
+      this.stepN = 0;
+      // 音程
+      this.hzHist = [0, 0, 0];
+      this.voiced = false;
+      this.voicedRun = 0;
+      this.midi = 0; // なめらかにした音程（MIDI 番号）
+      this.center = 0; // 音程変化の検出用（ゆっくり追従）
+      this.devRun = 0;
+      this.lastOnsetStep = -1e9;
+      this.steps = 0;
+      // 話し声
+      this.score = 0;
+      this.level = 0;
+      this.speech = false;
+      this.feats = { lef: 0, flat: 0, range: 0, vr: 0, run: 0 };
+      // 音程の履歴（描画用）：normalized 0..1 / 無声は -1。2 推定に 1 回（約 21ms）
+      this.hist = new Float32Array(cfg.histLen).fill(-1);
+      this.histIdx = 0;
+      this.out = { noteOnset: false, strength: 0 };
+    }
+
+    /** 音程（MIDI）→ 0..1（C2〜C6） */
+    norm(m) { return Math.max(0, Math.min(1, (m - 36) / 48)); }
+
+    /**
+     * ピッチ推定 1 回ごとに呼ぶ。
+     * @param hz 推定（無声は 0）
+     * @param active 全体の音量がゲートを超えているか
+     * @param amp この区間の RMS
+     */
+    step(hz, active, amp) {
+      const cfg = this.cfg, out = this.out;
+      out.noteOnset = false;
+      this.steps++;
+      // 3 回の中央値で単発の外れ（オクターブ誤り）を消す
+      const h = this.hzHist;
+      h[0] = h[1]; h[1] = h[2]; h[2] = active ? hz : 0;
+      const nz = (h[0] > 0) + (h[1] > 0) + (h[2] > 0);
+      let est = 0;
+      if (h[2] > 0 && nz >= 2) {
+        const a = h[0], b = h[1], c = h[2];
+        est = a > 0 && b > 0 ? Math.max(Math.min(a, b), Math.min(Math.max(a, b), c)) : c;
+      }
+      const v = est > 0;
+      if (v) {
+        const m = hzToMidi(est);
+        if (!this.voiced) { this.midi = m; this.center = m; this.devRun = 0; }
+        else {
+          this.midi += (m - this.midi) * cfg.pitchSmooth;
+          // 音程の変わり目：中心から thr 半音以上ずれた状態が holdSteps 回続いた
+          const dev = m - this.center;
+          if (Math.abs(dev) > cfg.noteThr) {
+            if (++this.devRun >= cfg.noteHold && this.steps - this.lastOnsetStep >= cfg.noteGap / this.stepSec) {
+              out.noteOnset = true;
+              out.strength = Math.min(0.9, 0.45 + 0.08 * Math.abs(dev));
+              this.lastOnsetStep = this.steps;
+              this.center = m;
+              this.devRun = 0;
+            }
+          } else {
+            this.devRun = 0;
+            this.center += (m - this.center) * cfg.centerFollow;
+          }
+        }
+        this.voicedRun++;
+      } else {
+        this.voicedRun = 0;
+        this.devRun = 0;
+      }
+      this.voiced = v;
+      if ((this.steps & 1) === 0) {
+        this.hist[this.histIdx] = v ? this.norm(this.midi) : -1;
+        this.histIdx = (this.histIdx + 1) % this.hist.length;
+      }
+
+      // 話し声の窓
+      const i = this.idx;
+      this.act[i] = active ? 1 : 0;
+      this.vo[i] = v ? 1 : 0;
+      this.mid[i] = v ? hzToMidi(est) : 0;
+      this.amp[i] = amp;
+      this.idx = (i + 1) % this.N;
+      if (this.count < this.N) this.count++;
+      if (active) this.silentSteps = 0;
+      else if (++this.silentSteps * this.stepSec >= cfg.segmentGap) {
+        // 長い無音で区切る（次の音は新しい区間として判定し直す）
+        this.count = 0;
+        if (this.silentSteps * this.stepSec >= cfg.speechHoldSilence) { this.speech = false; this.level = 0; this.score = 0; }
+      }
+      if (++this.stepN >= this.every) {
+        this.stepN = 0;
+        this._speechUpdate();
+      }
+      return out;
+    }
+
+    /** 話し声らしさの更新（窓 = 区間の始まりから最大 speechWindow 秒） */
+    _speechUpdate() {
+      const cfg = this.cfg, N = this.N, n = this.count;
+      const minSteps = Math.round(cfg.speechMinSec / this.stepSec);
+      let nAct = 0;
+      for (let k = 0; k < n; k++) nAct += this.act[(this.idx - 1 - k + N) % N];
+      let score = 0;
+      if (nAct >= minSteps) {
+        // 古い → 新しい順に並べ直さず、末尾から数える
+        const at = (k) => (this.idx - n + k + N) % N; // k = 0 が最古
+        // lef：1 秒ごと
+        const seg = Math.max(8, Math.round(1 / this.stepSec));
+        let lefN = 0, lefD = 0;
+        for (let end = n; end > 0; end -= seg) {
+          const s0 = Math.max(0, end - seg);
+          if (end - s0 < seg / 2 && lefD > 0) break; // 古い側の短い端は使わない
+          let sum = 0;
+          for (let k = s0; k < end; k++) sum += this.amp[at(k)];
+          const mean = sum / (end - s0);
+          for (let k = s0; k < end; k++) if (this.amp[at(k)] < 0.5 * mean) lefN++;
+          lefD += end - s0;
+        }
+        const lef = lefD ? lefN / lefD : 0;
+        // flat / range / vr
+        let nv = 0, nFlat = 0, nWin = 0, ns = 0, runs = 0, prevV = 0;
+        for (let k = 0; k < n; k++) {
+          const j = at(k);
+          if (this.vo[j] && !prevV) runs++;
+          prevV = this.vo[j];
+          if (!this.vo[j]) continue;
+          nv++;
+          this.sorted[ns++] = this.mid[j];
+          if (k >= 4) {
+            let ok = true, mn = 1e9, mx = -1e9;
+            for (let q = 0; q < 5; q++) {
+              const jj = at(k - q);
+              if (!this.vo[jj]) { ok = false; break; }
+              const m = this.mid[jj];
+              if (m < mn) mn = m;
+              if (m > mx) mx = m;
+            }
+            if (ok) { nWin++; if (mx - mn < 0.5) nFlat++; }
+          }
+        }
+        const vr = nv / nAct;
+        const flat = nWin ? nFlat / nWin : 1;
+        let range = 0;
+        if (ns > 10) {
+          const arr = this.sorted.subarray(0, ns);
+          arr.sort();
+          range = arr[Math.floor(ns * 0.9)] - arr[Math.floor(ns * 0.1)];
+        }
+        const run = runs ? (nv / runs) * this.stepSec : 0;
+        const f = this.feats;
+        f.lef = lef; f.flat = flat; f.range = range; f.vr = vr; f.run = run;
+        if (nWin >= 10) {
+          score = ramp(lef, 0.14, 0.24) * (1 - ramp(flat, 0.58, 0.72)) * (1 - ramp(range, 12, 17))
+            * ramp(vr, 0.22, 0.32) * (1 - ramp(vr, 0.86, 0.93)) * (1 - ramp(run, 0.35, 0.6));
+        }
+      }
+      this.score = score;
+      const a = 1 - Math.exp(-cfg.speechEvery / cfg.speechTau);
+      this.level += (score - this.level) * a;
+      if (!this.speech && this.level > cfg.speechOn) this.speech = true;
+      else if (this.speech && this.level < cfg.speechOff) this.speech = false;
+    }
+
+    /** 音程の履歴を古い順に dst へ */
+    history(dst) {
+      const H = this.hist.length;
+      for (let k = 0; k < dst.length; k++) dst[k] = this.hist[(this.histIdx - dst.length + k + H * 2) % H];
+      return dst;
+    }
+  }
+
+  D.VoiceAnalyzer = VoiceAnalyzer;
+})(globalThis.VJ = globalThis.VJ || {});
+</script>
 <script>/* src/dsp/features.js */
 /* FeatureExtractor：音声サンプル → 映像用の特徴量（AudioFeatures）。
  *
@@ -1276,7 +1639,7 @@ body.remote-mode #stage { opacity: 0.25; }
   const { clamp01, powToDb, dbToLin, decay } = VJ.util;
 
   const TYPES = ['kick', 'snare', 'hat', 'accent', 'impact'];
-  const FLAG = { kick: 1, snare: 2, hat: 4, accent: 8, impact: 16, beat: 32, downbeat: 64 };
+  const FLAG = { kick: 1, snare: 2, hat: 4, accent: 8, impact: 16, beat: 32, downbeat: 64, note: 128 };
 
   function makeFeatures(cfg) {
     const H = cfg.historyLen;
@@ -1295,6 +1658,13 @@ body.remote-mode #stage { opacity: 0.25; }
       waveform: new Float32Array(cfg.waveLen),
       bpm: 0, beatPhase: 0, beatConf: 0, barPhase: 0, beatN: 0, tempoManual: false,
       melodic: false, // ドラムの無い曲として扱っているか
+      // 声
+      voiced: 0, // 声（音程のある音）が鳴っているか 0..1
+      pitch: 0.5, // 音程 0..1（C2〜C6）。無声の間は直前の値を保つ
+      pitchHz: 0, note: 0, pitchClass: 0, // Hz（無声は 0）・MIDI 番号・音名（0..1 = C〜B）
+      noteN: 0, // 音程の変わり目の回数
+      speech: false, speechScore: 0, // 話し声（司会・MC）と判定しているか・その度合い
+      pitchHist: new Float32Array(cfg.voice.histLen), // 音程の履歴（古い順、無声は -1）
     };
   }
 
@@ -1329,6 +1699,16 @@ body.remote-mode #stage { opacity: 0.25; }
       this.melRing = new Float64Array(32).fill(-1e12);
       this.melRingIdx = 0;
       this.activeSec = 0;
+
+      // 声：ピッチ・音程の変わり目・話し声
+      this.pitch = new D.PitchTracker(sr, cfg.pitch);
+      this.voice = new D.VoiceAnalyzer((cfg.pitch.every * hop) / sr, cfg.voice);
+      this.voiceMode = cfg.voice.mode;
+      this.voiceE = 0;
+      this.lastMelSample = -1e12;
+      this.voicedSm = 0;
+      this.pitchSm = 0.5;
+      this.lastKickDrum = false;
 
       // テンポ
       this.tempo = new D.TempoTracker(sr, hop);
@@ -1450,6 +1830,7 @@ body.remote-mode #stage { opacity: 0.25; }
       const nb = this.filters.length;
 
       const eFull = this.fullFilter.energy(buf, off, hop);
+      this.voiceE += eFull;
       for (let b = 0; b < nb; b++) {
         const e = this.filters[b].energy(buf, off, hop);
         this.bandE[b] = e;
@@ -1478,6 +1859,10 @@ body.remote-mode #stage { opacity: 0.25; }
       this.env.high.update(g * this.agc[3].norm(groupDb[3]));
       this.rmsDb = dbFull;
 
+      // 話し声の間は、子音をスネア・ハイハットとして扱わず、キメ・一撃・拍も出さない
+      const speechNow = cfg.speechGuard && this.voice.speech;
+      const noDrums = this.voiceMode !== 'off' || speechNow;
+
       // オンセット（高い帯域から：スネア判定をキック判定より先に）
       const sampleEnd = this.sampleCount;
       for (let b = nb - 1; b >= 0; b--) {
@@ -1487,6 +1872,7 @@ body.remote-mode #stage { opacity: 0.25; }
         const s = det.step(this.bandE[b], active ? Math.max(fl + cfg.gateDb, cfg.silenceAbsDb) : Infinity, this.sens);
         if (det.gateOpen && det.z > cfg.accent.zMin && det.flux > 0) this.lastZHop[b] = this.hopCount;
         const type = this.detType[b];
+        if ((type === 'snare' || type === 'hat') && noDrums) continue;
         if (type === 'kick' || type === 'snare' || type === 'hat') {
           // スネアの胴鳴りがキック帯域に漏れた分は、キック帯域のピークより明らかに小さければ捨てる
           if (s > 0 && type === 'kick' && this.hopCount - this.lastSnareHop <= cfg.kickSnareHops && det.rel < -cfg.kickSnareRelDb) continue;
@@ -1494,7 +1880,8 @@ body.remote-mode #stage { opacity: 0.25; }
           if (s > 0 && type === 'kick') {
             // 低域が中域より十分強い立ち上がりだけを「ドラムがある」証拠として数える
             // （ピアノやギターの低い音がキック帯域に漏れたものは中域の方が強い）
-            if (powToDb(this.bandE[0]) - powToDb(this.bandE[1] + this.bandE[2]) > cfg.drumRatioDb) {
+            this.lastKickDrum = powToDb(this.bandE[0]) - powToDb(this.bandE[1] + this.bandE[2]) > cfg.drumRatioDb;
+            if (this.lastKickDrum) {
               this.kickRing[this.kickRingIdx] = sampleEnd;
               this.kickRingIdx = (this.kickRingIdx + 1) % this.kickRing.length;
             }
@@ -1513,14 +1900,36 @@ body.remote-mode #stage { opacity: 0.25; }
       if (ms > 0) {
         this.melRing[this.melRingIdx] = sampleEnd;
         this.melRingIdx = (this.melRingIdx + 1) % this.melRing.length;
-        if (this.melMode) this._onset('kick', sampleEnd, ms);
+        if (this.melMode && sampleEnd - this.lastMelSample >= 0.1 * this.sr) {
+          this.lastKickDrum = false;
+          this._onset('kick', sampleEnd, ms);
+          this.lastMelSample = sampleEnd;
+        }
       } else if (this.melMode && this.melDet.strengthUpdate > 0 && this.boost.kick < this.melDet.strengthUpdate) {
         this.boost.kick = this.melDet.strengthUpdate;
       }
       if ((this.hopCount & 63) === 0) this._updateMode();
 
+      // 声（約 10ms ごと）
+      if (this.pitch.push(buf, off, hop)) {
+        const amp = Math.sqrt(this.voiceE / cfg.pitch.every);
+        this.voiceE = 0;
+        const ev = this.voice.step(this.pitch.hz, active, amp);
+        if (ev.noteOnset) {
+          this.flagsAcc |= FLAG.note;
+          this.features.noteN++;
+          if (this.onsetLog) this.onsetLog.push({ type: 'note', sample: sampleEnd, strength: ev.strength });
+          // 歌のモード：音量の山が無い音程の変わり目（レガート・合唱）もキックとして使う
+          if (this.voiceMode === 'sing' && this.melMode && sampleEnd - this.lastMelSample >= 0.1 * this.sr) {
+            this.lastKickDrum = false;
+            this._onset('kick', sampleEnd, ev.strength);
+            this.lastMelSample = sampleEnd;
+          }
+        }
+      }
+
       // テンポ推定用の立ち上がりの強さ
-      if (active) {
+      if (active && !speechNow) {
         const w = cfg.tempoWeights;
         let osf = 0;
         for (let b = 0; b < nb; b++) osf += w[b] * this.det[b].flux;
@@ -1539,10 +1948,13 @@ body.remote-mode #stage { opacity: 0.25; }
       this.peakLagIdx = (this.peakLagIdx + 1) % this.peakLag.length;
       if (sFull > this.fullPeak) this.fullPeak = sFull;
       else this.fullPeak = Math.max(sFull, this.fullPeak - ac.peakFall * this.hopSec);
-      if (this.hopCount - this.lastAccentHop >= this.accentHops && this.env.level.v >= ac.minLevel && sFull >= lagged + ac.loudDb) {
+      if (!speechNow && this.hopCount - this.lastAccentHop >= this.accentHops && this.env.level.v >= ac.minLevel && sFull >= lagged + ac.loudDb) {
         let cnt = 0;
         for (let b = 0; b < nb; b++) if (this.hopCount - this.lastZHop[b] <= ac.windowHops) cnt++;
-        if (cnt >= ac.minBands) {
+        // 低域（キック）か高域（シンバル）も一緒に立ち上がった一撃だけ（声の出だしは中域だけ）
+        let edge = !ac.edgeBands;
+        if (ac.edgeBands) for (const b of ac.edgeBands) if (this.hopCount - this.lastZHop[b] <= ac.windowHops) edge = true;
+        if (cnt >= ac.minBands && edge) {
           this.lastAccentHop = this.hopCount;
           this._onset('accent', sampleEnd, Math.max(0.5, Math.min(1, 0.4 + (sFull - lagged) / 12)));
         }
@@ -1552,7 +1964,10 @@ body.remote-mode #stage { opacity: 0.25; }
       const fast = this.fastPow.update(eFull);
       const slow = this.slowPow.update(eFull);
       const slowDb = powToDb(slow);
-      if (Math.sqrt(fast) < cfg.breakRatio * Math.sqrt(slow) && slowDb > fl[0].db + cfg.gateDb) {
+      if (speechNow) {
+        this.breakSec = 0;
+        this.impactArmedUntil = -1;
+      } else if (Math.sqrt(fast) < cfg.breakRatio * Math.sqrt(slow) && slowDb > fl[0].db + cfg.gateDb) {
         this.breakSec += this.hopSec;
         if (this.breakSec >= cfg.breakHold) this.impactArmedUntil = this.sampleCount + cfg.impactWindow * this.sr;
       } else {
@@ -1597,7 +2012,8 @@ body.remote-mode #stage { opacity: 0.25; }
         this.densIdx = (this.densIdx + 1) % this.densRing.length;
       }
       // ブレイク明けの強打 → インパクト
-      if ((type === 'kick' || type === 'accent') && strength >= 0.6 && sample <= this.impactArmedUntil) {
+      // （キックはドラムらしい低音のときだけ。ドラムの無い曲・話し声の出だしでは出さない）
+      if (((type === 'kick' && this.lastKickDrum) || type === 'accent') && strength >= 0.6 && sample <= this.impactArmedUntil) {
         this.impactArmedUntil = -1;
         this._onset('impact', sample, 1);
       }
@@ -1631,13 +2047,15 @@ body.remote-mode #stage { opacity: 0.25; }
       // テンポ・拍
       const ts = this.tempo.state(this.sampleCount, this.tempoState);
       f.bpm = ts.bpm; f.beatPhase = ts.phase; f.beatConf = ts.conf; f.barPhase = ts.bar; f.tempoManual = ts.manual;
-      if (ts.bpm && this.lastBeatIndex !== null && ts.beatIndex > this.lastBeatIndex && ts.conf >= 0.25 && this.active) {
+      const speechNow = this.cfg.speechGuard && this.voice.speech;
+      if (ts.bpm && this.lastBeatIndex !== null && ts.beatIndex > this.lastBeatIndex && ts.conf >= 0.25 && this.active && !speechNow) {
         this.flagsAcc |= FLAG.beat;
         f.beatN++;
         if (ts.bar < 0.25) this.flagsAcc |= FLAG.downbeat;
       }
       this.lastBeatIndex = ts.bpm ? ts.beatIndex : null;
       f.melodic = this.melMode;
+      this._voiceFrame(dt);
 
       f.onsetFlags = this.flagsAcc;
       this.flagsAcc = 0;
@@ -1667,6 +2085,25 @@ body.remote-mode #stage { opacity: 0.25; }
         this._waveform(latest);
       }
       return f;
+    }
+
+    _voiceFrame(dt) {
+      const f = this.features, vo = this.voice;
+      const v = vo.voiced && this.active;
+      this.voicedSm += ((v ? 1 : 0) - this.voicedSm) * (1 - Math.exp(-dt / (v ? 0.03 : 0.15)));
+      f.voiced = this.voicedSm;
+      if (v) {
+        this.pitchSm += (vo.norm(vo.midi) - this.pitchSm) * (1 - Math.exp(-dt / 0.04));
+        f.note = vo.midi;
+        f.pitchHz = 440 * Math.pow(2, (vo.midi - 69) / 12);
+        f.pitchClass = (((Math.round(vo.midi) % 12) + 12) % 12) / 12;
+      } else {
+        f.pitchHz = 0;
+      }
+      f.pitch = this.pitchSm;
+      f.speech = vo.speech;
+      f.speechScore = vo.level;
+      vo.history(f.pitchHist);
     }
 
     _spectrum(latest, dt) {
@@ -2027,6 +2464,214 @@ body.remote-mode #stage { opacity: 0.25; }
   VJ.synth = { Mixer, song, demoSong, tone, pinkNoise, toWav, NOTE };
 })(globalThis.VJ = globalThis.VJ || {});
 </script>
+<script>/* src/audio/voicesynth.js */
+/* 声の合成（声帯音源 → フォルマント）。正解の発音時刻つき。テストと「デモ音源（歌・話し声）」に使う。
+ *   sing()   歌（アカペラ）：音程を保つ・長い音にビブラート・一部はレガート
+ *   speak()  話し声（司会）：抑揚（句ごとの下降・単語ごとの山・音節内の上がり下がり）・子音・単語や句の間
+ *   choir()  合唱：4 声・ゆっくりした立ち上がり
+ *   longTones()  ビブラート付きのロングトーン
+ * 話し声は、実際の朗読・読み上げ音声で調べた特徴（音量の谷の割合・音程の揺れ・有声の割合）に合わせてある。 */
+(function (VJ) {
+  'use strict';
+
+  const VOWEL = { a: [800, 1200, 2500], i: [300, 2300, 3000], u: [350, 1300, 2500], e: [500, 1900, 2500], o: [500, 800, 2500] };
+  const VOWELS = Object.keys(VOWEL);
+  const CONS = ['', 'k', 's', 't', 'n', 'm', '', 'p', 'sh', 'r', 'h'];
+
+  function rng(seed) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }
+
+  function bandpass(sr, f0, q) {
+    const w0 = (2 * Math.PI * f0) / sr, al = Math.sin(w0) / (2 * q), a0 = 1 + al;
+    const b0 = al / a0, b2 = -al / a0, a1 = (-2 * Math.cos(w0)) / a0, a2 = (1 - al) / a0;
+    let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+    return (x) => { const y = b0 * x + b2 * x2 - a1 * y1 - a2 * y2; x2 = x1; x1 = x; y2 = y1; y1 = y; return y; };
+  }
+
+  const midiToHz = (m) => 440 * Math.pow(2, (m - 69) / 12);
+
+  class Voice {
+    constructor(sr, sec, seed) {
+      this.sr = sr;
+      this.buf = new Float32Array(Math.ceil(sec * sr));
+      this.rnd = rng(seed);
+      this.onsets = [];
+    }
+
+    /** 子音（雑音・破裂）。長さ（秒）を返す */
+    consonant(t, c, vel) {
+      const sr = this.sr, b = this.buf, rnd = this.rnd, i0 = Math.round(t * sr);
+      if (c === 's' || c === 'sh' || c === 'h') {
+        const len = c === 'h' ? 0.05 : 0.08;
+        const bq = bandpass(sr, c === 's' ? 6500 : c === 'sh' ? 3800 : 1500, c === 'h' ? 0.7 : 2);
+        for (let i = 0; i < len * sr && i0 + i < b.length; i++) {
+          const x = i / sr, env = Math.min(1, x / 0.015) * Math.min(1, (len - x) / 0.015);
+          b[i0 + i] += bq(rnd() * 2 - 1) * env * (c === 'h' ? 0.12 : 0.22) * vel;
+        }
+        return len;
+      }
+      if (c === 'k' || c === 't' || c === 'p') {
+        const gap = 0.035; // 閉鎖（無音）→ 破裂
+        const bq = bandpass(sr, c === 'k' ? 2000 : c === 't' ? 4000 : 1000, 1);
+        const j0 = i0 + Math.round(gap * sr);
+        for (let i = 0; i < 0.025 * sr && j0 + i < b.length; i++) b[j0 + i] += bq(rnd() * 2 - 1) * Math.exp(-i / sr / 0.008) * 0.45 * vel;
+        return gap + 0.02;
+      }
+      return 0; // 鼻音・ら行は有声部分で表現
+    }
+
+    /** 有声音。f0(x) は秒 → Hz の関数 */
+    voiced(t, dur, f0, vowel, opts) {
+      const o = Object.assign({ vel: 1, attack: 0.02, release: 0.04, female: false, nasal: 0 }, opts);
+      const sr = this.sr, b = this.buf, rnd = this.rnd;
+      const fs = VOWEL[vowel].map((f) => f * (o.female ? 1.17 : 1));
+      const fil = fs.map((f, k) => bandpass(sr, f, f / [80, 90, 120][k]));
+      const i0 = Math.round(t * sr), n = Math.round(dur * sr);
+      let ph = 0;
+      for (let i = 0; i < n && i0 + i < b.length; i++) {
+        const x = i / sr;
+        ph += (f0(x) * (1 + 0.003 * (rnd() - 0.5))) / sr;
+        if (ph >= 1) ph -= 1;
+        const src = 2 * ph - 1 + 0.03 * (rnd() * 2 - 1);
+        let y = 0;
+        for (let k = 0; k < 3; k++) y += fil[k](src) * [1, 0.5, 0.25][k];
+        const nas = o.nasal && x < o.nasal ? 0.35 : 1;
+        const env = Math.min(1, x / o.attack) * Math.min(1, Math.max(0, dur - x) / o.release) * nas;
+        b[i0 + i] += y * env * 0.35 * o.vel;
+      }
+    }
+
+    norm(peak = 0.6) {
+      let m = 0;
+      for (const v of this.buf) m = Math.max(m, Math.abs(v));
+      const k = peak / (m || 1);
+      for (let i = 0; i < this.buf.length; i++) this.buf[i] *= k;
+      return this;
+    }
+
+    room(db = -62) {
+      const a = Math.pow(10, db / 20), r = this.rnd;
+      for (let i = 0; i < this.buf.length; i++) this.buf[i] += (r() * 2 - 1) * a;
+      return this;
+    }
+
+    result() { return { samples: this.norm().room().buf, onsets: this.onsets.slice().sort((a, b) => a - b), sampleRate: this.sr }; }
+  }
+
+  /** 歌（アカペラ）。onsets = 音符の頭。legato: 子音なしで音程だけ変わる音の割合 */
+  function sing({ sr = 48000, bpm = 90, bars = 12, female = true, seed = 1, legato = 0.3, vib = 0.4 } = {}) {
+    const beat = 60 / bpm, v = new Voice(sr, bars * 4 * beat + 2, seed), r = v.rnd;
+    const scale = [0, 2, 4, 5, 7, 9, 11, 12];
+    let t = 0.5, deg = 2, prevEnd = -1;
+    while (t < bars * 4 * beat) {
+      const len = r() < 0.6 ? beat / 2 : beat;
+      let nd = deg;
+      while (nd === deg) nd = Math.max(0, Math.min(7, deg + Math.floor(r() * 5) - 2));
+      deg = nd;
+      const hz = midiToHz((female ? 64 : 52) + scale[deg]);
+      if (r() < 0.1) { t += len; prevEnd = -1; continue; } // 休符
+      v.onsets.push(t);
+      const leg = prevEnd > 0 && r() < legato; // 前の音から切らずに音程だけ変える
+      const c = leg ? '' : CONS[Math.floor(r() * CONS.length)];
+      const cl = leg ? 0 : v.consonant(t, c, 0.8);
+      const d = len - cl - (leg ? 0 : 0.03);
+      const vd = len >= beat ? vib : 0;
+      v.voiced(t + cl, d + (leg ? 0.02 : 0), (x) => hz * Math.pow(2, (vd * Math.sin(2 * Math.PI * 5.5 * x) * Math.min(1, x / 0.3)) / 12),
+        VOWELS[Math.floor(r() * 5)], { female, vel: 0.7 + 0.3 * r(), attack: leg ? 0.005 : 0.04, release: leg ? 0.005 : 0.05, nasal: c === 'n' || c === 'm' ? 0.05 : 0 });
+      prevEnd = t + len;
+      t += len;
+    }
+    return v.result();
+  }
+
+  /** 話し声（司会・MC）。onsets = 音節の頭 */
+  function speak({ sr = 48000, sec = 30, female = false, seed = 2, rate = 7 } = {}) {
+    const v = new Voice(sr, sec + 1.5, seed), r = v.rnd;
+    const base = female ? 210 : 120;
+    let t = 0.4;
+    while (t < sec) {
+      // 句：3〜6 単語。全体に下降（declination）
+      const words = 3 + Math.floor(r() * 4);
+      const phraseStart = t, phraseTop = 2 + 3 * r();
+      let w = 0;
+      for (; w < words && t < sec; w++) {
+        const syl = 2 + Math.floor(r() * 4);
+        const peak = 1.5 + 3 * r(); // 単語の山（半音）
+        const peakPos = r();
+        for (let s = 0; s < syl && t < sec; s++) {
+          const len = (0.8 + 0.5 * r()) / rate;
+          const c = s === 0 && r() < 0.3 ? '' : CONS[Math.floor(r() * CONS.length)];
+          v.onsets.push(t);
+          const cl = v.consonant(t, c, 0.7);
+          const d = Math.max(0.05, len - cl);
+          const u0 = (s + 0) / syl, u1 = (s + 1) / syl;
+          // 音節内の上がり下がり（実際の話し声は 1 音節の中でも 1〜3 半音動く）と細かい揺れ
+          const glide = (r() * 2 - 1) * 3, wf = 6 + 4 * r(), wp = r() * 6.28;
+          const st = (u) => {
+            const decl = phraseTop - 5 * Math.min(1, (t - phraseStart + u * d) / 2.5);
+            const bump = peak * Math.exp(-Math.pow((u0 + (u1 - u0) * u - peakPos) / 0.35, 2));
+            return decl + bump + glide * (u - 0.5) + 0.45 * Math.sin(wp + 2 * Math.PI * wf * u * d);
+          };
+          const hz = (x) => base * Math.pow(2, st(x / d) / 12);
+          v.voiced(t + cl, d, hz, VOWELS[Math.floor(r() * 5)], { female, vel: 0.55 + 0.45 * r() * (1 - 0.4 * (s / syl)), attack: 0.015, release: 0.03, nasal: c === 'n' || c === 'm' ? 0.04 : 0 });
+          t += cl + d + 0.015 + 0.03 * r();
+        }
+        t += r() < 0.4 ? 0.06 + 0.12 * r() : 0.01; // 単語の間
+      }
+      t += 0.35 + 0.6 * r(); // 句の間（息継ぎ）
+    }
+    return v.result();
+  }
+
+  /** 合唱：4 声、2 拍ごとに和音。onsets = 和音の頭 */
+  function choir({ sr = 48000, bpm = 66, bars = 10, seed = 4 } = {}) {
+    const beat = 60 / bpm, v = new Voice(sr, bars * 4 * beat + 3, seed), r = v.rnd;
+    const chords = [[60, 64, 67, 48], [57, 60, 64, 45], [53, 57, 60, 41], [55, 59, 62, 43]];
+    for (let bar = 0; bar < bars; bar++) for (let h = 0; h < 2; h++) {
+      const t = 0.5 + (bar * 4 + h * 2) * beat;
+      v.onsets.push(t);
+      chords[bar % 4].forEach((m, k) => {
+        const hz = midiToHz(m + (k < 3 ? 0 : 12));
+        v.voiced(t + 0.03 * r(), 2 * beat * 0.97, (x) => hz * Math.pow(2, (0.25 * Math.sin(2 * Math.PI * 5.2 * x + k) * Math.min(1, x / 0.4)) / 12),
+          ['a', 'o', 'u', 'a'][k], { female: k < 2, vel: 0.5, attack: 0.12, release: 0.08 });
+      });
+    }
+    return v.result();
+  }
+
+  /** ロングトーン（ビブラート付き）5 音 */
+  function longTones({ sr = 48000, seed = 3 } = {}) {
+    const v = new Voice(sr, 26, seed);
+    [57, 60, 64, 62, 59].forEach((m, i) => {
+      const t = 0.5 + i * 5, hz = midiToHz(m);
+      v.onsets.push(t);
+      v.voiced(t, 4.5, (x) => hz * Math.pow(2, (0.6 * Math.sin(2 * Math.PI * 5.5 * x) * Math.min(1, x / 0.3)) / 12), 'a', { female: true, attack: 0.15, release: 0.1 });
+    });
+    return v.result();
+  }
+
+  /** 音声をつなぐ（間に gap 秒の無音） */
+  function concat(parts, sr = 48000, gap = 1.5) {
+    const n = parts.reduce((a, p) => a + p.samples.length + Math.round(gap * sr), 0);
+    const out = new Float32Array(n);
+    const marks = [];
+    let pos = 0;
+    for (const p of parts) {
+      out.set(p.samples, pos);
+      marks.push({ start: pos / sr, end: (pos + p.samples.length) / sr });
+      pos += p.samples.length + Math.round(gap * sr);
+    }
+    return { samples: out, marks };
+  }
+
+  /** デモ用：歌と話し声 */
+  function demo(kind, sr) {
+    if (kind === 'speech') return speak({ sr, sec: 40, seed: 21 });
+    return sing({ sr, bpm: 96, bars: 16, seed: 22 });
+  }
+
+  VJ.voiceSynth = { sing, speak, choir, longTones, concat, demo, midiToHz };
+})(globalThis.VJ = globalThis.VJ || {});
+</script>
 <script>/* src/audio/engine.js */
 /* AudioEngine：入力（マイク/ライン・デモ・音声ファイル）→ AnalyserNode。
  *
@@ -2114,7 +2759,7 @@ body.remote-mode #stage { opacity: 0.25; }
       this.ctx.resume().catch(() => {});
     }
 
-    /** 入力を開始。source: 'mic' | 'demo' | 'file' | 'buffer' */
+    /** 入力を開始。source: 'mic' | 'demo'（demo: band / sing / speech）| 'file' | 'display' | 'buffer' */
     async start(opts) {
       Object.assign(this.opts, opts || {});
       this._set('starting');
@@ -2127,7 +2772,8 @@ body.remote-mode #stage { opacity: 0.25; }
         if (this.opts.source === 'mic') {
           await this._startMic(this.opts.deviceId);
         } else if (this.opts.source === 'demo') {
-          const s = VJ.synth.demoSong(ctx.sampleRate);
+          const kind = this.opts.demo || 'band';
+          const s = kind === 'sing' || kind === 'speech' ? VJ.voiceSynth.demo(kind, ctx.sampleRate) : VJ.synth.demoSong(ctx.sampleRate);
           const ab = ctx.createBuffer(1, s.samples.length, ctx.sampleRate);
           ab.copyToChannel(s.samples, 0);
           this._startBuffer(ab, true);
@@ -2484,7 +3130,7 @@ body.remote-mode #stage { opacity: 0.25; }
         outputLatency: ctx && ctx.outputLatency !== undefined ? ctx.outputLatency : null,
         trackLatency: this.trackSettings && this.trackSettings.latency !== undefined ? this.trackSettings.latency : null,
         channels: this.channels,
-        device: this.opts.source === 'file' ? (this.nowPlaying || '音声ファイル') : this.opts.source === 'demo' ? 'デモ音源'
+        device: this.opts.source === 'file' ? (this.nowPlaying || '音声ファイル') : this.opts.source === 'demo' ? 'デモ音源' + ({ sing: '（歌）', speech: '（話し声）' }[this.opts.demo] || '')
           : this.opts.deviceLabel || (this.opts.source === 'mic' ? '既定のデバイス' : this.opts.source),
         chunk: this.diag.chunk,
         chunkMax: this.diag.chunkMax,
@@ -2793,6 +3439,8 @@ void main() {
       this.specBytes = new Uint8Array(64);
       this.specSlowBytes = new Uint8Array(64);
       this.waveBytes = new Uint8Array(512);
+      this.pitchBytes = new Uint8Array(128);
+      this.noParam = new Float32Array([0.5, 0.5, 0.5, 0.5]);
       this.feedbackScene = null;
       this.output = { rotate: 0, flipH: false, flipV: false, size: 1, x: 0, y: 0 };
       this.logo = null; // { tex, aspect }
@@ -2827,6 +3475,7 @@ void main() {
       this.texSpec = r8(64);
       this.texSpecSlow = r8(64);
       this.texWave = r8(512);
+      this.texPitch = G.texture(gl, 128, 1, { internal: gl.R8, format: gl.RED, type: gl.UNSIGNED_BYTE, filter: gl.NEAREST });
       this.texBlank = G.texture(gl, 1, 1, { data: new Uint8Array(4) });
       if (this.text) this.text.reset(gl); else this.text = new G.TextLayer(gl);
       this.logo = null;
@@ -2998,6 +3647,15 @@ void main() {
       gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 64, 1, gl.RED, gl.UNSIGNED_BYTE, this.specSlowBytes);
       gl.bindTexture(gl.TEXTURE_2D, this.texWave);
       gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 512, 1, gl.RED, gl.UNSIGNED_BYTE, this.waveBytes);
+      // 音程の履歴：0 = 無声、1..255 = 0..1
+      const ph = f.pitchHist, pb = this.pitchBytes;
+      if (ph) {
+        const n = Math.min(ph.length, 128), off = 128 - n;
+        for (let i = 0; i < off; i++) pb[i] = 0;
+        for (let i = 0; i < n; i++) { const v = ph[i]; pb[off + i] = v < 0 ? 0 : 1 + Math.round(Math.min(1, v) * 254); }
+        gl.bindTexture(gl.TEXTURE_2D, this.texPitch);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 128, 1, gl.RED, gl.UNSIGNED_BYTE, pb);
+      }
     }
 
     /** テクスチャ（縦横比 texAspect）を論理画面の中央付近に置く枠（uv 0..1）。maxW・maxH は画面に対する割合 */
@@ -3056,6 +3714,13 @@ void main() {
       p.set('u_beatPhase', f.beatPhase || 0);
       p.set('u_bar', f.barPhase || 0);
       p.set('u_bpm', f.bpm || 0);
+      p.set('u_pitch', f.pitch === undefined ? 0.5 : f.pitch);
+      p.set('u_voiced', f.voiced || 0);
+      p.set('u_pitchClass', f.pitchClass || 0);
+      p.set('u_speech', f.speech ? 1 : 0);
+      p.set('u_noteN', (f.noteN || 0) % 4096);
+      p.set('u_param', fr.param || this.noParam);
+      p.tex('u_pitchHist', this.texPitch);
       p.set('u_pal', fr.pal);
       p.tex('u_spec', this.texSpec);
       p.tex('u_specSlow', this.texSpecSlow);
@@ -3188,6 +3853,10 @@ uniform vec2 u_snareEv[8];
 uniform vec2 u_accentEv[8];
 uniform float u_travel;
 uniform float u_beat, u_beatPhase, u_bar, u_bpm; // 拍のパルス（拍で 1 → 減衰）・拍の位相・小節の位相
+// 声：音程 0..1（C2〜C6。無声の間は直前の値）・有声 0..1・音名 0..1（C〜B）・話し声 0..1・音程の変わり目の回数
+uniform float u_pitch, u_voiced, u_pitchClass, u_speech, u_noteN;
+uniform vec4 u_param; // シーンごとの調整（設定パネルのスライダー。各シーンの params の順）
+uniform sampler2D u_pitchHist; // 音程の履歴（約 2.7 秒・128 点）
 uniform vec3 u_pal[4];
 uniform sampler2D u_spec;
 uniform sampler2D u_specSlow;
@@ -3230,6 +3899,11 @@ vec2 uvc() { return (gl_FragCoord.xy - 0.5 * u_res) / u_res.y; }
 float spec(float x) { return texture(u_spec, vec2(clamp(x, 0.0, 1.0) * (63.0 / 64.0) + 0.5 / 64.0, 0.5)).r; }
 float specS(float x) { return texture(u_specSlow, vec2(clamp(x, 0.0, 1.0) * (63.0 / 64.0) + 0.5 / 64.0, 0.5)).r; }
 float wave(float x) { return texture(u_wave, vec2(clamp(x, 0.0, 1.0), 0.5)).r * 2.0 - 1.0; }
+// 音程の履歴：x = 0（約 2.7 秒前）〜 1（今）。0..1、無声のところは -1
+float pitchHist(float x) {
+  float v = texture(u_pitchHist, vec2(clamp(x, 0.0, 1.0) * (127.0 / 128.0) + 0.5 / 128.0, 0.5)).r;
+  return v < 0.5 / 255.0 ? -1.0 : (v * 255.0 - 1.0) / 254.0;
+}
 // 無音時のゆっくりした呼吸（止まって見えないように）
 float idle() { return u_idle * (0.5 + 0.5 * sin(u_time * 1.3)); }
 `;
@@ -3240,6 +3914,8 @@ float idle() { return u_idle * (0.5 + 0.5 * sin(u_time * 1.3)); }
     byId: {},
     register(def) {
       def.feedback = !!def.feedback;
+      // 調整できる値（最大 4 つ → u_param.xyzw）。{ id, name, min, max, def, step }
+      def.params = (def.params || []).slice(0, 4).map((p) => Object.assign({ min: 0, max: 1, def: 0.5, step: 0.01 }, p));
       def.cost = def.cost || 1;
       def.init = def.init || function () {};
       def.update = def.update || function () {};
@@ -3249,7 +3925,17 @@ float idle() { return u_idle * (0.5 + 0.5 * sin(u_time * 1.3)); }
       return def;
     },
     source(def) { return HEADER + '\n' + def.frag; },
-    /** キー（'0'〜'6'）やシーン名・番号の文字列から ID を引く */
+    /** シーンの調整値（設定に無ければ既定値）。out は長さ 4 */
+    paramValues(def, saved, out) {
+      out = out || new Float32Array(4);
+      for (let i = 0; i < 4; i++) {
+        const p = def.params[i];
+        const v = saved && typeof saved[i] === 'number' && isFinite(saved[i]) ? saved[i] : p ? p.def : 0.5;
+        out[i] = p ? Math.max(p.min, Math.min(p.max, v)) : v;
+      }
+      return out;
+    },
+    /** キー（'0'〜'9'・Shift の段は 's1'〜's9'）やシーン名・番号の文字列から ID を引く */
     resolve(token) {
       const t = String(token).trim().toLowerCase();
       if (!t) return null;
@@ -3826,6 +4512,150 @@ void main() {
   });
 })(globalThis.VJ = globalThis.VJ || {});
 </script>
+<script>/* src/scenes/orb.js */
+/* Shift+1: 声の輪 — 声に合わせて光る輪。輪の大きさは音量、色は声の高さ、音節ごとに波紋。中央にタイトル（司会・MC 向け）
+ * （仮の実装） */
+(function (VJ) {
+  'use strict';
+  VJ.scenes.register({
+    id: 'orb', key: 's1', name: 'Voice Orb', nameJa: '声の輪', aliases: ['声', 'こえ', 'ボイス'], cost: 1,
+    frag: `
+void main() {
+  vec2 p = uvc();
+  vec3 col = pal(u_pitch + 0.1 * u_time) * (0.1 + 0.4 * u_level) * smoothstep(0.5, 0.0, length(p));
+  outColor = vec4(col, 1.0);
+}`,
+  });
+})(globalThis.VJ = globalThis.VJ || {});
+</script>
+<script>/* src/scenes/melody.js */
+/* Shift+2: メロディ線 — 声や旋律の音程を光の線で描く（カラオケの音程バーのように右から左へ流れる）
+ * （仮の実装） */
+(function (VJ) {
+  'use strict';
+  VJ.scenes.register({
+    id: 'melody', key: 's2', name: 'Melody', nameJa: 'メロディ線', aliases: ['メロディ', '音程'], cost: 1,
+    frag: `
+void main() {
+  vec2 p = uvc();
+  vec3 col = pal(u_pitch + 0.1 * u_time) * (0.1 + 0.4 * u_level) * smoothstep(0.5, 0.0, length(p));
+  outColor = vec4(col, 1.0);
+}`,
+  });
+})(globalThis.VJ = globalThis.VJ || {});
+</script>
+<script>/* src/scenes/fireworks.js */
+/* Shift+3: 花火 — キックやキメで夜空に花火が開く
+ * （仮の実装） */
+(function (VJ) {
+  'use strict';
+  VJ.scenes.register({
+    id: 'fireworks', key: 's3', name: 'Fireworks', nameJa: '花火', aliases: ['はなび'], cost: 1,
+    frag: `
+void main() {
+  vec2 p = uvc();
+  vec3 col = pal(u_pitch + 0.1 * u_time) * (0.1 + 0.4 * u_level) * smoothstep(0.5, 0.0, length(p));
+  outColor = vec4(col, 1.0);
+}`,
+  });
+})(globalThis.VJ = globalThis.VJ || {});
+</script>
+<script>/* src/scenes/bokeh.js */
+/* Shift+4: 光の粒 — ぼけた光の玉がゆっくり漂う。音量で明るさ・大きさ（しっとりした曲・司会向け）
+ * （仮の実装） */
+(function (VJ) {
+  'use strict';
+  VJ.scenes.register({
+    id: 'bokeh', key: 's4', name: 'Bokeh', nameJa: '光の粒', aliases: ['ボケ', 'ひかり'], cost: 1,
+    frag: `
+void main() {
+  vec2 p = uvc();
+  vec3 col = pal(u_pitch + 0.1 * u_time) * (0.1 + 0.4 * u_level) * smoothstep(0.5, 0.0, length(p));
+  outColor = vec4(col, 1.0);
+}`,
+  });
+})(globalThis.VJ = globalThis.VJ || {});
+</script>
+<script>/* src/scenes/waves.js */
+/* Shift+5: 波 — 重なった波の線。低音で大きくうねり、高音で細かく揺れる
+ * （仮の実装） */
+(function (VJ) {
+  'use strict';
+  VJ.scenes.register({
+    id: 'waves', key: 's5', name: 'Waves', nameJa: '波', aliases: ['なみ', '海'], cost: 1,
+    frag: `
+void main() {
+  vec2 p = uvc();
+  vec3 col = pal(u_pitch + 0.1 * u_time) * (0.1 + 0.4 * u_level) * smoothstep(0.5, 0.0, length(p));
+  outColor = vec4(col, 1.0);
+}`,
+  });
+})(globalThis.VJ = globalThis.VJ || {});
+</script>
+<script>/* src/scenes/smoke.js */
+/* Shift+6: 煙 — 色の煙（インク）が渦を巻いて流れる。発音のたびに色が注がれる
+ * （仮の実装） */
+(function (VJ) {
+  'use strict';
+  VJ.scenes.register({
+    id: 'smoke', key: 's6', name: 'Smoke', nameJa: '煙', aliases: ['けむり', 'インク'], cost: 1,
+    frag: `
+void main() {
+  vec2 p = uvc();
+  vec3 col = pal(u_pitch + 0.1 * u_time) * (0.1 + 0.4 * u_level) * smoothstep(0.5, 0.0, length(p));
+  outColor = vec4(col, 1.0);
+}`,
+  });
+})(globalThis.VJ = globalThis.VJ || {});
+</script>
+<script>/* src/scenes/circle.js */
+/* Shift+7: サークル — 円形のスペクトラム。周波数ごとの棒が円周に並ぶ（DJ・ダンス向け）
+ * （仮の実装） */
+(function (VJ) {
+  'use strict';
+  VJ.scenes.register({
+    id: 'circle', key: 's7', name: 'Circle', nameJa: 'サークル', aliases: ['円', 'スペクトラム'], cost: 1,
+    frag: `
+void main() {
+  vec2 p = uvc();
+  vec3 col = pal(u_pitch + 0.1 * u_time) * (0.1 + 0.4 * u_level) * smoothstep(0.5, 0.0, length(p));
+  outColor = vec4(col, 1.0);
+}`,
+  });
+})(globalThis.VJ = globalThis.VJ || {});
+</script>
+<script>/* src/scenes/petals.js */
+/* Shift+8: 花びら — 花びらが舞う。キックで風が吹く
+ * （仮の実装） */
+(function (VJ) {
+  'use strict';
+  VJ.scenes.register({
+    id: 'petals', key: 's8', name: 'Petals', nameJa: '花びら', aliases: ['桜', 'さくら', '桜吹雪'], cost: 1,
+    frag: `
+void main() {
+  vec2 p = uvc();
+  vec3 col = pal(u_pitch + 0.1 * u_time) * (0.1 + 0.4 * u_level) * smoothstep(0.5, 0.0, length(p));
+  outColor = vec4(col, 1.0);
+}`,
+  });
+})(globalThis.VJ = globalThis.VJ || {});
+</script>
+<script>/* src/scenes/voiceprint.js */
+/* Shift+9: 声紋 — 音の高さごとの強さを時間方向に流して模様にする（声・話し声がよく見える）
+ * （仮の実装） */
+(function (VJ) {
+  'use strict';
+  VJ.scenes.register({
+    id: 'voiceprint', key: 's9', name: 'Voiceprint', nameJa: '声紋', aliases: ['スペクトログラム', '声のもよう'], cost: 1,
+    frag: `
+void main() {
+  vec2 p = uvc();
+  vec3 col = pal(u_pitch + 0.1 * u_time) * (0.1 + 0.4 * u_level) * smoothstep(0.5, 0.0, length(p));
+  outColor = vec4(col, 1.0);
+}`,
+  });
+})(globalThis.VJ = globalThis.VJ || {});
+</script>
 <script>/* src/scenes/testpattern.js */
 /* テストパターン（G キー）— プロジェクターの位置・台形・明るさを合わせるための図形。
  * 格子・中心の十字・正円（縦横比の確認）・外枠・四隅の印・明るさの段階。音には反応しない。
@@ -4083,7 +4913,8 @@ void main() {
 /* オートモード：操作者が何もしなくても破綻しないように自動でシーンを切り替える。
  *  - 前の切替から switchSec 秒以上たち、アクセント（なければ強いキック）が来たら次のシーンへ
  *  - 曲にシーン指定があればその中で順番に。なければ盛り上がりに合わせて選ぶ
- *  - 無音が silenceSec 秒続いたらタイトルへ。強打で元に戻る */
+ *  - 無音が silenceSec 秒続いたらタイトルへ。強打で元に戻る
+ *  - 設定「MC のときはタイトル」：話し声を検出したらタイトルへ。演奏が 2.5 秒続いたら元に戻る */
 (function (VJ) {
   'use strict';
 
@@ -4113,8 +4944,23 @@ void main() {
         this.silentFrom = st.sceneId;
         return { scene: 'title', reason: 'silence' };
       }
+      // 話し声（MC）→ タイトル（設定で ON のとき。司会のタイプでは使わない）
+      const mcTitle = !!(show.settings && show.settings.speechTitle) && !(show.profile && show.profile.id === 'speech');
+      if (mcTitle && f.speech && st.sceneId !== 'title' && !this.silentFrom) {
+        this.silentFrom = st.sceneId;
+        this.musicSince = 0;
+        return { scene: 'title', reason: 'speech' };
+      }
       if (this.silentFrom) {
-        if (f.active && (f.onsetFlags & (1 | 8 | 16)) && (f.kick >= 0.6 || f.accent > 0 || (f.onsetFlags & 16))) {
+        // MC 対応のときは、話し声でない音（演奏）が 2.5 秒続いたら戻る（話し始めの一言で戻らないように）
+        let resume;
+        if (mcTitle) {
+          if (f.active && !f.speech) { this.musicSince = this.musicSince || now; } else this.musicSince = 0;
+          resume = this.musicSince && now - this.musicSince >= 2.5;
+        } else {
+          resume = f.active && (f.onsetFlags & (1 | 8 | 16)) && (f.kick >= 0.6 || f.accent > 0 || (f.onsetFlags & 16));
+        }
+        if (resume) {
           const back = this.silentFrom;
           this.silentFrom = null;
           this.lastSwitch = now;
@@ -4133,7 +4979,7 @@ void main() {
       const fl = f.onsetFlags;
       // 1) キメ・ブレイク明け  2) 少し待っても無ければ小節の頭（テンポが取れているとき）  3) それも無ければキック
       const trigger = (since >= S && (fl & (8 | 16)))
-        || (since >= S + 6 && (fl & 64) && f.beatConf >= 0.35)
+        || (since >= S + 6 && (fl & 64) && f.beatConf >= 0.35 && !prof.noTempo)
         || (since >= KF && (fl & 1));
       if (!trigger) return null;
       const song = show.currentSong();
@@ -4293,7 +5139,9 @@ void main() {
       this.director.silentFrom = null;
       this.state.beforeTest = null;
       const name = VJ.scenes.byId[id].nameJa;
-      if (opts.immediate || !this.lastActive) {
+      // 予約中の同じシーンをもう一度選んだら、拍を待たずに切り替える
+      const again = this.state.pending && this.state.pending.id === id;
+      if (opts.immediate || again || !this.lastActive) {
         this._applyScene(id);
         this._toast(`シーン: ${name}`);
       } else {
@@ -4613,6 +5461,7 @@ void main() {
       fr.logoCorner = (logo === 'corner' || (logo === 'both' && !isTitle)) && s.sceneId !== 'test' ? this.settings.logoCorner || 'br' : '';
       fr.latSq = this.settings.latencySquare ? s.latSq : -1;
       fr.vignette = s.sceneId === 'test' ? 0 : 0.6;
+      fr.param = VJ.scenes.paramValues(fr.scene, this.settings.sceneParams && this.settings.sceneParams[fr.scene.id], fr.param);
       return fr;
     }
   }
@@ -4626,16 +5475,21 @@ void main() {
 (function (VJ) {
   'use strict';
 
-  const SCENE_KEYS = {
-    Digit0: 'title', Digit1: 'ripple', Digit2: 'tunnel', Digit3: 'horizon', Digit4: 'aurora', Digit5: 'kaleido',
-    Digit6: 'glitch', Digit7: 'eq', Digit8: 'stars', Digit9: 'scope',
-  };
-  for (const k of Object.keys(SCENE_KEYS)) SCENE_KEYS[k.replace('Digit', 'Numpad')] = SCENE_KEYS[k];
+  /** 数字キー → シーン。Shift を押していれば 2 段目（key が 's1'〜's9' のシーン）。0 はどちらもタイトル */
+  function sceneForKey(code, shift) {
+    const m = /^(?:Digit|Numpad)(\d)$/.exec(code);
+    if (!m) return null;
+    const d = m[1];
+    if (d === '0') return 'title';
+    const want = (shift ? 's' : '') + d;
+    const def = VJ.scenes.list.find((s) => s.key === want && !s.hidden);
+    return def ? def.id : null;
+  }
 
   const HOLD = { KeyL: 1500, KeyR: 2000 };
 
   const KEY_HELP = [
-    ['1〜9', 'シーン切替（次のビートで）'], ['Shift+数字', 'すぐ切替'], ['0', 'タイトル（バンド名）'],
+    ['1〜9', 'シーン切替（次のビートで。もう一度押すとすぐ）'], ['Shift+1〜9', 'シーン 2 段目（声の輪・メロディ線・花火 など）'], ['0', 'タイトル（バンド名）'],
     ['→ / ←', '次の曲 / 前の曲（曲名を表示）'], ['Space', 'フラッシュ'], ['S（押している間）', 'ストロボ'],
     ['B', '暗転 ON/OFF'], ['C / Shift+C', 'パレット 次 / 前'], ['↑ / ↓', '感度'], ['Shift+↑ / ↓', '全体の明るさ'],
     ['A', 'オート ON/OFF'], ['Enter', 'タップテンポ（拍に合わせて 3 回以上）'], ['Q / W / E', 'テロップ 1〜3 を表示・消す'],
@@ -4697,7 +5551,9 @@ void main() {
       }
 
       let handled = true;
-      if (SCENE_KEYS[code]) show.selectScene(SCENE_KEYS[code], { immediate: shift || code.endsWith('0') });
+      const sceneId = sceneForKey(code, shift);
+      if (/^(?:Digit|Numpad)\d$/.test(code) && !sceneId) ui.toast('このキーにはシーンがありません', 'warn');
+      else if (sceneId) show.selectScene(sceneId, { immediate: code.endsWith('0') });
       else if (code === 'ArrowRight') show.nextSong();
       else if (code === 'ArrowLeft') show.prevSong();
       else if (code === 'Space') show.flash(0.85, 'key') || ui.toast('フラッシュ制限中（光過敏対策）', 'warn');
@@ -4733,7 +5589,7 @@ void main() {
     return { handle, up };
   }
 
-  VJ.keys = { install, SCENE_KEYS, KEY_HELP, forForm };
+  VJ.keys = { install, sceneForKey, KEY_HELP, forForm };
 })(globalThis.VJ = globalThis.VJ || {});
 </script>
 <script>/* src/ui/hud.js */
@@ -6010,6 +6866,8 @@ void main() {
           const sr = o.sampleRate || 48000;
           let samples = o.samples;
           if (samples === 'demo') samples = VJ.synth.demoSong(sr).samples;
+          else if (samples === 'demo-sing' || samples === 'demo-speech') samples = VJ.voiceSynth.demo(samples.slice(5), sr).samples;
+          else if (o.voice) samples = VJ.voiceSynth[o.voice.kind](Object.assign({ sr }, o.voice)).samples;
           else if (o.song) samples = VJ.synth.song(Object.assign({ sampleRate: sr }, o.song)).samples;
           else if (Array.isArray(samples)) samples = Float32Array.from(samples);
           if (o.offset) samples = samples.subarray(Math.round(o.offset * sr));
@@ -6049,6 +6907,8 @@ void main() {
           res.kickN = fx.features.kickN;
           res.bpm = fx.features.bpm;
           res.melodic = fx.features.melodic;
+          res.speech = fx.features.speech;
+          res.noteN = fx.features.noteN;
           return res;
         } finally {
           app.renderer.setOutput(app.settings.output);

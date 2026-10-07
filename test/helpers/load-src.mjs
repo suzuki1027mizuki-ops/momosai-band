@@ -11,7 +11,7 @@ export function scriptList() {
   return [...html.matchAll(/<script\s+src="([^"]+)"/g)].map((m) => m[1]);
 }
 
-const DEFAULT_INCLUDE = ['src/core/', 'src/dsp/', 'src/audio/synth.js', 'src/show/', 'src/scenes/', 'src/ui/midi.js', 'src/ui/keys.js'];
+const DEFAULT_INCLUDE = ['src/core/', 'src/dsp/', 'src/audio/synth.js', 'src/audio/voicesynth.js', 'src/show/', 'src/scenes/', 'src/ui/midi.js', 'src/ui/keys.js'];
 
 export function loadVJ(include = DEFAULT_INCLUDE) {
   delete globalThis.VJ;
@@ -46,7 +46,7 @@ export function analyze(VJ, samples, sr, opts = {}) {
       latest.fill(0);
       latest.set(samples.subarray(start, end), 8192 - (end - start));
       const f = fx.computeFrame(latest, i / sr, chunk.length / sr);
-      if (opts.keepFrames) frames.push({ t: i / sr, level: f.level, low: f.low, mid: f.mid, high: f.high, kick: f.kick, intensity: f.intensity, active: f.active, impactN: f.impactN, flags: f.onsetFlags, bpm: f.bpm, conf: f.beatConf, melodic: f.melodic });
+      if (opts.keepFrames) frames.push({ t: i / sr, level: f.level, low: f.low, mid: f.mid, high: f.high, kick: f.kick, intensity: f.intensity, active: f.active, impactN: f.impactN, flags: f.onsetFlags, bpm: f.bpm, conf: f.beatConf, melodic: f.melodic, speech: f.speech, speechScore: f.speechScore, voiced: f.voiced, pitch: f.pitch, noteN: f.noteN });
     }
   }
   return { log: fx.onsetLog, fx, frames };

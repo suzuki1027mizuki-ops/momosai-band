@@ -43,6 +43,8 @@
     output: { rotate: 0, flipH: false, flipV: false, size: 1, x: 0, y: 0 }, // 表示の調整
     autoStart: false, // 起動したら前回の入力で自動的に開始
     lastSource: 'mic', // 前回の音声入力の種類
+    sceneParams: {}, // シーンごとの調整値 { sceneId: [v0, v1, v2, v3] }
+    speechTitle: false, // 話し声（MC）を検出したらタイトル画面にする
   };
 
   /** 解析パラメータ（調整はテストで行う。UI には出さない） */
@@ -69,6 +71,21 @@
     melodic: { W: 2, L: 4, R: 6, K: 1.5, minRise: 2.5, refractory: 0.12, relDb: 16, peakFall: 3 },
     melodicMode: 'auto', // auto: ドラムが無ければ自動で切替 / on: 常に / off: 使わない
     drumRatioDb: -2, // キック時に 低域 ÷ 中域 がこれより大きければドラムとみなす
+    // 声：ピッチ推定（YIN）
+    pitch: { fmin: 70, fmax: 1100, every: 4, thr: 0.15, maxAperiodic: 0.3, lowpass: 2000 },
+    // 声の扱い。mode: off（楽器と同じ）/ sing（歌：音程の変わり目にも反応・子音をドラム扱いしない）
+    //                 / speech（話し声：子音をドラム扱いしない）
+    voice: {
+      mode: 'off',
+      pitchSmooth: 0.5, // 音程のなめらかさ（推定 1 回あたりの追従率）
+      noteThr: 0.9, noteHold: 3, noteGap: 0.1, centerFollow: 0.08, // 音程の変わり目：半音・回数・最短間隔（秒）・中心の追従率
+      speechWindow: 4, speechEvery: 0.17, speechMinSec: 1.5, // 話し声の判定：窓（秒）・更新間隔・判定に要る有音の長さ
+      speechTau: 0.6, speechOn: 0.55, speechOff: 0.25, // なめらかさ（秒）とヒステリシス
+      segmentGap: 1.0, speechHoldSilence: 8, // この秒数の無音で区間を区切る / 話し声の状態を解除
+      histLen: 128,
+    },
+    // 話し声（MC）を検出したら、自動フラッシュ・ブレイク明けの一撃・キメ・拍を止める
+    speechGuard: true,
     // テンポ推定に使う帯域ごとの重み（立ち上がりの強さの和）
     tempoWeights: [1.0, 0.5, 0.5, 0.8, 0.4],
     kickSnareHops: 5, // スネア検出からこのホップ数以内のキック候補は…
@@ -76,7 +93,7 @@
     statTau: 1.0, // flux の平均・分散の時定数
     gateDb: 10, // ノイズフロア + gateDb を超えたら有効
     // アクセント（キメ）：3 帯域以上が同時に立ち上がり、かつ全帯域の音量が「直近のピーク + loudDb」を超えた
-    accent: { zMin: 1.5, minBands: 3, windowHops: 6, minLevel: 0.5, refractory: 0.25, loudDb: 3, peakFall: 2, lagHops: 16 },
+    accent: { zMin: 1.5, minBands: 3, edgeBands: [0, 4], windowHops: 6, minLevel: 0.5, refractory: 0.25, loudDb: 3, peakFall: 2, lagHops: 16 },
     // 自動正規化（連続値のみ）
     agc: { rangeDb: 24, attack: 0.3, release: 8, warmRelease: 1.0, warmSec: 6, initDb: -40, floorMarginDb: 20 },
     noiseFloor: { rise: 20, fall: 0.5, initDb: -100, capBelowRefDb: 20 },

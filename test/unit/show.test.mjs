@@ -159,11 +159,28 @@ test('MIDI：ノートでシーン・フラッシュ・暗転・曲送り、CC �
   assert.equal(c.state.sceneId, 'horizon');
 });
 
-test('キー割り当て：数字・テンキーがすべてのシーンに対応', () => {
-  const ids = new Set(Object.values(VJ.keys.SCENE_KEYS));
+test('キー割り当て：数字・Shift+数字・テンキーがすべてのシーンに対応', () => {
+  const ids = new Set();
+  for (const code of ['Digit', 'Numpad']) for (let d = 0; d <= 9; d++) for (const sh of [false, true]) ids.add(VJ.keys.sceneForKey(code + d, sh));
   for (const s of VJ.scenes.list) if (!s.hidden) assert.ok(ids.has(s.id), s.id);
-  assert.equal(VJ.keys.SCENE_KEYS.Numpad3, 'horizon');
-  assert.equal(VJ.keys.SCENE_KEYS.Digit0, 'title');
+  assert.equal(VJ.keys.sceneForKey('Numpad3', false), 'horizon');
+  assert.equal(VJ.keys.sceneForKey('Digit0', false), 'title');
+  assert.equal(VJ.keys.sceneForKey('Digit0', true), 'title');
+  assert.equal(VJ.keys.sceneForKey('Digit1', true), 'orb');
+  assert.equal(VJ.keys.sceneForKey('KeyA', false), null);
+  // キーの重複が無い
+  const keys = VJ.scenes.list.filter((s) => !s.hidden).map((s) => s.key);
+  assert.equal(new Set(keys).size, keys.length);
+});
+
+test('シーン切替：予約中に同じキーをもう一度押すと、拍を待たずに切り替わる', () => {
+  const c = new VJ.ShowController(Object.assign({}, VJ.defaultSettings, { auto: false }));
+  c.update(fakeFeatures(), 1 / 60, 1);
+  c.selectScene('tunnel');
+  assert.equal(c.state.sceneId, 'title');
+  assert.equal(c.state.pending.id, 'tunnel');
+  c.selectScene('tunnel');
+  assert.equal(c.state.sceneId, 'tunnel');
 });
 
 test('曲ごとのパレットは、関係ない設定変更（バンド名の入力など）で元に戻らない', () => {

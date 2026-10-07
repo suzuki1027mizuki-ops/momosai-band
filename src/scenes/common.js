@@ -18,6 +18,10 @@ uniform vec2 u_snareEv[8];
 uniform vec2 u_accentEv[8];
 uniform float u_travel;
 uniform float u_beat, u_beatPhase, u_bar, u_bpm; // 拍のパルス（拍で 1 → 減衰）・拍の位相・小節の位相
+// 声：音程 0..1（C2〜C6。無声の間は直前の値）・有声 0..1・音名 0..1（C〜B）・話し声 0..1・音程の変わり目の回数
+uniform float u_pitch, u_voiced, u_pitchClass, u_speech, u_noteN;
+uniform vec4 u_param; // シーンごとの調整（設定パネルのスライダー。各シーンの params の順）
+uniform sampler2D u_pitchHist; // 音程の履歴（約 2.7 秒・128 点）
 uniform vec3 u_pal[4];
 uniform sampler2D u_spec;
 uniform sampler2D u_specSlow;
@@ -60,6 +64,11 @@ vec2 uvc() { return (gl_FragCoord.xy - 0.5 * u_res) / u_res.y; }
 float spec(float x) { return texture(u_spec, vec2(clamp(x, 0.0, 1.0) * (63.0 / 64.0) + 0.5 / 64.0, 0.5)).r; }
 float specS(float x) { return texture(u_specSlow, vec2(clamp(x, 0.0, 1.0) * (63.0 / 64.0) + 0.5 / 64.0, 0.5)).r; }
 float wave(float x) { return texture(u_wave, vec2(clamp(x, 0.0, 1.0), 0.5)).r * 2.0 - 1.0; }
+// 音程の履歴：x = 0（約 2.7 秒前）〜 1（今）。0..1、無声のところは -1
+float pitchHist(float x) {
+  float v = texture(u_pitchHist, vec2(clamp(x, 0.0, 1.0) * (127.0 / 128.0) + 0.5 / 128.0, 0.5)).r;
+  return v < 0.5 / 255.0 ? -1.0 : (v * 255.0 - 1.0) / 254.0;
+}
 // 無音時のゆっくりした呼吸（止まって見えないように）
 float idle() { return u_idle * (0.5 + 0.5 * sin(u_time * 1.3)); }
 `;
@@ -70,6 +79,8 @@ float idle() { return u_idle * (0.5 + 0.5 * sin(u_time * 1.3)); }
     byId: {},
     register(def) {
       def.feedback = !!def.feedback;
+      // 調整できる値（最大 4 つ → u_param.xyzw）。{ id, name, min, max, def, step }
+      def.params = (def.params || []).slice(0, 4).map((p) => Object.assign({ min: 0, max: 1, def: 0.5, step: 0.01 }, p));
       def.cost = def.cost || 1;
       def.init = def.init || function () {};
       def.update = def.update || function () {};
@@ -79,7 +90,17 @@ float idle() { return u_idle * (0.5 + 0.5 * sin(u_time * 1.3)); }
       return def;
     },
     source(def) { return HEADER + '\n' + def.frag; },
-    /** キー（'0'〜'6'）やシーン名・番号の文字列から ID を引く */
+    /** シーンの調整値（設定に無ければ既定値）。out は長さ 4 */
+    paramValues(def, saved, out) {
+      out = out || new Float32Array(4);
+      for (let i = 0; i < 4; i++) {
+        const p = def.params[i];
+        const v = saved && typeof saved[i] === 'number' && isFinite(saved[i]) ? saved[i] : p ? p.def : 0.5;
+        out[i] = p ? Math.max(p.min, Math.min(p.max, v)) : v;
+      }
+      return out;
+    },
+    /** キー（'0'〜'9'・Shift の段は 's1'〜's9'）やシーン名・番号の文字列から ID を引く */
     resolve(token) {
       const t = String(token).trim().toLowerCase();
       if (!t) return null;

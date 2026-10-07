@@ -1,7 +1,8 @@
 /* オートモード：操作者が何もしなくても破綻しないように自動でシーンを切り替える。
  *  - 前の切替から switchSec 秒以上たち、アクセント（なければ強いキック）が来たら次のシーンへ
  *  - 曲にシーン指定があればその中で順番に。なければ盛り上がりに合わせて選ぶ
- *  - 無音が silenceSec 秒続いたらタイトルへ。強打で元に戻る */
+ *  - 無音が silenceSec 秒続いたらタイトルへ。強打で元に戻る
+ *  - 設定「MC のときはタイトル」：話し声を検出したらタイトルへ。演奏が 2.5 秒続いたら元に戻る */
 (function (VJ) {
   'use strict';
 
@@ -31,8 +32,23 @@
         this.silentFrom = st.sceneId;
         return { scene: 'title', reason: 'silence' };
       }
+      // 話し声（MC）→ タイトル（設定で ON のとき。司会のタイプでは使わない）
+      const mcTitle = !!(show.settings && show.settings.speechTitle) && !(show.profile && show.profile.id === 'speech');
+      if (mcTitle && f.speech && st.sceneId !== 'title' && !this.silentFrom) {
+        this.silentFrom = st.sceneId;
+        this.musicSince = 0;
+        return { scene: 'title', reason: 'speech' };
+      }
       if (this.silentFrom) {
-        if (f.active && (f.onsetFlags & (1 | 8 | 16)) && (f.kick >= 0.6 || f.accent > 0 || (f.onsetFlags & 16))) {
+        // MC 対応のときは、話し声でない音（演奏）が 2.5 秒続いたら戻る（話し始めの一言で戻らないように）
+        let resume;
+        if (mcTitle) {
+          if (f.active && !f.speech) { this.musicSince = this.musicSince || now; } else this.musicSince = 0;
+          resume = this.musicSince && now - this.musicSince >= 2.5;
+        } else {
+          resume = f.active && (f.onsetFlags & (1 | 8 | 16)) && (f.kick >= 0.6 || f.accent > 0 || (f.onsetFlags & 16));
+        }
+        if (resume) {
           const back = this.silentFrom;
           this.silentFrom = null;
           this.lastSwitch = now;
@@ -51,7 +67,7 @@
       const fl = f.onsetFlags;
       // 1) キメ・ブレイク明け  2) 少し待っても無ければ小節の頭（テンポが取れているとき）  3) それも無ければキック
       const trigger = (since >= S && (fl & (8 | 16)))
-        || (since >= S + 6 && (fl & 64) && f.beatConf >= 0.35)
+        || (since >= S + 6 && (fl & 64) && f.beatConf >= 0.35 && !prof.noTempo)
         || (since >= KF && (fl & 1));
       if (!trigger) return null;
       const song = show.currentSong();

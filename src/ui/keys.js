@@ -3,16 +3,21 @@
 (function (VJ) {
   'use strict';
 
-  const SCENE_KEYS = {
-    Digit0: 'title', Digit1: 'ripple', Digit2: 'tunnel', Digit3: 'horizon', Digit4: 'aurora', Digit5: 'kaleido',
-    Digit6: 'glitch', Digit7: 'eq', Digit8: 'stars', Digit9: 'scope',
-  };
-  for (const k of Object.keys(SCENE_KEYS)) SCENE_KEYS[k.replace('Digit', 'Numpad')] = SCENE_KEYS[k];
+  /** 数字キー → シーン。Shift を押していれば 2 段目（key が 's1'〜's9' のシーン）。0 はどちらもタイトル */
+  function sceneForKey(code, shift) {
+    const m = /^(?:Digit|Numpad)(\d)$/.exec(code);
+    if (!m) return null;
+    const d = m[1];
+    if (d === '0') return 'title';
+    const want = (shift ? 's' : '') + d;
+    const def = VJ.scenes.list.find((s) => s.key === want && !s.hidden);
+    return def ? def.id : null;
+  }
 
   const HOLD = { KeyL: 1500, KeyR: 2000 };
 
   const KEY_HELP = [
-    ['1〜9', 'シーン切替（次のビートで）'], ['Shift+数字', 'すぐ切替'], ['0', 'タイトル（バンド名）'],
+    ['1〜9', 'シーン切替（次のビートで。もう一度押すとすぐ）'], ['Shift+1〜9', 'シーン 2 段目（声の輪・メロディ線・花火 など）'], ['0', 'タイトル（バンド名）'],
     ['→ / ←', '次の曲 / 前の曲（曲名を表示）'], ['Space', 'フラッシュ'], ['S（押している間）', 'ストロボ'],
     ['B', '暗転 ON/OFF'], ['C / Shift+C', 'パレット 次 / 前'], ['↑ / ↓', '感度'], ['Shift+↑ / ↓', '全体の明るさ'],
     ['A', 'オート ON/OFF'], ['Enter', 'タップテンポ（拍に合わせて 3 回以上）'], ['Q / W / E', 'テロップ 1〜3 を表示・消す'],
@@ -74,7 +79,9 @@
       }
 
       let handled = true;
-      if (SCENE_KEYS[code]) show.selectScene(SCENE_KEYS[code], { immediate: shift || code.endsWith('0') });
+      const sceneId = sceneForKey(code, shift);
+      if (/^(?:Digit|Numpad)\d$/.test(code) && !sceneId) ui.toast('このキーにはシーンがありません', 'warn');
+      else if (sceneId) show.selectScene(sceneId, { immediate: code.endsWith('0') });
       else if (code === 'ArrowRight') show.nextSong();
       else if (code === 'ArrowLeft') show.prevSong();
       else if (code === 'Space') show.flash(0.85, 'key') || ui.toast('フラッシュ制限中（光過敏対策）', 'warn');
@@ -110,5 +117,5 @@
     return { handle, up };
   }
 
-  VJ.keys = { install, SCENE_KEYS, KEY_HELP, forForm };
+  VJ.keys = { install, sceneForKey, KEY_HELP, forForm };
 })(globalThis.VJ = globalThis.VJ || {});

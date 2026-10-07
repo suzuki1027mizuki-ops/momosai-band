@@ -84,7 +84,7 @@
       this.ctx.resume().catch(() => {});
     }
 
-    /** 入力を開始。source: 'mic' | 'demo' | 'file' | 'buffer' */
+    /** 入力を開始。source: 'mic' | 'demo'（demo: band / sing / speech）| 'file' | 'display' | 'buffer' */
     async start(opts) {
       Object.assign(this.opts, opts || {});
       this._set('starting');
@@ -97,7 +97,8 @@
         if (this.opts.source === 'mic') {
           await this._startMic(this.opts.deviceId);
         } else if (this.opts.source === 'demo') {
-          const s = VJ.synth.demoSong(ctx.sampleRate);
+          const kind = this.opts.demo || 'band';
+          const s = kind === 'sing' || kind === 'speech' ? VJ.voiceSynth.demo(kind, ctx.sampleRate) : VJ.synth.demoSong(ctx.sampleRate);
           const ab = ctx.createBuffer(1, s.samples.length, ctx.sampleRate);
           ab.copyToChannel(s.samples, 0);
           this._startBuffer(ab, true);
@@ -454,7 +455,7 @@
         outputLatency: ctx && ctx.outputLatency !== undefined ? ctx.outputLatency : null,
         trackLatency: this.trackSettings && this.trackSettings.latency !== undefined ? this.trackSettings.latency : null,
         channels: this.channels,
-        device: this.opts.source === 'file' ? (this.nowPlaying || '音声ファイル') : this.opts.source === 'demo' ? 'デモ音源'
+        device: this.opts.source === 'file' ? (this.nowPlaying || '音声ファイル') : this.opts.source === 'demo' ? 'デモ音源' + ({ sing: '（歌）', speech: '（話し声）' }[this.opts.demo] || '')
           : this.opts.deviceLabel || (this.opts.source === 'mic' ? '既定のデバイス' : this.opts.source),
         chunk: this.diag.chunk,
         chunkMax: this.diag.chunkMax,

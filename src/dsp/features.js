@@ -11,7 +11,7 @@
   const { clamp01, powToDb, dbToLin, decay } = VJ.util;
 
   const TYPES = ['kick', 'snare', 'hat', 'accent', 'impact'];
-  const FLAG = { kick: 1, snare: 2, hat: 4, accent: 8, impact: 16, beat: 32, downbeat: 64 };
+  const FLAG = { kick: 1, snare: 2, hat: 4, accent: 8, impact: 16, beat: 32, downbeat: 64, note: 128 };
 
   function makeFeatures(cfg) {
     const H = cfg.historyLen;
@@ -30,6 +30,13 @@
       waveform: new Float32Array(cfg.waveLen),
       bpm: 0, beatPhase: 0, beatConf: 0, barPhase: 0, beatN: 0, tempoManual: false,
       melodic: false, // ドラムの無い曲として扱っているか
+      // 声
+      voiced: 0, // 声（音程のある音）が鳴っているか 0..1
+      pitch: 0.5, // 音程 0..1（C2〜C6）。無声の間は直前の値を保つ
+      pitchHz: 0, note: 0, pitchClass: 0, // Hz（無声は 0）・MIDI 番号・音名（0..1 = C〜B）
+      noteN: 0, // 音程の変わり目の回数
+      speech: false, speechScore: 0, // 話し声（司会・MC）と判定しているか・その度合い
+      pitchHist: new Float32Array(cfg.voice.histLen), // 音程の履歴（古い順、無声は -1）
     };
   }
 
@@ -64,6 +71,16 @@
       this.melRing = new Float64Array(32).fill(-1e12);
       this.melRingIdx = 0;
       this.activeSec = 0;
+
+      // 声：ピッチ・音程の変わり目・話し声
+      this.pitch = new D.PitchTracker(sr, cfg.pitch);
+      this.voice = new D.VoiceAnalyzer((cfg.pitch.every * hop) / sr, cfg.voice);
+      this.voiceMode = cfg.voice.mode;
+      this.voiceE = 0;
+      this.lastMelSample = -1e12;
+      this.voicedSm = 0;
+      this.pitchSm = 0.5;
+      this.lastKickDrum = false;
 
       // テンポ
       this.tempo = new D.TempoTracker(sr, hop);
@@ -185,6 +202,7 @@
       const nb = this.filters.length;
 
       const eFull = this.fullFilter.energy(buf, off, hop);
+      this.voiceE += eFull;
       for (let b = 0; b < nb; b++) {
         const e = this.filters[b].energy(buf, off, hop);
         this.bandE[b] = e;
@@ -213,6 +231,10 @@
       this.env.high.update(g * this.agc[3].norm(groupDb[3]));
       this.rmsDb = dbFull;
 
+      // 話し声の間は、子音をスネア・ハイハットとして扱わず、キメ・一撃・拍も出さない
+      const speechNow = cfg.speechGuard && this.voice.speech;
+      const noDrums = this.voiceMode !== 'off' || speechNow;
+
       // オンセット（高い帯域から：スネア判定をキック判定より先に）
       const sampleEnd = this.sampleCount;
       for (let b = nb - 1; b >= 0; b--) {
@@ -222,6 +244,7 @@
         const s = det.step(this.bandE[b], active ? Math.max(fl + cfg.gateDb, cfg.silenceAbsDb) : Infinity, this.sens);
         if (det.gateOpen && det.z > cfg.accent.zMin && det.flux > 0) this.lastZHop[b] = this.hopCount;
         const type = this.detType[b];
+        if ((type === 'snare' || type === 'hat') && noDrums) continue;
         if (type === 'kick' || type === 'snare' || type === 'hat') {
           // スネアの胴鳴りがキック帯域に漏れた分は、キック帯域のピークより明らかに小さければ捨てる
           if (s > 0 && type === 'kick' && this.hopCount - this.lastSnareHop <= cfg.kickSnareHops && det.rel < -cfg.kickSnareRelDb) continue;
@@ -229,7 +252,8 @@
           if (s > 0 && type === 'kick') {
             // 低域が中域より十分強い立ち上がりだけを「ドラムがある」証拠として数える
             // （ピアノやギターの低い音がキック帯域に漏れたものは中域の方が強い）
-            if (powToDb(this.bandE[0]) - powToDb(this.bandE[1] + this.bandE[2]) > cfg.drumRatioDb) {
+            this.lastKickDrum = powToDb(this.bandE[0]) - powToDb(this.bandE[1] + this.bandE[2]) > cfg.drumRatioDb;
+            if (this.lastKickDrum) {
               this.kickRing[this.kickRingIdx] = sampleEnd;
               this.kickRingIdx = (this.kickRingIdx + 1) % this.kickRing.length;
             }
@@ -248,14 +272,36 @@
       if (ms > 0) {
         this.melRing[this.melRingIdx] = sampleEnd;
         this.melRingIdx = (this.melRingIdx + 1) % this.melRing.length;
-        if (this.melMode) this._onset('kick', sampleEnd, ms);
+        if (this.melMode && sampleEnd - this.lastMelSample >= 0.1 * this.sr) {
+          this.lastKickDrum = false;
+          this._onset('kick', sampleEnd, ms);
+          this.lastMelSample = sampleEnd;
+        }
       } else if (this.melMode && this.melDet.strengthUpdate > 0 && this.boost.kick < this.melDet.strengthUpdate) {
         this.boost.kick = this.melDet.strengthUpdate;
       }
       if ((this.hopCount & 63) === 0) this._updateMode();
 
+      // 声（約 10ms ごと）
+      if (this.pitch.push(buf, off, hop)) {
+        const amp = Math.sqrt(this.voiceE / cfg.pitch.every);
+        this.voiceE = 0;
+        const ev = this.voice.step(this.pitch.hz, active, amp);
+        if (ev.noteOnset) {
+          this.flagsAcc |= FLAG.note;
+          this.features.noteN++;
+          if (this.onsetLog) this.onsetLog.push({ type: 'note', sample: sampleEnd, strength: ev.strength });
+          // 歌のモード：音量の山が無い音程の変わり目（レガート・合唱）もキックとして使う
+          if (this.voiceMode === 'sing' && this.melMode && sampleEnd - this.lastMelSample >= 0.1 * this.sr) {
+            this.lastKickDrum = false;
+            this._onset('kick', sampleEnd, ev.strength);
+            this.lastMelSample = sampleEnd;
+          }
+        }
+      }
+
       // テンポ推定用の立ち上がりの強さ
-      if (active) {
+      if (active && !speechNow) {
         const w = cfg.tempoWeights;
         let osf = 0;
         for (let b = 0; b < nb; b++) osf += w[b] * this.det[b].flux;
@@ -274,10 +320,13 @@
       this.peakLagIdx = (this.peakLagIdx + 1) % this.peakLag.length;
       if (sFull > this.fullPeak) this.fullPeak = sFull;
       else this.fullPeak = Math.max(sFull, this.fullPeak - ac.peakFall * this.hopSec);
-      if (this.hopCount - this.lastAccentHop >= this.accentHops && this.env.level.v >= ac.minLevel && sFull >= lagged + ac.loudDb) {
+      if (!speechNow && this.hopCount - this.lastAccentHop >= this.accentHops && this.env.level.v >= ac.minLevel && sFull >= lagged + ac.loudDb) {
         let cnt = 0;
         for (let b = 0; b < nb; b++) if (this.hopCount - this.lastZHop[b] <= ac.windowHops) cnt++;
-        if (cnt >= ac.minBands) {
+        // 低域（キック）か高域（シンバル）も一緒に立ち上がった一撃だけ（声の出だしは中域だけ）
+        let edge = !ac.edgeBands;
+        if (ac.edgeBands) for (const b of ac.edgeBands) if (this.hopCount - this.lastZHop[b] <= ac.windowHops) edge = true;
+        if (cnt >= ac.minBands && edge) {
           this.lastAccentHop = this.hopCount;
           this._onset('accent', sampleEnd, Math.max(0.5, Math.min(1, 0.4 + (sFull - lagged) / 12)));
         }
@@ -287,7 +336,10 @@
       const fast = this.fastPow.update(eFull);
       const slow = this.slowPow.update(eFull);
       const slowDb = powToDb(slow);
-      if (Math.sqrt(fast) < cfg.breakRatio * Math.sqrt(slow) && slowDb > fl[0].db + cfg.gateDb) {
+      if (speechNow) {
+        this.breakSec = 0;
+        this.impactArmedUntil = -1;
+      } else if (Math.sqrt(fast) < cfg.breakRatio * Math.sqrt(slow) && slowDb > fl[0].db + cfg.gateDb) {
         this.breakSec += this.hopSec;
         if (this.breakSec >= cfg.breakHold) this.impactArmedUntil = this.sampleCount + cfg.impactWindow * this.sr;
       } else {
@@ -332,7 +384,8 @@
         this.densIdx = (this.densIdx + 1) % this.densRing.length;
       }
       // ブレイク明けの強打 → インパクト
-      if ((type === 'kick' || type === 'accent') && strength >= 0.6 && sample <= this.impactArmedUntil) {
+      // （キックはドラムらしい低音のときだけ。ドラムの無い曲・話し声の出だしでは出さない）
+      if (((type === 'kick' && this.lastKickDrum) || type === 'accent') && strength >= 0.6 && sample <= this.impactArmedUntil) {
         this.impactArmedUntil = -1;
         this._onset('impact', sample, 1);
       }
@@ -366,13 +419,15 @@
       // テンポ・拍
       const ts = this.tempo.state(this.sampleCount, this.tempoState);
       f.bpm = ts.bpm; f.beatPhase = ts.phase; f.beatConf = ts.conf; f.barPhase = ts.bar; f.tempoManual = ts.manual;
-      if (ts.bpm && this.lastBeatIndex !== null && ts.beatIndex > this.lastBeatIndex && ts.conf >= 0.25 && this.active) {
+      const speechNow = this.cfg.speechGuard && this.voice.speech;
+      if (ts.bpm && this.lastBeatIndex !== null && ts.beatIndex > this.lastBeatIndex && ts.conf >= 0.25 && this.active && !speechNow) {
         this.flagsAcc |= FLAG.beat;
         f.beatN++;
         if (ts.bar < 0.25) this.flagsAcc |= FLAG.downbeat;
       }
       this.lastBeatIndex = ts.bpm ? ts.beatIndex : null;
       f.melodic = this.melMode;
+      this._voiceFrame(dt);
 
       f.onsetFlags = this.flagsAcc;
       this.flagsAcc = 0;
@@ -402,6 +457,25 @@
         this._waveform(latest);
       }
       return f;
+    }
+
+    _voiceFrame(dt) {
+      const f = this.features, vo = this.voice;
+      const v = vo.voiced && this.active;
+      this.voicedSm += ((v ? 1 : 0) - this.voicedSm) * (1 - Math.exp(-dt / (v ? 0.03 : 0.15)));
+      f.voiced = this.voicedSm;
+      if (v) {
+        this.pitchSm += (vo.norm(vo.midi) - this.pitchSm) * (1 - Math.exp(-dt / 0.04));
+        f.note = vo.midi;
+        f.pitchHz = 440 * Math.pow(2, (vo.midi - 69) / 12);
+        f.pitchClass = (((Math.round(vo.midi) % 12) + 12) % 12) / 12;
+      } else {
+        f.pitchHz = 0;
+      }
+      f.pitch = this.pitchSm;
+      f.speech = vo.speech;
+      f.speechScore = vo.level;
+      vo.history(f.pitchHist);
     }
 
     _spectrum(latest, dt) {

@@ -45,6 +45,24 @@
       },
       show: { switchSec: 45, kickFallbackSec: 60, autoFlash: false, react: 0.7, tiers: { low: ['aurora', 'stars'], mid: ['aurora', 'stars', 'scope'], high: ['horizon', 'scope', 'kaleido'] } },
     },
+    {
+      id: 'voice', name: '歌（アカペラ・弾き語りの歌・カラオケ）',
+      desc: '声の高さで色が変わり、音程が変わるたびに反応。子音（サ行・タ行など）をドラムとして扱いません。',
+      dsp: {
+        melodicMode: 'on', voice: { mode: 'sing' },
+        env: { level: 0.2, low: 0.25, mid: 0.18, high: 0.1 }, peak: { kick: 0.25, snare: 0.2 },
+      },
+      show: { switchSec: 30, kickFallbackSec: 45, autoFlash: false, react: 0.85, tiers: { low: ['orb', 'bokeh', 'aurora', 'melody'], mid: ['melody', 'orb', 'waves', 'smoke', 'petals'], high: ['melody', 'circle', 'fireworks', 'kaleido'] } },
+    },
+    {
+      id: 'speech', name: '司会・スピーチ・朗読',
+      desc: '話し声に合わせてやさしく動きます。フラッシュ・テンポに合わせた切替は使いません。',
+      dsp: {
+        melodicMode: 'on', voice: { mode: 'speech' }, melodic: { K: 1.8, minRise: 3, refractory: 0.15 },
+        env: { level: 0.3, low: 0.35, mid: 0.25, high: 0.15 }, peak: { kick: 0.35, snare: 0.3, hat: 0.15, accent: 0.5 },
+      },
+      show: { switchSec: 60, kickFallbackSec: 90, autoFlash: false, react: 0.6, noTempo: true, tiers: { low: ['orb', 'bokeh', 'aurora'], mid: ['orb', 'voiceprint', 'bokeh', 'waves'], high: ['orb', 'voiceprint', 'waves', 'stars'] } },
+    },
   ];
   VJ.profiles.DEFAULT_TIERS = DEFAULT_TIERS;
 

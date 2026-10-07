@@ -119,7 +119,9 @@
       this.director.silentFrom = null;
       this.state.beforeTest = null;
       const name = VJ.scenes.byId[id].nameJa;
-      if (opts.immediate || !this.lastActive) {
+      // 予約中の同じシーンをもう一度選んだら、拍を待たずに切り替える
+      const again = this.state.pending && this.state.pending.id === id;
+      if (opts.immediate || again || !this.lastActive) {
         this._applyScene(id);
         this._toast(`シーン: ${name}`);
       } else {
@@ -439,6 +441,7 @@
       fr.logoCorner = (logo === 'corner' || (logo === 'both' && !isTitle)) && s.sceneId !== 'test' ? this.settings.logoCorner || 'br' : '';
       fr.latSq = this.settings.latencySquare ? s.latSq : -1;
       fr.vignette = s.sceneId === 'test' ? 0 : 0.6;
+      fr.param = VJ.scenes.paramValues(fr.scene, this.settings.sceneParams && this.settings.sceneParams[fr.scene.id], fr.param);
       return fr;
     }
   }

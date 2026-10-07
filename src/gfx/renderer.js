@@ -26,6 +26,8 @@
       this.specBytes = new Uint8Array(64);
       this.specSlowBytes = new Uint8Array(64);
       this.waveBytes = new Uint8Array(512);
+      this.pitchBytes = new Uint8Array(128);
+      this.noParam = new Float32Array([0.5, 0.5, 0.5, 0.5]);
       this.feedbackScene = null;
       this.output = { rotate: 0, flipH: false, flipV: false, size: 1, x: 0, y: 0 };
       this.logo = null; // { tex, aspect }
@@ -60,6 +62,7 @@
       this.texSpec = r8(64);
       this.texSpecSlow = r8(64);
       this.texWave = r8(512);
+      this.texPitch = G.texture(gl, 128, 1, { internal: gl.R8, format: gl.RED, type: gl.UNSIGNED_BYTE, filter: gl.NEAREST });
       this.texBlank = G.texture(gl, 1, 1, { data: new Uint8Array(4) });
       if (this.text) this.text.reset(gl); else this.text = new G.TextLayer(gl);
       this.logo = null;
@@ -231,6 +234,15 @@
       gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 64, 1, gl.RED, gl.UNSIGNED_BYTE, this.specSlowBytes);
       gl.bindTexture(gl.TEXTURE_2D, this.texWave);
       gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 512, 1, gl.RED, gl.UNSIGNED_BYTE, this.waveBytes);
+      // 音程の履歴：0 = 無声、1..255 = 0..1
+      const ph = f.pitchHist, pb = this.pitchBytes;
+      if (ph) {
+        const n = Math.min(ph.length, 128), off = 128 - n;
+        for (let i = 0; i < off; i++) pb[i] = 0;
+        for (let i = 0; i < n; i++) { const v = ph[i]; pb[off + i] = v < 0 ? 0 : 1 + Math.round(Math.min(1, v) * 254); }
+        gl.bindTexture(gl.TEXTURE_2D, this.texPitch);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 128, 1, gl.RED, gl.UNSIGNED_BYTE, pb);
+      }
     }
 
     /** テクスチャ（縦横比 texAspect）を論理画面の中央付近に置く枠（uv 0..1）。maxW・maxH は画面に対する割合 */
@@ -289,6 +301,13 @@
       p.set('u_beatPhase', f.beatPhase || 0);
       p.set('u_bar', f.barPhase || 0);
       p.set('u_bpm', f.bpm || 0);
+      p.set('u_pitch', f.pitch === undefined ? 0.5 : f.pitch);
+      p.set('u_voiced', f.voiced || 0);
+      p.set('u_pitchClass', f.pitchClass || 0);
+      p.set('u_speech', f.speech ? 1 : 0);
+      p.set('u_noteN', (f.noteN || 0) % 4096);
+      p.set('u_param', fr.param || this.noParam);
+      p.tex('u_pitchHist', this.texPitch);
       p.set('u_pal', fr.pal);
       p.tex('u_spec', this.texSpec);
       p.tex('u_specSlow', this.texSpecSlow);
