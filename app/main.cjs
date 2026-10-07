@@ -161,7 +161,11 @@ function smoke(win) {
     if (bridge) bridge.close();
     app.exit(res.ok ? 0 : 1);
   };
-  const timer = setTimeout(() => done({ ok: false, error: 'timeout' }), 60000);
+  // 時間切れのときは、どこで止まったか（window.__smoke）も出す
+  const timer = setTimeout(() => {
+    win.webContents.executeJavaScript('window.__smoke || ""', true).catch(() => '?')
+      .then((stage) => done({ ok: false, error: 'timeout', stage }));
+  }, 60000);
   win.webContents.once('did-finish-load', async () => {
     try {
       const js = (code) => win.webContents.executeJavaScript(code, true);
@@ -173,7 +177,9 @@ function smoke(win) {
       if (fatal) throw new Error('起動できません: ' + fatal);
       const res = await js(`(async () => {
         const app = VJ.app;
+        window.__smoke = 'startAudio';
         await VJ.panel.startAudio({ source: 'mic' });
+        window.__smoke = 'frames';
         const f0 = app.frameNo;
         await new Promise((r) => setTimeout(r, 2500));
         const out = {
@@ -181,13 +187,22 @@ function smoke(win) {
           failed: app.renderer.info().failed, net: VJ.net.status, pin: VJ.net.info && VJ.net.info.pin, params: VJ.params,
           visibility: document.visibilityState, focus: document.hasFocus(), raf: await new Promise((r) => { let n = 0; const t0 = performance.now(); const f = () => { n++; if (performance.now() - t0 < 1000) requestAnimationFrame(f); else r(n); }; requestAnimationFrame(f); }),
         };
+        window.__smoke = 'openOutput';
         VJ.link.openOutput(app);
-        for (let i = 0; i < 100 && !(VJ.link.lastStatus && VJ.link.lastStatus.engineStatus === 'running' && VJ.link.lastStatus.io.net.status === 'on'); i++) await new Promise((r) => setTimeout(r, 100));
+        const tw = performance.now();
+        for (let i = 0; i < 100 && !(VJ.link.lastStatus && VJ.link.lastStatus.engineStatus === 'running' && VJ.link.lastStatus.io.net.status === 'on'); i++) {
+          const ls = VJ.link.lastStatus;
+          window.__smoke = 'openOutput i=' + i + ' t=' + Math.round(performance.now() - tw) + ' role=' + VJ.link.role + ' peer=' + !!VJ.link.peer
+            + ' closed=' + (VJ.link.peer && VJ.link.peer.closed) + ' st=' + (ls ? ls.engineStatus + '/' + (ls.io && ls.io.net.status) : '-');
+          await new Promise((r) => setTimeout(r, 100));
+        }
         out.role = VJ.link.role;
         out.outputStatus = VJ.link.lastStatus ? VJ.link.lastStatus.engineStatus : null;
         out.outputNet = VJ.link.lastStatus && VJ.link.lastStatus.io ? VJ.link.lastStatus.io.net.status : null;
         // 本番開始（離脱確認あり）のあとでも、操作側から出力ウィンドウを閉じて 1 画面に戻れる
+        window.__smoke = 'startShow';
         await VJ.link.request({ t: 'cmd', target: 'ui', name: 'startShow', args: [] }).catch(() => {});
+        window.__smoke = 'closeOutput';
         VJ.link.closeOutput();
         for (let i = 0; i < 60 && VJ.link.role !== 'solo'; i++) await new Promise((r) => setTimeout(r, 100));
         out.afterClose = VJ.link.role;
