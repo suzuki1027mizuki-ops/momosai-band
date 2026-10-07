@@ -93,7 +93,8 @@
       if (!app || typeof name !== 'string' || !Array.isArray(args)) return false;
       const show = app.show, a0 = args[0];
       const num = (v, lo, hi) => (typeof v === 'number' && isFinite(v) ? Math.max(lo, Math.min(hi, v)) : null);
-      if (show.state.locked && name !== 'blackout') return false;
+      // ロック中も暗転と「ストロボを止める」は通す（押している途中でロックしても止められるように）
+      if (show.state.locked && name !== 'blackout' && !(name === 'strobe' && !a0)) return false;
       switch (name) {
         case 'scene': {
           const id = typeof a0 === 'string' ? VJ.scenes.resolve(a0) : null;
@@ -111,7 +112,11 @@
         case 'tap': show.tap(); break;
         case 'master': if (num(a0, 0, 1) !== null) show.setMaster(a0); else return false; break;
         case 'sens': if (num(a0, -5, 5) !== null) show.setSensitivity(a0); else return false; break;
-        case 'strobe': show.setStrobe(!!a0); break;
+        case 'strobe':
+          show.setStrobe(!!a0);
+          // スマホは押している間 0.4 秒ごとに送り直す。届かなくなったら止める
+          net._strobeUntil = a0 && from === 'phone' ? performance.now() + 1500 : 0;
+          break;
         case 'test': show.toggleTestPattern(); break;
         default: return false;
       }
@@ -121,6 +126,7 @@
 
     /** 毎フレーム（音声解析をしているウィンドウ）：状態と特徴量を送る */
     frame(app, f, nowMs) {
+      if (net._strobeUntil && performance.now() > net._strobeUntil) { net._strobeUntil = 0; app.show.setStrobe(false); }
       if (!net.ws || net.ws.readyState !== 1 || !f) return;
       net._flags |= f.onsetFlags || 0;
       if (nowMs - net._statusT >= 200) {

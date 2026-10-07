@@ -57,10 +57,12 @@ void main() {
   float hueShift = (u_pitchS - 0.5) * 0.3 + u_time * 0.008;
   float soft = clamp(0.05 + 0.3 * blur + 0.1 * u_lvlS, 0.03, 0.6);
   float grow = size * (1.0 + 0.22 * u_lvlS + 0.08 * idle());
+  bool anyKick = kw[0] + kw[1] + kw[2] > 0.001;   // キックの影響が無いときは押しのけの計算を省く
   mat2 R = rot(0.3);
   vec3 acc = vec3(0.0);
+  int L0 = u_quality > 0.4 ? 0 : 1;                // GPU が苦しいときは奥の小さな玉の層を省く
 
-  for (int L = 0; L < 3; L++) {
+  for (int L = L0; L < 3; L++) {
     float fl = float(L);
     float cell = 0.1 * pow(1.95, fl);         // 奥 0.1 → 手前 0.38
     float spd = 0.45 + 0.45 * fl;              // 視差：手前ほど速く流れる
@@ -86,6 +88,7 @@ void main() {
       float sw = 0.0;
       vec2 push = vec2(0.0);
       for (int k = 0; k < 3; k++) {
+        if (!anyKick) break;
         vec2 dk = cs - kp[k];
         float w = kw[k] * exp(-dot(dk, dk) * 7.0);
         sw += w;

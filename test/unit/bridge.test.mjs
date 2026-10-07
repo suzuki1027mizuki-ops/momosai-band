@@ -2,7 +2,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import dgram from 'node:dgram';
-import { startBridge, oscMessage, oscBundle, oscDecode, oscToCommand, artDmx, featuresToOsc, lanAddresses } from '../../bridge/server.mjs';
+import net from 'node:net';
+import crypto from 'node:crypto';
+import { startBridge, vjOriginOk, oscMessage, oscBundle, oscDecode, oscToCommand, artDmx, featuresToOsc, lanAddresses } from '../../bridge/server.mjs';
 import { loadVJ } from '../helpers/load-src.mjs';
 
 const VJ = loadVJ([...['src/core/', 'src/dsp/', 'src/audio/synth.js', 'src/audio/voicesynth.js', 'src/show/', 'src/scenes/', 'src/ui/midi.js', 'src/ui/keys.js'], 'src/io/']);
@@ -147,6 +149,58 @@ test('ブリッジ：スマホは暗証番号でつながり、操作が VJ に�
     assert.equal(locked.ok, false);
     assert.equal(locked.locked, true);
     vj.close(); ph.close();
+  } finally {
+    b.close();
+  }
+});
+
+/** 生のソケットで WebSocket の接続要求を送り、応答の 1 行目とソケットを返す */
+function rawUpgrade(port, path, headers = '') {
+  return new Promise((resolve) => {
+    const s = net.connect(port, '127.0.0.1', () => {
+      s.write(`GET ${path} HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: ${crypto.randomBytes(16).toString('base64')}\r\nSec-WebSocket-Version: 13\r\n${headers}\r\n`);
+    });
+    let got = '';
+    s.on('data', (d) => { got += d.toString('latin1'); if (got.includes('\r\n\r\n')) resolve({ status: got.split('\r\n')[0], s }); });
+    s.on('error', () => {});
+    s.on('close', () => resolve({ status: got.split('\r\n')[0], s }));
+  });
+}
+function maskedText(obj) {
+  const p = Buffer.from(JSON.stringify(obj));
+  const m = crypto.randomBytes(4);
+  for (let i = 0; i < p.length; i++) p[i] ^= m[i & 3];
+  return Buffer.concat([Buffer.from([0x81, 0x80 | p.length]), m, p]);
+}
+
+test('ブリッジ：断られた接続をすぐ切られても・変な設定が来ても落ちない。ほかのサイトのページから /vj にはつなげない', async () => {
+  const b = await startBridge({ port: 0, oscPort: false, host: '127.0.0.1', pin: '1357' });
+  try {
+    // 断る（403）途中で相手が RST で切る
+    for (let i = 0; i < 30; i++) {
+      const s = net.connect(b.port, '127.0.0.1', () => {
+        s.write('GET /nope HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: abc\r\n\r\n');
+        setImmediate(() => s.resetAndDestroy());
+      });
+      s.on('error', () => {});
+    }
+    await wait(300);
+    // 呼び出し元（Origin）の確認
+    assert.match((await rawUpgrade(b.port, '/vj', 'Origin: https://evil.example\r\n')).status, /403/);
+    assert.match((await rawUpgrade(b.port, '/vj', 'Origin: http://192.168.1.5:8787\r\n')).status, /403/);
+    const ok = await rawUpgrade(b.port, '/vj', 'Origin: null\r\n');
+    assert.match(ok.status, /101/);
+    // 小数のポート・長すぎる送り先は使わない（送ろうとして落ちない）
+    ok.s.write(maskedText({ t: 'config', osc: { enabled: true, host: '127.0.0.1', port: 0.5 } }));
+    await wait(100);
+    ok.s.write(maskedText({ t: 'feat', f: { level: 0.5 } }));
+    await wait(200);
+    assert.equal(b.stats.oscOut, 0);
+    const res = await fetch(`http://127.0.0.1:${b.port}/status`).then((r) => r.json());
+    assert.equal(res.ok, true, 'ブリッジは動き続けている');
+    ok.s.destroy();
+    assert.ok(vjOriginOk(undefined) && vjOriginOk('null') && vjOriginOk('file://') && vjOriginOk('http://localhost:5173') && vjOriginOk('http://127.0.0.1'));
+    assert.ok(!vjOriginOk('https://example.com') && !vjOriginOk('http://localhost.evil.com') && !vjOriginOk('http://127.0.0.1.evil.com'));
   } finally {
     b.close();
   }

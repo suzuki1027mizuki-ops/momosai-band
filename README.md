@@ -117,8 +117,8 @@
 
 ### スマホ操作・OSC・照明・単体アプリ
 
-- **ブリッジ**（`bridge/`）：スマホ操作・OSC・Art-Net のための小さなサーバーです（依存パッケージなし）。ブラウザ版では `start-bridge-windows.bat` / `start-bridge-mac.command` で起動します（Node.js 18 以上が必要）。パネル ⑦ で「ブリッジにつなぐ」を ON にすると、スマホで開く URL と暗証番号が出ます。
-- **単体アプリ**（`app/`、Electron）：マイクの許可確認なし・出力ウィンドウをプロジェクター側に自動で全画面・PC の音の取り込み（Windows）・ブリッジ内蔵。`cd app && npm install && npm run dist:win`（`dist:mac` / `dist:linux`）で作れます。`npm run smoke` で自己診断（偽のマイクで起動 → 入力・描画・ブリッジ・出力ウィンドウを確認）します。
+- **ブリッジ**（`bridge/`）：スマホ操作・OSC・Art-Net のための小さなサーバーです（依存パッケージなし）。ブラウザ版では `start-bridge-windows.bat` / `start-bridge-mac.command` で起動します（Node.js 18 以上が必要）。パネル ⑦ で「ブリッジにつなぐ」を ON にすると、スマホで開く URL と暗証番号が出ます。VJ 本体用の接続口は、同じ PC でファイルから開いた VJ（か localhost のページ）だけを受け付けます。
+- **単体アプリ**（`app/`、Electron）：マイクの許可確認なし・出力ウィンドウをプロジェクター側に自動で全画面・PC の音の取り込み（Windows）・ブリッジ内蔵。`cd app && npm install && npm run dist:win`（`dist:mac` / `dist:linux`）で作れます。`npm run smoke` で自己診断（偽のマイクで起動 → 入力・描画・ブリッジ・出力ウィンドウの開閉を確認）します。
 
 ## 遅延を小さくするための設計
 

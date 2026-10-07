@@ -94,11 +94,26 @@
       return (this.profile && this.profile.show.crossfade) || 0;
     }
 
+    /** フェードアウト中のシーンの重み（1 → 0） */
+    _xmix(x) {
+      const t = Math.min(1, Math.max(0, (this.now - x.t0) / x.dur));
+      return (x.w0 === undefined ? 1 : x.w0) * (1 - t * t * (3 - 2 * t));
+    }
+
     _applyScene(id) {
       const def = VJ.scenes.byId[id] || VJ.scenes.byId.title;
       const prev = this.state.sceneId, dur = this.crossfadeSec();
       if (dur > 0 && this._started && prev !== def.id && prev !== 'test' && def.id !== 'test' && this.sceneAvailable(prev)) {
-        this.xfade = { id: prev, t0: this.now, dur, start: this.state.sceneStart, uniforms: this.state.uniforms };
+        // フェードの途中でまた切り替えたら、いま多く見えている方を消えていく側にして、その重みから続ける
+        // （描画先は 2 組なので 3 つは混ぜられない。少ない方だけが急に消える＝変化を半分以下に抑える）
+        let out = { id: prev, start: this.state.sceneStart, uniforms: this.state.uniforms, w0: 1 };
+        const px = this.xfade;
+        if (px && px.id !== prev) {
+          const m = this._xmix(px);
+          if (m > 0.5 && px.id !== def.id && this.sceneAvailable(px.id)) out = { id: px.id, start: px.start, uniforms: px.uniforms, w0: m };
+          else out.w0 = 1 - m;
+        }
+        this.xfade = Object.assign(out, { t0: this.now, dur });
       } else {
         this.xfade = null;
       }
@@ -138,6 +153,7 @@
       if (!this.sceneAvailable(id)) { this._toast(t('「{0}」は使えません（シェーダエラー）', VJ.sceneName(VJ.scenes.byId[id])), 'warn'); return false; }
       this.director.noteSwitch(this.now);
       this.director.silentFrom = null;
+      this.director.mcOverride = true; // 操作者が選んだ：この MC の間はタイトルに戻さない
       this.state.beforeTest = null;
       const name = VJ.sceneName(VJ.scenes.byId[id]);
       // 予約中の同じシーンをもう一度選んだら、拍を待たずに切り替える
@@ -194,6 +210,7 @@
       if (song.palette !== null) this.setPalette(song.palette);
       this.director.noteSwitch(this.now);
       this.director.silentFrom = null;
+      this.director.mcOverride = true; // 操作者が選んだ：この MC の間はタイトルに戻さない
       if (this.onSongStart) this.onSongStart(i);
       if (!song.notitle) this.showSongTitle();
       this._toast(`M${i + 1} ${song.title}`);
@@ -477,13 +494,14 @@
       fr.param = this.sceneParams(fr.scene, fr.param);
       const x = this.xfade;
       if (x) {
-        const xf = fr._xf || (fr._xf = { scene: null, uniforms: null, param: null, sceneTime: 0, mix: 0 });
-        const t = Math.min(1, Math.max(0, (this.now - x.t0) / x.dur));
+        const xf = fr._xf || (fr._xf = { scene: null, uniforms: null, param: null, sceneTime: 0, mix: 0, titleLogo: false });
         xf.scene = VJ.scenes.byId[x.id];
         xf.uniforms = x.uniforms;
         xf.param = this.sceneParams(xf.scene, xf.param);
         xf.sceneTime = this.now - x.start;
-        xf.mix = 1 - t * t * (3 - 2 * t);
+        xf.mix = this._xmix(x);
+        // タイトルからのフェードアウト中もロゴのまま（文字に変わらない）
+        xf.titleLogo = x.id === 'title' && !s.endState && (logo === 'title' || logo === 'both');
         fr.xfade = xf;
       } else {
         fr.xfade = null;

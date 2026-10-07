@@ -397,5 +397,6 @@
     "スマホからの操作・OSC・Art-Net には「ブリッジ」が要ります。単体アプリには入っています。ブラウザ版は <code>bridge</code> フォルダの起動ファイル（Node.js が必要）で起動します。": "Phone control, OSC and Art-Net need the \"bridge\". The desktop app includes it. For the browser version, start it with the launcher in the <code>bridge</code> folder (requires Node.js).",
     "受信：ブリッジの UDP <b id=\"osc-in\">9000</b> 番。<code>/vj/scene 3</code>・<code>/vj/flash</code>・<code>/vj/blackout 1</code>・<code>/vj/next</code>・<code>/vj/master 0.8</code> など（手順書参照）": "Receive: bridge UDP port <b id=\"osc-in\">9000</b>. <code>/vj/scene 3</code>, <code>/vj/flash</code>, <code>/vj/blackout 1</code>, <code>/vj/next</code>, <code>/vj/master 0.8</code>, etc. (see the manual)",
     "映像は出力ウィンドウに出ています。キー操作とこのパネルはそのまま使えます。出力ウィンドウはプロジェクター側へ移動して<b>ダブルクリック</b>（または F）で全画面に。閉じるとこの画面に戻ります。": "The visuals are in the output window. Keys and this panel work as usual. Move the output window to the projector and <b>double-click</b> it (or press F) for fullscreen. Closing it returns to this screen.",
+    "出力ウィンドウを閉じられませんでした。出力ウィンドウを直接閉じてください": "Could not close the output window. Please close it directly.",
   };
 })(globalThis.VJ = globalThis.VJ || {});

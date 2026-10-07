@@ -272,11 +272,11 @@
       if (!this.programs[def.id]) return false;
       const x = fr.xfade && fr.xfade.mix > 0.001 && this.programs[fr.xfade.scene.id] && fr.xfade.scene.id !== def.id ? fr.xfade : null;
       const main = this._slot(def, x ? x.scene.id : null);
-      const dst = this._drawScene(main, def, fr, fr.uniforms, fr.param, fr.sceneTime);
+      const dst = this._drawScene(main, def, fr, fr.uniforms, fr.param, fr.sceneTime, fr.titleLogo);
       let dst2 = null;
       if (x) {
         const other = this._slot(x.scene, def.id);
-        dst2 = this._drawScene(other, x.scene, fr, x.uniforms, x.param, x.sceneTime);
+        dst2 = this._drawScene(other, x.scene, fr, x.uniforms, x.param, x.sceneTime, x.titleLogo);
       }
 
       // 仕上げ
@@ -307,7 +307,7 @@
     }
 
     /** 1 シーンを描画先の組に描く。描いたターゲットを返す */
-    _drawScene(sl, def, fr, uniforms, param, sceneTime) {
+    _drawScene(sl, def, fr, uniforms, param, sceneTime, logo) {
       const gl = this.gl, f = fr.f, p = this.programs[def.id];
       const src = sl.targets[sl.ping], dst = sl.targets[1 - sl.ping];
       gl.bindFramebuffer(gl.FRAMEBUFFER, dst.fb);
@@ -343,7 +343,7 @@
       p.tex('u_specSlow', this.texSpecSlow);
       p.tex('u_wave', this.texWave);
       p.tex('u_prev', src.tex);
-      if (fr.titleLogo && this.logo) {
+      if (logo && this.logo) {
         p.tex('u_title', this.logo.tex);
         if (p.has('u_titleRect')) p.set('u_titleRect', this.fitRect(this.logo.aspect, 0.7, 0.6, 0.5, 0.5));
       } else {

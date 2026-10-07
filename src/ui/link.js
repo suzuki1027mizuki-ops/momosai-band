@@ -93,11 +93,14 @@
 
     /** 操作側：出力ウィンドウを開く（ポップアップがブロックされないよう、クリック直後にまず開く） */
     openOutput(app) {
-      if (link.role === 'control' && link.peer && !link.peer.closed) { link.peer.focus(); return; }
+      // 閉じている途中の出力ウィンドウ（「閉じる」の直後）は、前面に出さずに新しく開く
+      const closing = link._closing && !link._closing.closed && link._closing === link.peer ? link._closing : null;
+      if (link.role === 'control' && link.peer && !link.peer.closed && !closing) { link.peer.focus(); return; }
       if (link.role === 'control') link.closeOutput(true); // 閉じた直後（見張りが気づく前）でも元に戻してから開く
       const base = location.href.replace(/[?#].*$/, '');
       const keep = ['test', 'scale', 'pr', 'desync'].filter((k) => VJ.params[k] !== undefined).map((k) => `&${k}=${encodeURIComponent(VJ.params[k])}`).join('');
-      const w = window.open(base + '?role=output' + keep, 'momosai-vj-output', 'popup,width=960,height=540');
+      // 同じ名前だと閉じている途中のウィンドウが使い回されるので、そのときは別の名前で
+      const w = window.open(base + '?role=output' + keep, closing ? 'momosai-vj-output-' + Date.now() : 'momosai-vj-output', 'popup,width=960,height=540');
       if (!w) { app.ui.toast(VJ.t('出力ウィンドウを開けませんでした（ポップアップのブロックを解除してください）'), 'warn'); return; }
       link.adopt(app, w, true);
       // 画面が 2 つあれば、もう一方（プロジェクター）へ移す（「ウィンドウの管理」の許可が必要）
@@ -121,7 +124,11 @@
       // ブリッジ・USB-DMX は出力ウィンドウが受け持つ（両方からつなぐと操作が 2 回になる）
       VJ.net._close();
       VJ.net.url = '';
-      VJ.dmx.closeSerial();
+      // 開いていた USB-DMX は、閉じてから出力ウィンドウで開き直す（同じポートは 2 か所で開けない）
+      const dmxInfo = VJ.dmx.port ? VJ.dmx.info || {} : null;
+      VJ.dmx.closeSerial().then(() => {
+        if (dmxInfo) link.request({ t: 'cmd', target: 'dmx', name: 'openGranted', args: [dmxInfo] }).catch(() => {});
+      });
       const resume = document.getElementById('resume-box');
       if (resume) resume.hidden = true; // 出力側が本番の状態を持っているので、古い「前回の続き」は出さない
       app.paused = true;
@@ -147,9 +154,20 @@
     /** 操作側：出力ウィンドウを閉じて 1 画面に戻る */
     closeOutput(alreadyClosed) {
       if (link.role !== 'control') return;
+      if (!alreadyClosed && link.peer && !link.peer.closed) {
+        // 出力側の「本番中の離脱確認」を外してから閉じる（確認が残っていると閉じるのが取り消される。
+        // Electron では何も表示されずに取り消される）。1 画面に戻すのは、実際に閉じたのを _poll が見てから
+        const peer = (link._closing = link.peer);
+        const wait = new Promise((res) => setTimeout(res, 1500));
+        Promise.race([link.request({ t: 'cmd', target: 'app', name: 'releaseGuard', args: [] }).catch(() => {}), wait])
+          .then(() => {
+            try { peer.close(); } catch (e) { /* noop */ }
+            setTimeout(() => { if (link.peer === peer && !peer.closed) link.app.ui.toast(VJ.t('出力ウィンドウを閉じられませんでした。出力ウィンドウを直接閉じてください'), 'warn'); }, 3000);
+          });
+        return;
+      }
       clearInterval(link._poll);
       link._closedPeer = link.peer;
-      if (!alreadyClosed && link.peer && !link.peer.closed) link.peer.close();
       const app = link.app, local = link.local;
       const last = app.show.session();
       app.show = local.show;
@@ -299,7 +317,7 @@
         else if (d.target === 'engine') value = await app.engine[d.name](...(d.args || []));
         else if (d.target === 'app') value = await app[d.name](...(d.args || []));
         else if (d.target === 'ui') value = await app.ui[d.name](...(d.args || []));
-        else if (d.target === 'dmx' && (d.name === 'openGranted' || d.name === 'closeSerial')) value = await VJ.dmx[d.name]();
+        else if (d.target === 'dmx' && (d.name === 'openGranted' || d.name === 'closeSerial')) value = await VJ.dmx[d.name](...(d.args || []).slice(0, 1));
         if (value && typeof value === 'object' && !Array.isArray(value)) value = JSON.parse(JSON.stringify(value));
         if (Array.isArray(value)) value = value.map((x) => (x && typeof x.toJSON === 'function' ? x.toJSON() : x));
       } catch (e) {

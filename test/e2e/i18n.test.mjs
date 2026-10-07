@@ -70,6 +70,9 @@ test('英語：パネル・キー一覧・診断表示・トースト・状態�
   await page.selectOption('#opt-lang', 'ja');
   assert.match(await page.textContent('#btn-show'), /ショー開始/);
   assert.match(await page.textContent('#keys-full'), /フラッシュ/);
+  // 英語のときにコードが書いた文字（MIDI の状態など）も日本語に戻る。受信ポートの番号は消えない
+  const ms = await page.textContent('#midi-status');
+  assert.ok(!ms.trim() || JP.test(ms), 'midi-status: ' + ms);
   assert.deepEqual(errors, []);
   await ctx.close();
 });

@@ -137,6 +137,18 @@ async function start() {
   if (SMOKE) smoke(win);
 }
 
+// 本番中の離脱確認（ページの beforeunload）。Electron は何も表示せずに閉じるのを取り消すので、ここで確かめる
+app.on('web-contents-created', (_e, wc) => {
+  wc.on('will-prevent-unload', (e) => {
+    const win = BrowserWindow.fromWebContents(wc);
+    const r = dialog.showMessageBoxSync(win || undefined, {
+      type: 'warning', message: '本番中です。閉じますか？', detail: '閉じると映像が止まります。',
+      buttons: ['閉じる', '閉じない'], defaultId: 1, cancelId: 1, noLink: true,
+    });
+    if (r === 0) e.preventDefault(); // 確認を無視して閉じる
+  });
+});
+
 app.on('window-all-closed', () => {
   if (bridge) bridge.close();
   app.quit();
@@ -174,12 +186,19 @@ function smoke(win) {
         out.role = VJ.link.role;
         out.outputStatus = VJ.link.lastStatus ? VJ.link.lastStatus.engineStatus : null;
         out.outputNet = VJ.link.lastStatus && VJ.link.lastStatus.io ? VJ.link.lastStatus.io.net.status : null;
+        // 本番開始（離脱確認あり）のあとでも、操作側から出力ウィンドウを閉じて 1 画面に戻れる
+        await VJ.link.request({ t: 'cmd', target: 'ui', name: 'startShow', args: [] }).catch(() => {});
+        VJ.link.closeOutput();
+        for (let i = 0; i < 60 && VJ.link.role !== 'solo'; i++) await new Promise((r) => setTimeout(r, 100));
+        out.afterClose = VJ.link.role;
         return out;
       })()`);
       res.windows = BrowserWindow.getAllWindows().length;
+      // 2 つ目のウィンドウは、上の「閉じる」で閉じているはず
+      res.ok2 = res.afterClose === 'solo' && res.windows === 1;
       res.bridgePin = bridge ? bridge.pin : null;
       res.ok = res.engine === 'running' && res.frames > 30 && (!process.env.MOMOSAI_FAKE_WAV || res.level > -60) && res.failed.length === 0 && res.net === 'on' && res.pin === res.bridgePin
-        && res.windows === 2 && res.role === 'control' && res.outputStatus === 'running' && res.outputNet === 'on';
+        && res.ok2 && res.role === 'control' && res.outputStatus === 'running' && res.outputNet === 'on';
       clearTimeout(timer);
       done(res);
     } catch (e) {

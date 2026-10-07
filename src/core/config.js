@@ -90,7 +90,8 @@
     melodicMode: 'auto', // auto: ドラムが無ければ自動で切替 / on: 常に / off: 使わない
     drumRatioDb: -2, // キック時に 低域 ÷ 中域 がこれより大きければドラムとみなす
     // 声：ピッチ推定（YIN）
-    pitch: { fmin: 70, fmax: 1100, every: 4, thr: 0.15, maxAperiodic: 0.3, lowpass: 2000 },
+    // everySec：推定の間隔（秒）。ホップ数はサンプルレートから決める（96kHz でも時間で同じ間隔にする）
+    pitch: { fmin: 70, fmax: 1100, everySec: 0.0107, thr: 0.15, maxAperiodic: 0.3, lowpass: 2000 },
     // 声の扱い。mode: off（楽器と同じ）/ sing（歌：音程の変わり目にも反応・子音をドラム扱いしない）
     //                 / speech（話し声：子音をドラム扱いしない）
     voice: {

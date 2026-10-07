@@ -65,6 +65,8 @@
       return true;
     };
     app.getSettings = () => JSON.parse(JSON.stringify(app.settings));
+    // 操作側から出力ウィンドウを閉じる前に呼ばれる（離脱確認を外す）
+    app.releaseGuard = () => { VJ.guard.showing = false; return true; };
     app.show.onTap = () => (app.extractor ? app.extractor.tap() : 0);
     app.show.onSongStart = () => { if (app.extractor) app.extractor.tempo.clearManual(); };
     // 前回の続きから再開できるように、曲・シーンの位置を保存（操作ウィンドウ以外）

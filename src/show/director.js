@@ -18,6 +18,7 @@
       this.lastSwitch = -1e9;
       this.switches = 0;
       this.silentFrom = null; // 無音でタイトルにする前のシーン
+      this.mcOverride = false; // MC 中に操作者がシーンを選んだ（話し声が終わるまでタイトルにしない）
       this.rng = VJ.util.rng(1234);
     }
 
@@ -34,7 +35,8 @@
       }
       // 話し声（MC）→ タイトル（設定で ON のとき。司会のタイプでは使わない）
       const mcTitle = !!(show.settings && show.settings.speechTitle) && !(show.profile && show.profile.id === 'speech');
-      if (mcTitle && f.speech && st.sceneId !== 'title' && !this.silentFrom) {
+      if (!f.speech) this.mcOverride = false;
+      if (mcTitle && f.speech && !this.mcOverride && st.sceneId !== 'title' && !this.silentFrom) {
         this.silentFrom = st.sceneId;
         this.musicSince = 0;
         return { scene: 'title', reason: 'speech' };

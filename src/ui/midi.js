@@ -98,7 +98,8 @@
       }
       const action = midi.map(settings || show.settings)[key];
       if (!action) return false;
-      if (show.state.locked && action !== 'blackout') return false;
+      // ロック中も暗転と「ストロボを離す」は通す（押している途中でロックしても止められるように）
+      if (show.state.locked && action !== 'blackout' && !(action === 'strobe' && release)) return false;
       // つまみ
       if (action === 'master' || action === 'sens') {
         if (!cc) return false;

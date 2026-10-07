@@ -129,6 +129,54 @@ test('オート：一定時間後のアクセントで切替・無音でタイ�
   assert.equal(c.state.sceneId, before);
 });
 
+test('オート＋MC のときはタイトル：MC 中に操作者が選んだシーンは、話し声が終わるまでタイトルに戻さない', () => {
+  const s = Object.assign({}, VJ.defaultSettings, { auto: true, speechTitle: true, setlistText: '' });
+  const c = new VJ.ShowController(s);
+  c._applyScene('ripple');
+  let t = 0;
+  const step = (f) => { t += 1 / 60; c.update(fakeFeatures(f), 1 / 60, t); };
+  for (let i = 0; i < 60; i++) step();
+  step({ speech: true });
+  assert.equal(c.state.sceneId, 'title', '話し声でタイトルへ');
+  c.selectScene('aurora', { immediate: true });
+  for (let i = 0; i < 120; i++) step({ speech: true });
+  assert.equal(c.state.sceneId, 'aurora', '選んだシーンのまま');
+  // 演奏 → 次の MC ではまたタイトルへ
+  for (let i = 0; i < 60 * 5; i++) step();
+  step({ speech: true });
+  assert.equal(c.state.sceneId, 'title');
+});
+
+test('クロスフェードの途中でまた切り替えても、見えている絵が急に入れ替わらない', () => {
+  const s = Object.assign({}, VJ.defaultSettings, { auto: false, crossfade: 1, setlistText: '' });
+  const c = new VJ.ShowController(s);
+  let t = 0;
+  const step = (n) => { for (let i = 0; i < n; i++) { t += 1 / 60; c.update(fakeFeatures(), 1 / 60, t); } return c.frame(fakeFeatures(), 1 / 60, null); };
+  c._applyScene('ripple');
+  step(60);
+  c.selectScene('aurora', { immediate: true });
+  const a = step(18); // 0.3 秒：ripple がまだ多く見えている
+  assert.equal(a.xfade.scene.id, 'ripple');
+  const m = a.xfade.mix;
+  assert.ok(m > 0.6 && m < 0.9, 'mix ' + m);
+  c.selectScene('tunnel', { immediate: true });
+  const b = step(0);
+  assert.equal(b.xfade.scene.id, 'ripple', '多く見えている方が消えていく側のまま');
+  assert.ok(Math.abs(b.xfade.mix - m) < 0.02, `${m} -> ${b.xfade.mix}`);
+  // 半分を過ぎてから切り替えたら、新しく入ってきた方が消えていく側になる
+  step(60);
+  c.selectScene('aurora', { immediate: true });
+  const d = step(42); // 0.7 秒：aurora の方が多い
+  const m2 = d.xfade.mix;
+  assert.equal(d.xfade.scene.id, 'tunnel');
+  c.selectScene('stars', { immediate: true });
+  const e = step(0);
+  assert.equal(e.xfade.scene.id, 'aurora');
+  assert.ok(Math.abs(e.xfade.mix - (1 - m2)) < 0.02, `${1 - m2} -> ${e.xfade.mix}`);
+  step(70);
+  assert.equal(c.frame(fakeFeatures(), 1 / 60, null).xfade, null, 'フェードは終わる');
+});
+
 test('光過敏判定ヘルパー：3Hz 以下は通り、5Hz の点滅は検出', () => {
   const fps = 60;
   const sq = (hz) => Array.from({ length: fps * 3 }, (_, i) => (Math.floor((i / fps) * hz * 2) % 2 ? 0.6 : 0.05));
@@ -191,6 +239,14 @@ test('MIDI ラーン：学習した操作に割り当てが変わり、設定に
   assert.equal(c.state.strobe, true);
   VJ.midi.handle(c, [0x80, 50, 0], s);
   assert.equal(c.state.strobe, false);
+  // 押している途中でロックしても、離せば止まる（ロック中は新たには押せない）
+  VJ.midi.handle(c, [0x90, 50, 100], s);
+  c.lock();
+  VJ.midi.handle(c, [0x80, 50, 0], s);
+  assert.equal(c.state.strobe, false, 'ロック中でもストロボを離せる');
+  VJ.midi.handle(c, [0x90, 50, 100], s);
+  assert.equal(c.state.strobe, false, 'ロック中は押せない');
+  c.unlock();
   // 操作の一覧：全シーンと主な操作がある
   const ids = VJ.midi.actions().map((a) => a.id);
   for (const sc of VJ.scenes.list) if (!sc.hidden) assert.ok(ids.includes('scene:' + sc.id), sc.id);

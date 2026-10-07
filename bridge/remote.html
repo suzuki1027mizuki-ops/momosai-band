@@ -161,8 +161,17 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); }
   });
   $('pin').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btn-login').click(); });
   const strobe = $('btn-strobe');
-  strobe.addEventListener('pointerdown', (e) => { e.preventDefault(); send('strobe', [true]); });
-  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) strobe.addEventListener(ev, () => send('strobe', [false]));
+  // 押している間は送り直し続ける（途中で電波が切れても VJ 側が自動で止める）
+  let strobeT = 0;
+  const strobeOff = () => { if (strobeT) { clearInterval(strobeT); strobeT = 0; send('strobe', [false]); } };
+  strobe.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    send('strobe', [true]);
+    clearInterval(strobeT);
+    strobeT = setInterval(() => send('strobe', [true]), 400);
+  });
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) strobe.addEventListener(ev, strobeOff);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) strobeOff(); });
   let mt = 0;
   $('master').addEventListener('input', () => { const now = Date.now(); if (now - mt > 80) { mt = now; send('master', [+$('master').value]); } });
   $('master').addEventListener('change', () => send('master', [+$('master').value]));

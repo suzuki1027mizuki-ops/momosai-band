@@ -104,6 +104,11 @@
       dmx.app = app;
       const c = dmx.config(app.settings);
       if ((!c.enabled || c.out === 'artnet') && dmx.port) dmx.closeSerial();
+      // USB-DMX の種類を変えたら、通信の設定（速さ・ストップビット）を変えて開き直す
+      else if (c.enabled && dmx.port && dmx.serialMode !== c.out && !dmx._reopening) {
+        dmx._reopening = true;
+        dmx.openSerial(dmx.port).finally(() => { dmx._reopening = false; });
+      }
       if (!c.enabled) dmx.status = 'off';
       else if (c.out === 'artnet') dmx.status = VJ.net && VJ.net.status === 'on' ? 'on' : 'wait-bridge';
       else dmx.status = dmx.port ? 'on' : 'no-port';
@@ -156,10 +161,15 @@
       return port;
     },
 
-    /** 許可済みの USB-DMX を開く（2 画面のときは、操作側で選んだあと出力側でこれを呼ぶ） */
-    async openGranted() {
+    /** 許可済みの USB-DMX を開く（2 画面のときは、操作側で選んだあと出力側でこれを呼ぶ）。
+     *  info：操作側で選んだポートの getInfo()（同じ USB の製品番号のポートを選ぶ） */
+    async openGranted(info) {
       if (!navigator.serial) return false;
-      const ports = await navigator.serial.getPorts();
+      let ports = await navigator.serial.getPorts();
+      if (info && info.usbVendorId !== undefined) {
+        const same = ports.filter((p) => { const i = p.getInfo ? p.getInfo() : {}; return i.usbVendorId === info.usbVendorId && i.usbProductId === info.usbProductId; });
+        if (same.length) ports = same;
+      }
       if (!ports.length) { dmx.status = 'no-port'; return false; }
       return dmx.openSerial(ports[ports.length - 1]);
     },
@@ -172,6 +182,7 @@
         dmx.port = port;
         dmx.writer = port.writable.getWriter();
         dmx.serialMode = c.out;
+        dmx.info = port.getInfo ? port.getInfo() : null;
         dmx.status = 'on';
         dmx.error = '';
         return true;

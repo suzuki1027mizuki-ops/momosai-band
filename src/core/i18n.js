@@ -32,6 +32,18 @@
       return args.length ? r.replace(/\{(\d)\}/g, (m, i) => (args[i] === undefined ? '' : String(args[i]))) : r;
     },
 
+    /** 英語の訳 → 元の日本語（英語のときにコードが書いた文字を、元の文として覚えるため） */
+    _ja(v) {
+      if (!i18n._rev || i18n._revN !== i18n.en) {
+        i18n._rev = new Map();
+        i18n._revN = i18n.en;
+        for (const k of Object.keys(i18n.en)) if (!i18n._rev.has(i18n.en[k])) i18n._rev.set(i18n.en[k], k);
+      }
+      const key = v.trim();
+      const ja = i18n._rev.get(key);
+      return ja === undefined ? v : v.replace(key, ja);
+    },
+
     /** 辞書にあれば訳す（無ければそのまま）。前後の空白は残す */
     _tx(orig) { return i18n.lang === 'en' ? i18n._en(orig) : orig; },
     _en(orig) {
@@ -66,7 +78,7 @@
           let m = origAttr.get(el);
           if (!m) origAttr.set(el, (m = {}));
           const cur = el.getAttribute(a);
-          if (m[a] === undefined || (cur !== m[a] && cur !== i18n._en(m[a]))) m[a] = cur; // コードが書き換えた
+          if (m[a] === undefined || (cur !== m[a] && cur !== i18n._en(m[a]))) m[a] = i18n._ja(cur); // コードが書き換えた
           el.setAttribute(a, i18n._tx(m[a]));
         }
       }
@@ -78,7 +90,7 @@
         if (!p || i18n._skip(p) || p.closest('[data-i18n-html]')) continue;
         // あとからコードが書き換えた文字は、それを元の文として覚え直す
         const known = origText.get(n);
-        if (known === undefined || (n.nodeValue !== known && n.nodeValue !== i18n._en(known))) origText.set(n, n.nodeValue);
+        if (known === undefined || (n.nodeValue !== known && n.nodeValue !== i18n._en(known))) origText.set(n, i18n._ja(n.nodeValue));
         const o = origText.get(n);
         const want = i18n.lang === 'en' ? i18n._tx(o) : o;
         if (n.nodeValue !== want) n.nodeValue = want;

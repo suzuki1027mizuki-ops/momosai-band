@@ -90,6 +90,16 @@ test('話し声：司会のような話し声を数秒で話し声と判定す�
   }
 });
 
+test('話し声：サンプルレートが 44.1k / 96k でも同じように判定する（推定の間隔を時間で決める）', () => {
+  for (const sr of [44100, 96000]) {
+    const r = analyze(VJ, V.speak({ sr }).samples, sr, { keepFrames: true });
+    const first = r.frames.find((f) => f.speech);
+    assert.ok(first && first.t < 5, sr + ': detected at ' + (first && first.t));
+    const sing = analyze(VJ, V.sing({ sr }).samples, sr, { keepFrames: true });
+    assert.equal(sing.frames.filter((f) => f.speech).length, 0, sr + ': singing is not speech');
+  }
+});
+
 test('話し声：歌・合唱・ロングトーン・バンド演奏・ドラムの無い曲は話し声と判定しない', () => {
   const cases = [
     ['sing', V.sing({}).samples], ['sing-m', V.sing({ bpm: 120, female: false, seed: 7 }).samples], ['sing-fast', V.sing({ bpm: 150, seed: 8, legato: 0.1, vib: 0 }).samples],

@@ -73,8 +73,9 @@
       this.activeSec = 0;
 
       // 声：ピッチ・音程の変わり目・話し声
-      this.pitch = new D.PitchTracker(sr, cfg.pitch);
-      this.voice = new D.VoiceAnalyzer((cfg.pitch.every * hop) / sr, cfg.voice);
+      const pEvery = (this.pitchEvery = Math.max(1, Math.round((cfg.pitch.everySec * sr) / hop)));
+      this.pitch = new D.PitchTracker(sr, Object.assign({}, cfg.pitch, { every: pEvery }));
+      this.voice = new D.VoiceAnalyzer((pEvery * hop) / sr, cfg.voice);
       this.voiceMode = cfg.voice.mode;
       this.voiceE = 0;
       this.lastMelSample = -1e12;
@@ -285,7 +286,7 @@
 
       // 声（約 10ms ごと）
       if (this.pitch.push(buf, off, hop)) {
-        const amp = Math.sqrt(this.voiceE / cfg.pitch.every);
+        const amp = Math.sqrt(this.voiceE / this.pitchEvery);
         this.voiceE = 0;
         const ev = this.voice.step(this.pitch.hz, active, amp, this.pitch.aperiodic);
         if (ev.noteOnset) {

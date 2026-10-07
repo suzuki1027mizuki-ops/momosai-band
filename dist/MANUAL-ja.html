@@ -228,9 +228,11 @@ pre { background: var(--box); border: 1px solid var(--line); border-radius: 6px;
 
 <h2>14. スマホから操作・OSC・照明（DMX）</h2>
 <p>これらは「ブリッジ」（同じ PC で動く小さなサーバー）を通します。<b>単体アプリ版には入っていて自動でつながります。</b>
-ブラウザ版では <code>start-bridge-windows.bat</code> / <code>start-bridge-mac.command</code> で起動し（Node.js が必要）、パネル ⑦ で「ブリッジにつなぐ」を ON。</p>
+ブラウザ版では <code>start-bridge-windows.bat</code> / <code>start-bridge-mac.command</code> で起動し（Node.js が必要）、パネル ⑦ で「ブリッジにつなぐ」を ON。
+VJ 本体は、<b>同じ PC で、HTML ファイルを直接開いたとき</b>（または <code>localhost</code> のページ）だけブリッジにつながります（ほかのサイトのページから暗証番号を読まれないように）。</p>
 <ul>
-  <li><b>スマホから操作</b>：PC とスマホを同じ Wi-Fi / LAN に。パネル ⑦ に出る URL（例：<code>http://192.168.1.23:8787/</code>）をスマホで開き、暗証番号（4 けた）を入れる。シーン・フラッシュ・暗転・曲送り・テロップ・ストロボ・明るさ・感度を操作でき、今のシーンと曲が表示されます。暗証番号を 10 回まちがえた端末はつながらなくなります。</li>
+  <li><b>スマホから操作</b>：PC とスマホを同じ Wi-Fi / LAN に。パネル ⑦ に出る URL（例：<code>http://192.168.1.23:8787/</code>）をスマホで開き、暗証番号（4 けた）を入れる。シーン・フラッシュ・暗転・曲送り・テロップ・ストロボ・明るさ・感度を操作でき、今のシーンと曲が表示されます。暗証番号を 10 回まちがえた端末はつながらなくなります。
+      ストロボはスマホで押している間だけ光り、途中で電波が切れても 1.5 秒ほどで止まります。</li>
   <li><b>OSC 受信</b>（UDP 9000 番）：<code>/vj/scene 3</code>（番号・s1・名前）、<code>/vj/flash</code>、<code>/vj/blackout 1</code>、<code>/vj/next</code>、<code>/vj/prev</code>、<code>/vj/auto 1</code>、<code>/vj/palette 2</code>、<code>/vj/msg 0</code>、<code>/vj/tap</code>、<code>/vj/master 0.8</code>、<code>/vj/sens 2</code>、<code>/vj/strobe 1</code>、<code>/vj/test</code>。
       既定では<b>同じ PC のソフトからだけ</b>受けます。LAN の照明卓などから受けるときは、ブリッジを <code>--osc-lan</code> 付きで起動（単体アプリは環境変数 <code>MOMOSAI_OSC_LAN=1</code>）。</li>
   <li><b>OSC 送信</b>：⑦ の OSC で「音の特徴量を送る」を ON にして送り先を入れると、<code>/vj/level</code>・<code>/vj/low</code>・<code>/vj/kick</code>・<code>/vj/bpm</code>・<code>/vj/pitch</code>・<code>/vj/speech</code>・<code>/vj/onset/kick</code>・<code>/vj/beat</code> などを 30 回/秒で送ります（TouchDesigner・Resolume・照明ソフト用）。</li>

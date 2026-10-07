@@ -164,7 +164,8 @@ class WsConn {
     this.onmessage = null;
     this.onclose = null;
     this.open = true;
-    socket.on('data', (d) => this._data(d));
+    this.lastSeen = Date.now();
+    socket.on('data', (d) => { this.lastSeen = Date.now(); this._data(d); });
     socket.on('close', () => this._closed());
     socket.on('error', () => this._closed());
   }
@@ -205,7 +206,8 @@ class WsConn {
         if (text && this.onmessage) {
           let obj = null;
           try { obj = JSON.parse(msg.toString('utf8')); } catch (e) { obj = null; }
-          if (obj && typeof obj === 'object') this.onmessage(obj);
+          // 1 つの不正なメッセージでブリッジ全体が止まらないように
+          if (obj && typeof obj === 'object') { try { this.onmessage(obj); } catch (e) { /* noop */ } }
         }
       }
     }
@@ -229,9 +231,25 @@ class WsConn {
     try { this.socket.end(); } catch (e) { /* noop */ }
     this._closed();
   }
+
+  /** 応答の無い相手を切る（Wi-Fi から外れたスマホなど。TCP だけに任せると数分かかる） */
+  keepAlive(now, idleMs) {
+    if (!this.open) return;
+    if (now - this.lastSeen > idleMs) { try { this.socket.destroy(); } catch (e) { /* noop */ } this._closed(); }
+    else if (now - this.lastSeen > idleMs / 3) this._send(0x9, Buffer.alloc(0));
+  }
 }
 
 const isLoopback = (addr) => addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1';
+const IDLE_MS = 15000;
+
+/** /vj に来てよい呼び出し元：ファイルから開いた VJ 本体（Origin: null / file://）、この PC の http ページ、
+ *  ブラウザ以外（Origin なし）。ほかのウェブサイトのページから暗証番号を読まれたり操作を横取りされたりしないように */
+export function vjOriginOk(origin) {
+  if (origin === undefined || origin === 'null' || origin === 'file://') return true;
+  return /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(String(origin));
+}
+const portOk = (p) => Number.isInteger(p) && p >= 1 && p <= 65535;
 
 /** この PC の LAN の IPv4 アドレス */
 export function lanAddresses() {
@@ -309,12 +327,18 @@ export async function startBridge(opts = {}) {
   });
 
   server.on('upgrade', (req, socket) => {
+    // 断る前に相手が切っても（RST）ブリッジが落ちないように、最初にエラーを受ける
+    socket.on('error', () => {});
     const url = (req.url || '').split('?')[0];
     const addr = socket.remoteAddress || '';
     const key = req.headers['sec-websocket-key'];
     const kind = url === '/vj' ? 'vj' : url === '/phone' ? 'phone' : null;
     // VJ 本体は同じ PC からだけ
-    if (!kind || !key || (kind === 'vj' && !isLoopback(addr))) { socket.end('HTTP/1.1 403 Forbidden\r\n\r\n'); return; }
+    if (!kind || !key || (kind === 'vj' && (!isLoopback(addr) || !vjOriginOk(req.headers.origin)))) {
+      try { socket.end('HTTP/1.1 403 Forbidden\r\n\r\n'); } catch (e) { /* noop */ }
+      setTimeout(() => socket.destroy(), 1000).unref();
+      return;
+    }
     const accept = crypto.createHash('sha1').update(key + WS_GUID).digest('base64');
     socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
     socket.setNoDelay(true);
@@ -335,9 +359,9 @@ export async function startBridge(opts = {}) {
           stats.artnet++;
         } else if (m.t === 'config') {
           const o = m.osc;
-          oscOut = o && o.enabled && typeof o.host === 'string' && o.port > 0 && o.port < 65536 ? { host: o.host, port: o.port | 0 } : null;
+          oscOut = o && o.enabled && typeof o.host === 'string' && o.host.length < 256 && portOk(o.port) ? { host: o.host, port: o.port } : null;
           const a = m.artnet;
-          art = a && a.enabled && typeof a.host === 'string' ? { host: a.host, universe: Math.max(0, Math.min(32767, a.universe | 0)) } : null;
+          art = a && a.enabled && typeof a.host === 'string' && a.host.length < 256 ? { host: a.host, universe: Math.max(0, Math.min(32767, a.universe | 0)) } : null;
         }
       };
       ws.onclose = () => { vjs.delete(ws); log('VJ 本体が切断しました'); };
@@ -383,10 +407,13 @@ export async function startBridge(opts = {}) {
     throw new Error(`ポート ${port} を使えません（ブリッジが二重に起動している？）: ${e.message}`);
   }
   boundPort = server.address().port;
+  const ka = setInterval(() => { const now = Date.now(); for (const c of [...vjs, ...phones]) c.keepAlive(now, IDLE_MS); }, 2000);
+  ka.unref();
   return {
     port: boundPort, oscPort: boundOsc, pin, stats,
     get urls() { return info().urls; },
     close() {
+      clearInterval(ka);
       for (const c of [...vjs, ...phones]) c.close(1001);
       server.close();
       try { udp.close(); } catch (e) { /* noop */ }

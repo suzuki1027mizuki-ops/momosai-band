@@ -415,6 +415,7 @@
       if (app.engine.running) $('btn-start').textContent = t('↻ 入力を切り替え / 再開始');
       if (VJ.link.role === 'control') $('btn-output').textContent = t('出力ウィンドウを前面に');
       VJ.i18n.translateDom(document.body);
+      panel.renderIo(); // 訳し直した説明文の中の受信ポート番号（#osc-in）を入れ直す
     },
 
     /** ⑦ 外部連携（ブリッジ・OSC・DMX） */
@@ -452,7 +453,7 @@
       $('dmx-port').addEventListener('click', async () => {
         try {
           const port = await VJ.dmx.chooseSerial();
-          if (VJ.link.role === 'control') await VJ.link.request({ t: 'cmd', target: 'dmx', name: 'openGranted', args: [] });
+          if (VJ.link.role === 'control') await VJ.link.request({ t: 'cmd', target: 'dmx', name: 'openGranted', args: [port.getInfo ? port.getInfo() : null] });
           else await VJ.dmx.openSerial(port);
           panel.renderIo();
         } catch (e) {
