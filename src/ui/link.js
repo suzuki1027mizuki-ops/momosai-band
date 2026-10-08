@@ -206,10 +206,11 @@
         link.local.fresh = false;
         const sess = first ? link.local.session : app.show.session();
         link.send({ t: 'cmd', target: 'show', name: 'restoreSession', args: [sess] });
-        // 動いていた入力を出力側で再開（画面共有・ファイルは出力側での操作が必要なので除く）
+        // 動いていた入力を出力側で再開（ファイルは出力側に渡していないので除く）。
+        // 「PC で再生中の音」の共有はウィンドウをまたいで引き継げないので、出力ウィンドウで選び直してもらう
         const st = link.lastStatus;
         const o = first ? (link.local.wasRunning ? link.local.opts : null) : (st && st.engineStatus === 'running' ? st.engineOpts : null);
-        if (o && (o.source === 'mic' || o.source === 'demo')) {
+        if (o && (o.source === 'mic' || o.source === 'demo' || o.source === 'display')) {
           app.startAudio({ source: o.source, deviceId: o.deviceId, deviceLabel: o.deviceLabel, channel: o.channel || app.settings.channel, monitor: app.settings.monitor }).catch(() => {});
         }
       } else if (d.t === 'status') {
@@ -289,7 +290,16 @@
       setTimeout(() => { hint.hidden = true; }, 8000);
       document.addEventListener('dblclick', () => { VJ.guard.enterFullscreen(); hint.hidden = true; });
       app.show.on((msg, kind) => link.send({ t: 'toast', msg, kind }));
-      app.engine.on((status, message) => link.send({ t: 'engine', status, message }));
+      app.engine.on((status, message) => {
+        link.send({ t: 'engine', status, message });
+        // 共有する画面を選ぶ画面はこのウィンドウに出て、操作ウィンドウからは見えない。待ちが続いたら操作側に案内を出す
+        clearTimeout(link._pickT);
+        if (status === 'starting' && app.engine.opts.source === 'display') {
+          link._pickT = setTimeout(() => {
+            if (app.engine.status === 'starting') link.send({ t: 'engine', status: 'starting', message: VJ.t('出力ウィンドウに、共有する画面を選ぶ画面が出ています。出力ウィンドウで、共有する画面（またはタブ）と音声を選んでください。') });
+          }, 700);
+        }
+      });
       let hits = 0;
       app.onFeatures = (f) => { hits |= f.onsetFlags; };
       setInterval(() => {

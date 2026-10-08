@@ -275,6 +275,51 @@ test('出力ウィンドウを再読み込みしても、曲の位置と音声�
   await ctrl.close();
 });
 
+test('2 画面：「PC で再生中の音」は出力ウィンドウで選び直し、操作側に案内が出る', async () => {
+  const p = await openApp(browser, DIST, 'test=1', { width: 480, height: 270 });
+  const ctrl = p.page;
+  // 共有する画面を選ぶ画面の代わり：__share() を呼ぶまで待たせ、呼ぶと音声つきの共有を返す
+  const picker = () => {
+    navigator.mediaDevices.getDisplayMedia = () => new Promise((resolve) => {
+      window.__share = () => {
+        const ac = new AudioContext(), dst = ac.createMediaStreamDestination(), osc = ac.createOscillator();
+        osc.connect(dst); osc.start();
+        const s = document.createElement('canvas').captureStream(1);
+        s.addTrack(dst.stream.getAudioTracks()[0]);
+        window.__share = null;
+        resolve(s);
+      };
+    });
+  };
+  await ctrl.context().addInitScript(picker); // このあと開く出力ウィンドウにも入れる
+  await ctrl.evaluate(picker);
+  const share = async (pg) => {
+    await pg.waitForFunction(() => typeof window.__share === 'function', null, { timeout: 15000 });
+    await pg.evaluate(() => window.__share());
+  };
+  const status = (re) => ctrl.waitForFunction((s) => new RegExp(s).test(document.getElementById('audio-status').textContent), re, { timeout: 10000 });
+  // 1 画面で始めておく
+  await ctrl.check('input[name=src][value=display]');
+  await ctrl.click('#btn-start');
+  await share(ctrl);
+  await ctrl.waitForFunction(() => VJ.app.engine.status === 'running', null, { timeout: 15000 });
+  // 出力ウィンドウを開くと、出力側で選び直しになる（黙って止まらない）。操作側には案内が出る
+  const [out] = await Promise.all([ctrl.context().waitForEvent('page'), ctrl.click('#btn-output')]);
+  await out.waitForFunction(() => window.VJ && VJ.app && VJ.link.role === 'output', null, { timeout: 30000 });
+  await out.waitForFunction(() => VJ.app.engine.status === 'starting' && VJ.app.engine.opts.source === 'display', null, { timeout: 15000 });
+  await status('出力ウィンドウに');
+  await share(out);
+  await out.waitForFunction(() => VJ.app.engine.status === 'running', null, { timeout: 15000 });
+  await status('入力中');
+  // 2 画面のまま操作側から始め直しても同じ
+  await ctrl.click('#btn-start');
+  await status('出力ウィンドウに');
+  await share(out);
+  await status('入力中');
+  await out.close();
+  await ctrl.close();
+});
+
 test('自分が開いていないページからの偽の通知では、操作対象を切り替えない', async () => {
   const fs2 = await import('node:fs');
   const path = await import('node:path');
