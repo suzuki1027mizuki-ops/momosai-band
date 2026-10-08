@@ -427,6 +427,35 @@
 
     titleText() { return this.state.endState ? this.endText() : this.bandName(); }
 
+    /** タイトルの下の小さな文字：開演までのカウントダウン。出演バンドが複数あるときは「次の出演」、
+     *  終演のあとは「次は ○○」 */
+    titleSub(nowDate) {
+      const cd = this.countdownText(nowDate);
+      if (cd) return cd;
+      const s = this.settings, n = Array.isArray(s.bands) ? s.bands.length : 0;
+      if (n < 2 || !VJ.bands) return '';
+      if (this.state.endState) {
+        const next = (s.bandIdx | 0) + 1 < n ? VJ.bands.nameOf(s, (s.bandIdx | 0) + 1) : '';
+        return next ? t('次は {0}', next) : '';
+      }
+      return this.state.songIdx < 0 ? t('次の出演') : '';
+    }
+
+    /** 出演バンドを切り替えたとき：開演前（タイトル）に戻す */
+    resetShow() {
+      const s = this.state;
+      s.songIdx = -1;
+      s.endState = false;
+      s.text = null;
+      s.msg = null;
+      s.pending = null;
+      s.beforeTest = null;
+      this.director.silentFrom = null;
+      this._applyScene('title');
+      this._toast(t('出演：{0}', this.bandName() || '—'));
+      return true;
+    }
+
     /** 動きの大きさを掛けた特徴量（オブジェクトは使い回す） */
     _scaled(f) {
       const k = this.react();
@@ -487,7 +516,7 @@
       fr.titleLogo = isTitle && !s.endState && (logo === 'title' || logo === 'both');
       // バンド名の文字：タイトルと、文字を使うシーン（声の輪など。def.title）で
       const usesTitle = isTitle || fr.scene.title || (this.xfade && VJ.scenes.byId[this.xfade.id] && (this.xfade.id === 'title' || VJ.scenes.byId[this.xfade.id].title));
-      fr.titleTex = usesTitle && getText ? getText(this.titleText(), this.countdownText()).tex : null;
+      fr.titleTex = usesTitle && getText ? getText(this.titleText(), this.titleSub()).tex : null;
       fr.logoCorner = (logo === 'corner' || (logo === 'both' && !isTitle)) && s.sceneId !== 'test' ? this.settings.logoCorner || 'br' : '';
       fr.latSq = this.settings.latencySquare ? s.latSq : -1;
       fr.vignette = s.sceneId === 'test' ? 0 : 0.6;

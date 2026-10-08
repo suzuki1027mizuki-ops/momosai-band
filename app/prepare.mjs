@@ -12,6 +12,7 @@ fs.rmSync(WEB, { recursive: true, force: true });
 fs.mkdirSync(path.join(WEB, 'bridge'), { recursive: true });
 fs.copyFileSync(path.join(ROOT, 'dist/momosai-vj.html'), path.join(WEB, 'momosai-vj.html'));
 fs.copyFileSync(path.join(ROOT, 'bridge/server.mjs'), path.join(WEB, 'bridge/server.mjs'));
+fs.copyFileSync(path.join(ROOT, 'bridge/qr.mjs'), path.join(WEB, 'bridge/qr.mjs'));
 fs.copyFileSync(path.join(ROOT, 'bridge/remote.html'), path.join(WEB, 'bridge/remote.html'));
 // アプリの版数はリポジトリの package.json に合わせる
 const pkg = JSON.parse(fs.readFileSync(path.join(HERE, 'package.json'), 'utf8'));

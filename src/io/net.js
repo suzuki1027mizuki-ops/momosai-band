@@ -39,12 +39,21 @@
       let ws;
       try { ws = new WebSocket(net.url); } catch (e) { net.status = 'error'; net.error = e.message; return; }
       net.ws = ws;
-      ws.onopen = () => { net.status = 'on'; net.error = ''; net._cfgKey = ''; net._sendConfig(); };
+      ws.onopen = () => {
+        net.status = 'on'; net.error = ''; net._cfgKey = ''; net._sendConfig();
+        // スマホの操作画面に出すシーンの見本画像（つないだときに 1 回だけ。ブリッジが覚えておく）
+        if (VJ.thumbs) net.send({ t: 'thumbs', d: VJ.thumbs });
+      };
       ws.onmessage = (e) => {
         let m;
         try { m = JSON.parse(e.data); } catch (err) { return; }
         if (!m || typeof m !== 'object') return;
-        if (m.t === 'info') net.info = { pin: String(m.pin || ''), urls: Array.isArray(m.urls) ? m.urls.map(String) : [], oscPort: m.oscPort | 0, phones: m.phones | 0 };
+        if (m.t === 'info') {
+          net.info = { pin: String(m.pin || ''), urls: Array.isArray(m.urls) ? m.urls.map(String) : [], oscPort: m.oscPort | 0, phones: m.phones | 0 };
+          // スマホ用の QR コード（SVG）。形を確かめて、画像として表示する
+          net.qr = (Array.isArray(m.qr) ? m.qr : []).filter((q) => q && typeof q.url === 'string' && typeof q.svg === 'string' && /^<svg[\s>]/.test(q.svg) && q.svg.length < 100000)
+            .slice(0, 3).map((q) => ({ url: q.url, img: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(q.svg) }));
+        }
         else if (m.t === 'cmd') net.exec(m.name, m.args, m.from);
       };
       ws.onerror = () => { net.error = VJ.t('ブリッジにつながりません'); };
@@ -118,6 +127,14 @@
           net._strobeUntil = a0 && from === 'phone' ? performance.now() + 1500 : 0;
           break;
         case 'test': show.toggleTestPattern(); break;
+        case 'band': {
+          // 'next' / 'prev' か、1 から始まる番号（スマホは確認してから送る）
+          if (!VJ.bandsUI) return false;
+          if (a0 === 'next' || a0 === 'prev') VJ.bandsUI.step(a0 === 'next' ? 1 : -1, { force: true });
+          else if (num(a0, 1, 99) !== null && Number.isInteger(a0)) VJ.bandsUI.switchTo(a0 - 1);
+          else return false;
+          break;
+        }
         default: return false;
       }
       if (app.onAction) app.onAction('net:' + (from || ''));
@@ -140,8 +157,9 @@
             song: song ? `M${s.songIdx + 1} ${song.title}` : s.endState ? VJ.t('（終演）') : VJ.t('（開演前）'),
             bpm: f.bpm && f.beatConf > 0.2 ? f.bpm : 0, speech: !!f.speech,
             auto: !!s.auto, blackout: !!s.blackout, master: s.master, sens: s.sens,
-            scenes: VJ.scenes.list.filter((d) => !d.hidden).map((d) => ({ id: d.id, key: d.key.replace('s', '⇧'), name: VJ.sceneName(d) })),
+            scenes: (VJ.scenePick ? VJ.scenePick.list() : VJ.scenes.list.filter((d) => !d.hidden)).map((d) => ({ id: d.id, key: d.key.replace('s', '⇧'), name: VJ.sceneName(d) })),
             lang: VJ.i18n.lang,
+            band: VJ.bandsUI ? VJ.bandsUI.state(app.settings) : null,
           },
         });
       }
@@ -162,6 +180,8 @@
 
     /** パネル表示用 */
     state() { return { status: net.status, info: net.info, error: net.error || '' }; },
+    /** スマホ用の QR コード [{ url, img }]（状態の通知には入れない。大きいので必要なときだけ） */
+    qrCodes() { return net.status === 'on' && net.info ? net.qr || [] : []; },
   };
 
   VJ.net = net;

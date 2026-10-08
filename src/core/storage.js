@@ -15,7 +15,8 @@
       if (!(k in src)) continue;
       const bv = base[k], sv = src[k];
       if (Array.isArray(bv)) {
-        if (Array.isArray(sv) && sv.length === bv.length) out[k] = clone(sv);
+        // 出演バンドの一覧は長さが変わる（中身は sanitize で確かめる）
+        if (Array.isArray(sv) && (sv.length === bv.length || k === 'bands')) out[k] = clone(sv);
       } else if (isObj(bv)) {
         if (isObj(sv)) out[k] = clone(sv);
       } else if (typeof bv === typeof sv && (typeof sv !== 'number' || isFinite(sv))) {
@@ -39,6 +40,7 @@
     for (const [k, v] of Object.entries(s.autoScenes || {})) if (typeof v === 'boolean') as[k] = v;
     s.autoScenes = as;
     if (!s.messages.every((m) => typeof m === 'string')) s.messages = s.messages.map((m) => (typeof m === 'string' ? m : ''));
+    if (VJ.bands) VJ.bands.ensure(s);
     return s;
   }
 

@@ -52,6 +52,9 @@
     net: { enabled: false, url: 'ws://127.0.0.1:8787/vj' }, // ブリッジ（スマホ操作・OSC・Art-Net）
     osc: { enabled: false, host: '127.0.0.1', port: 9001, rate: 30 }, // OSC で特徴量を送る
     dmx: { enabled: false, out: 'artnet', host: '255.255.255.255', universe: 0, type: 'drgb', count: 4, start: 1, max: 1, pulse: 0.5, flash: true }, // 照明
+    bands: [], // 出演バンド（bands.js）。いま出ているバンドの値は上の bandName・setlistText などにある
+    bandIdx: 0, // いま出ているバンドの番号
+    guide: true, // パネルの上に「はじめてのガイド」を出す
   };
 
   /** 英語で初めて開いたときのセットリストの見本 */

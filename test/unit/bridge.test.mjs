@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import dgram from 'node:dgram';
 import net from 'node:net';
+import http from 'node:http';
 import crypto from 'node:crypto';
 import { startBridge, vjOriginOk, oscMessage, oscBundle, oscDecode, oscToCommand, artDmx, featuresToOsc, lanAddresses } from '../../bridge/server.mjs';
 import { loadVJ } from '../helpers/load-src.mjs';
@@ -51,6 +52,12 @@ test('OSC：メッセージ・バンドルの作成と読み取り、操作へ�
   assert.deepEqual(oscToCommand({ address: '/VJ/Blackout/', args: [1] }), { name: 'blackout', args: [true] });
   assert.deepEqual(oscToCommand({ address: '/vj/master', args: [0.7] }), { name: 'master', args: [0.7] });
   assert.equal(oscToCommand({ address: '/other', args: [] }), null);
+  // 出演バンド：番号（1 から）・次・前
+  assert.deepEqual(oscToCommand({ address: '/vj/band', args: [2] }), { name: 'band', args: [2] });
+  assert.equal(oscToCommand({ address: '/vj/band', args: [0] }), null);
+  assert.deepEqual(oscToCommand({ address: '/vj/band/next', args: [] }), { name: 'band', args: ['next'] });
+  assert.deepEqual(oscToCommand({ address: '/vj/band/prev', args: [1] }), { name: 'band', args: ['prev'] });
+  assert.equal(oscToCommand({ address: '/vj/band/next', args: [0] }), null);
   assert.throws(() => oscDecode(Buffer.from('garbage')));
   // 特徴量 → バンドル
   const f = oscDecode(featuresToOsc({ level: 0.5, kick: 1, bpm: 120, speech: true, scene: 'orb', onsets: 1 | 32 }));
@@ -201,6 +208,53 @@ test('ブリッジ：断られた接続をすぐ切られても・変な設定�
     ok.s.destroy();
     assert.ok(vjOriginOk(undefined) && vjOriginOk('null') && vjOriginOk('file://') && vjOriginOk('http://localhost:5173') && vjOriginOk('http://127.0.0.1'));
     assert.ok(!vjOriginOk('https://example.com') && !vjOriginOk('http://localhost.evil.com') && !vjOriginOk('http://127.0.0.1.evil.com'));
+  } finally {
+    b.close();
+  }
+});
+
+/** Host ヘッダーを指定して GET（fetch では Host を変えられないため） */
+function getWithHost(port, path, host, address = '127.0.0.1') {
+  return new Promise((resolve, reject) => {
+    const req = http.request({ host: address, port, path, headers: { Host: host } }, (res) => {
+      let body = '';
+      res.on('data', (d) => { body += d; });
+      res.on('end', () => resolve({ status: res.statusCode, body }));
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+test('ブリッジ：VJ 本体に QR コード（暗証番号入り）を渡す。/qr はこの PC から・この PC のアドレスでだけ。見本画像をスマホへ渡す', async () => {
+  const b = await startBridge({ port: 0, oscPort: false, pin: '5678', host: '0.0.0.0' });
+  try {
+    const vj = await open(`ws://127.0.0.1:${b.port}/vj`);
+    const info = await nextMessage(vj, (m) => m.t === 'info');
+    assert.ok(Array.isArray(info.qr));
+    assert.equal(info.qr.length, Math.min(3, info.urls.length));
+    for (const [i, q] of info.qr.entries()) {
+      assert.equal(q.url, info.urls[i]);
+      assert.match(q.svg, /^<svg[^>]*viewBox/);
+    }
+    // /qr：この PC のアドレスで開いたときだけ（DNS リバインディング対策）
+    const ok = await getWithHost(b.port, '/qr', `127.0.0.1:${b.port}`);
+    assert.equal(ok.status, 200);
+    assert.match(ok.body, /5678/);
+    assert.equal((await getWithHost(b.port, '/qr', `localhost:${b.port}`)).status, 200);
+    assert.equal((await getWithHost(b.port, '/qr', `evil.example:${b.port}`)).status, 403);
+    const lan = lanAddresses()[0];
+    if (lan) assert.equal((await getWithHost(b.port, '/qr', `${lan}:${b.port}`, lan)).status, 403, 'LAN からは開けない');
+    // 見本画像：形の正しいものだけ、つながっているスマホとあとからつながるスマホへ
+    const ph = await open(`ws://127.0.0.1:${b.port}/phone`);
+    ph.send(JSON.stringify({ t: 'auth', pin: '5678' }));
+    await nextMessage(ph, (m) => m.t === 'auth' && m.ok);
+    vj.send(JSON.stringify({ t: 'thumbs', d: { ripple: 'data:image/webp;base64,AAAA', bad: 'javascript:alert(1)', 'x y': 'data:image/png;base64,AA' } }));
+    assert.deepEqual((await nextMessage(ph, (m) => m.t === 'thumbs')).d, { ripple: 'data:image/webp;base64,AAAA' });
+    const ph2 = await open(`ws://127.0.0.1:${b.port}/phone`);
+    ph2.send(JSON.stringify({ t: 'auth', pin: '5678' }));
+    assert.deepEqual((await nextMessage(ph2, (m) => m.t === 'thumbs')).d, { ripple: 'data:image/webp;base64,AAAA' });
+    for (const w of [vj, ph, ph2]) w.close();
   } finally {
     b.close();
   }

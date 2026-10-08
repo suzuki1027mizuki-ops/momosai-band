@@ -22,6 +22,7 @@
     ['→ / ←', '次の曲 / 前の曲（曲名を表示）'], ['Space', 'フラッシュ'], ['S（押している間）', 'ストロボ'],
     ['B', '暗転 ON/OFF'], ['C / Shift+C', 'パレット 次 / 前'], ['↑ / ↓', '感度'], ['Shift+↑ / ↓', '全体の明るさ'],
     ['A', 'オート ON/OFF'], ['Enter', 'タップテンポ（拍に合わせて 3 回以上）'], ['Q / W / E', 'テロップ 1〜3 を表示・消す'],
+    ['N / Shift+N', '次のバンド / 前のバンド（演奏中は 2 回押す）'],
     ['T', '曲名をもう一度表示'], ['G', 'テストパターン（位置合わせ）'], ['F', '全画面にする'], ['D', '診断表示'],
     ['H', 'このヘルプ'], ['M', '設定パネル'], ['L', 'ロック（長押しで解除）'], ['R（2 秒長押し）', 'ソフトリセット'],
     ['Esc', 'パネルを閉じる（全画面中は長押しで解除）'],
@@ -93,6 +94,7 @@
       else if (code === 'ArrowDown') (shift ? show.nudgeMaster(-1) : show.nudgeSensitivity(-1));
       else if (code === 'KeyA') show.toggleAuto();
       else if (code === 'KeyT') show.showSongTitle();
+      else if (code === 'KeyN') { if (VJ.bandsUI) VJ.bandsUI.step(shift ? -1 : 1); }
       else if (code === 'Enter' || code === 'NumpadEnter') show.tap();
       else if (code === 'KeyQ') show.toggleMessage(0);
       else if (code === 'KeyW') show.toggleMessage(1);

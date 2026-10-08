@@ -10,10 +10,12 @@
     "test:e2e": "node --test --test-concurrency=1 \"test/e2e/*.test.mjs\"",
     "test": "npm run build && npm run fixtures && npm run test:unit && npm run test:e2e",
     "bridge": "node bridge/server.mjs",
+    "thumbs": "node tools/thumbs.mjs",
     "check-scenes": "node tools/check-scenes.mjs",
     "app:smoke": "cd app && npm install --no-audit --no-fund && npm run smoke"
   },
   "devDependencies": {
+    "jsqr": "^1.4.0",
     "playwright": "1.56.1"
   },
   "license": "MIT"

@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { qrSvg, qrTerminal } from './qr.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
@@ -109,6 +110,9 @@ export function oscToCommand(msg) {
     case '/vj/sens': return isFinite(num(v)) ? { name: 'sens', args: [num(v)] } : null;
     case '/vj/strobe': return { name: 'strobe', args: [num(v) !== 0] };
     case '/vj/test': return pressed ? { name: 'test', args: [] } : null;
+    case '/vj/band': return isFinite(num(v)) && num(v) >= 1 ? { name: 'band', args: [Math.round(num(v))] } : null;
+    case '/vj/band/next': return pressed ? { name: 'band', args: ['next'] } : null;
+    case '/vj/band/prev': return pressed ? { name: 'band', args: ['prev'] } : null;
     default: return null;
   }
 }
@@ -278,6 +282,7 @@ export async function startBridge(opts = {}) {
   const vjs = new Set(), phones = new Set();
   const stats = { oscIn: 0, oscOut: 0, artnet: 0, cmds: 0, authFail: 0 };
   let lastStatus = null;
+  let lastThumbs = null; // シーンの見本画像（VJ 本体から。スマホがつながったら渡す）
   let boundPort = port, boundOsc = oscPort;
   let oscOut = null; // { host, port }
   let art = null; // { host, universe }
@@ -309,7 +314,18 @@ export async function startBridge(opts = {}) {
     boundOsc = udp.address().port;
   }
 
-  const info = () => ({ t: 'info', pin, port: boundPort, oscPort: boundOsc, oscLan: oscHost !== '127.0.0.1', urls: lanAddresses().map((a) => `http://${a}:${boundPort}/`), phones: phones.size });
+  // スマホで読み取る QR コード（暗証番号入り。URL の # 以降はサーバーに送られない）。VJ 本体（この PC）にだけ渡す
+  const qrCache = new Map();
+  const phoneUrl = (u) => `${u}#p=${pin}`;
+  const qrOf = (u) => {
+    if (!qrCache.has(u)) qrCache.set(u, qrSvg(phoneUrl(u), { scale: 6, margin: 3 }));
+    return qrCache.get(u);
+  };
+  const urls = () => lanAddresses().map((a) => `http://${a.includes(':') ? `[${a}]` : a}:${boundPort}/`);
+  const info = () => ({
+    t: 'info', pin, port: boundPort, oscPort: boundOsc, oscLan: oscHost !== '127.0.0.1', urls: urls(), phones: phones.size,
+    qr: urls().slice(0, 3).map((u) => ({ url: u, svg: qrOf(u) })),
+  });
   const broadcastInfo = () => { for (const v of vjs) v.send(info()); };
 
   const server = http.createServer((req, res) => {
@@ -317,6 +333,23 @@ export async function startBridge(opts = {}) {
     if (req.method === 'GET' && (url === '/' || url === '/remote.html')) {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
       res.end(remoteHtml);
+    } else if (req.method === 'GET' && url === '/qr') {
+      // この PC のブラウザで QR を表示（暗証番号入りなので、この PC から・この PC のアドレスで開いたときだけ。
+      // ほかのサイトが自分のドメインを 127.0.0.1 に向けて読み取る「DNS リバインディング」も Host で防ぐ）
+      if (!isLoopback(req.socket.remoteAddress || '') || !/^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i.test(req.headers.host || '')) {
+        res.writeHead(403, { 'Content-Type': 'text/plain' });
+        res.end('forbidden');
+        return;
+      }
+      const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      const list = urls();
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY' });
+      res.end(`<!doctype html><html lang="ja"><meta charset="utf-8"><title>MOMOSAI VJ — QR</title>
+<body style="font:16px sans-serif;background:#111;color:#eee;text-align:center;padding:20px">
+<h1 style="font-size:20px">スマホのカメラで読み取ってください / Scan with your phone</h1>
+${list.length ? list.map((u) => `<figure style="display:inline-block;margin:10px"><div style="background:#fff;padding:8px;border-radius:8px">${qrOf(u)}</div><figcaption>${esc(u)}</figcaption></figure>`).join('') : '<p>LAN に接続されていません / Not connected to a LAN</p>'}
+<p>暗証番号 / PIN: <b style="font-size:28px;letter-spacing:0.2em">${esc(pin)}</b></p>
+<p style="color:#999">QR には暗証番号が入っています。観客から見えるところでは表示しないでください。</p></body></html>`);
     } else if (req.method === 'GET' && url === '/status') {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
       res.end(JSON.stringify({ ok: true, app: 'momosai-vj-bridge', vj: vjs.size, phones: phones.size }));
@@ -351,6 +384,11 @@ export async function startBridge(opts = {}) {
         if (m.t === 'status' && m.s && typeof m.s === 'object') {
           lastStatus = m.s;
           for (const p of phones) if (p.authed) p.send({ t: 'status', s: m.s });
+        } else if (m.t === 'thumbs' && m.d && typeof m.d === 'object') {
+          const d = {};
+          for (const [k, v] of Object.entries(m.d)) if (/^[a-z0-9_-]{1,32}$/i.test(k) && typeof v === 'string' && v.startsWith('data:image/') && v.length < 200000) d[k] = v;
+          lastThumbs = d;
+          for (const p of phones) if (p.authed) p.send({ t: 'thumbs', d });
         } else if (m.t === 'feat' && m.f && oscOut) {
           const b = featuresToOsc(m.f);
           if (b) { out.send(b, oscOut.port, oscOut.host); stats.oscOut++; }
@@ -375,6 +413,7 @@ export async function startBridge(opts = {}) {
           if (String(m.pin) === pin) {
             ws.authed = true;
             ws.send({ t: 'auth', ok: true });
+            if (lastThumbs) ws.send({ t: 'thumbs', d: lastThumbs });
             if (lastStatus) ws.send({ t: 'status', s: lastStatus });
             log(`スマホが接続しました（${addr}）`);
             broadcastInfo();
@@ -430,6 +469,12 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   console.log('MOMOSAI VJ ブリッジを起動しました');
   console.log(`  VJ 本体の設定パネル ⑦ で「ブリッジにつなぐ」を押してください（ws://127.0.0.1:${b.port}/vj）`);
   console.log(`  スマホで開く: ${b.urls.join('  ') || '(LAN に接続されていません)'}   暗証番号: ${b.pin}`);
+  if (b.urls.length) {
+    // スマホのカメラで読み取れる QR（暗証番号入り）。Mac のターミナルは白地なので反転
+    console.log('  スマホのカメラでこの QR を読み取ると、暗証番号を入れずにつながります：');
+    console.log(qrTerminal(`${b.urls[0]}#p=${b.pin}`, { invert: process.platform === 'darwin' }));
+    console.log(`  QR が崩れて見えるときは、この PC のブラウザで http://127.0.0.1:${b.port}/qr を開いてください`);
+  }
   console.log(`  OSC 受信ポート: ${b.oscPort}（例: /vj/scene 3, /vj/flash, /vj/blackout 1）${oscLan ? '  LAN から受け付けます' : '  この PC からだけ（LAN の照明卓から受けるときは --osc-lan を付けて起動）'}`);
   console.log('  終了するにはこのウィンドウを閉じるか Ctrl+C');
 }

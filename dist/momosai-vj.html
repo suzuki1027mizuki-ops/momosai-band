@@ -45,7 +45,7 @@ body.nocursor #panel, body.nocursor #panel * { cursor: auto !important; }
   background: #11111c; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font: inherit; }
 #panel input[type=text], #panel textarea { width: 100%; }
 #panel select { max-width: 100%; }
-#panel textarea { font-family: var(--mono); font-size: 12.5px; min-height: 150px; resize: vertical; }
+#panel textarea { font-family: var(--mono); font-size: 12.5px; min-height: 110px; resize: vertical; }
 #panel input[type=range] { flex: 1; min-width: 120px; accent-color: var(--accent); }
 #panel input[type=color] { width: 36px; height: 28px; border: 0; padding: 0; background: none; }
 button {
@@ -97,12 +97,82 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .midimap .k { font-family: var(--mono); color: var(--muted); }
 .midimap button { padding: 1px 8px; font-size: 12px; }
 .midimap button.wait { border-color: var(--accent2); color: var(--accent2); }
+/* シーンを絵で選ぶ */
+.scene-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; margin: 6px 0; }
+.scene-btn { position: relative; padding: 0; border-radius: 6px; overflow: hidden; background: #000; border: 2px solid #3a3a58; display: flex; flex-direction: column; text-align: left; }
+.scene-btn img, .scene-btn .noimg { width: 100%; aspect-ratio: 16 / 9; display: block; object-fit: cover; background: #222; }
+.scene-btn .sk { position: absolute; left: 3px; top: 3px; background: rgba(0,0,0,0.72); color: #fff; font: 11px var(--mono); padding: 0 4px; border-radius: 3px; }
+.scene-btn .sn { font-size: 11px; padding: 2px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: #11111c; }
+.scene-btn.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.scene-btn.pending { border-color: var(--accent2); border-style: dashed; }
+#panel .sub { font-size: 13px; color: var(--text); }
+/* セットリストの表 */
+.sl-list { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
+.sl-song { border: 1px solid var(--line); border-radius: 6px; padding: 5px 6px; background: #0e0e18; }
+.sl-song.picking { border-color: var(--accent2); }
+.sl-row1 { display: flex; gap: 4px; align-items: center; }
+#panel .sl-row1 input[type=text] { flex: 1; width: auto; padding: 4px 6px; }
+.sl-no { font-family: var(--mono); color: var(--muted); font-size: 12px; min-width: 2.2em; }
+.sl-row1 button, .sl-row2 > button { padding: 1px 7px; font-size: 12px; }
+.sl-row1 button:disabled { opacity: 0.3; cursor: default; }
+.sl-row2 { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-top: 4px; }
+.sl-chip { display: inline-flex; align-items: center; gap: 4px; background: #1c1c2c; border: 1px solid #3a3a58; border-radius: 4px; padding: 1px 2px 1px 1px; font-size: 12px; }
+.sl-chip img { width: 36px; height: 20px; object-fit: cover; border-radius: 2px; }
+.sl-chip button { padding: 0 5px; font-size: 11px; border: 0; background: none; }
+.sl-arrow { color: var(--muted); font-size: 11px; }
+.sl-row3 { display: flex; gap: 8px; align-items: center; margin-top: 4px; font-size: 12px; }
+#panel .sl-row3 select { padding: 2px 4px; font-size: 12px; }
+.sl-picker { margin-top: 6px; }
+/* はじめてのガイド */
+.guide { border: 1px solid var(--accent2); border-radius: 8px; padding: 8px 10px; margin: 8px 0; background: #1a0d1c; }
+.guide .g-head { display: flex; align-items: center; gap: 8px; }
+.guide .g-head .hint { flex: 1; }
+.guide .g-head button { padding: 0 8px; }
+.guide ol { list-style: none; padding: 0; margin: 6px 0 0; }
+.guide li { display: grid; grid-template-columns: 1.9em 1fr; gap: 4px; padding: 4px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.guide li:hover { background: #241328; }
+.guide li.next { background: #2a1430; outline: 1px solid var(--accent2); }
+.guide li.done { opacity: 0.55; }
+.guide .g-mark { display: inline-flex; width: 1.5em; height: 1.5em; border-radius: 50%; align-items: center; justify-content: center; background: #33334d; font-size: 12px; }
+.guide li.done .g-mark { background: var(--ok); color: #000; }
+.guide li.next .g-mark { background: var(--accent2); color: #fff; }
+#btn-guide.on { border-color: var(--accent2); color: var(--accent2); }
+#panel h2.flash-h { animation: flashh 1.4s ease-out; }
+@keyframes flashh { 0% { background: rgba(255, 46, 200, 0.45); } 100% { background: transparent; } }
+.sc-step.bad { color: var(--bad); }
+.sc-step.warn { color: var(--warn); }
+.sc-step.ok { color: var(--ok); }
+/* サウンドチェック */
+.scbox { border: 1px solid var(--accent); border-radius: 8px; padding: 8px 10px; margin: 6px 0; background: #0b1820; }
+.sc-step { font-weight: 700; margin-bottom: 6px; }
+.sc-bar { height: 8px; background: #11111c; border-radius: 4px; overflow: hidden; margin: 4px 0; }
+.sc-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+.sc-items { list-style: none; padding: 0; margin: 4px 0; }
+.sc-items li { display: grid; grid-template-columns: 1.7em 1fr; gap: 2px; font-size: 13px; margin: 3px 0; }
+.sc-items li.bad { color: #ffb3c0; }
+.sc-items li.warn { color: #ffd99a; }
+/* 出演バンドの一覧 */
+.bandlist { display: flex; flex-direction: column; gap: 3px; margin: 4px 0; }
+.qrbox { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; margin: 6px 0; }
+.qrbox figure { margin: 0; text-align: center; font-size: 12px; color: var(--muted); }
+.qrbox img { width: 180px; height: 180px; image-rendering: pixelated; background: #fff; border-radius: 6px; display: block; }
+.band-row { text-align: left; display: grid; grid-template-columns: 1.6em 3.4em 1fr auto auto auto auto; align-items: center; gap: 4px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: #11111c; cursor: pointer; font-size: 13px; }
+.band-row.on { border-color: var(--accent); background: #0d2430; }
+.band-row .bi { color: var(--muted); font-family: var(--mono); }
+.band-row .bt { font-family: var(--mono); color: var(--muted); }
+.band-row .bn { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.band-row .bs { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.band-row button { padding: 0 6px; font-size: 11px; }
+.band-row button:disabled { opacity: 0.3; cursor: default; }
+#panel input[type=time] { background: #11111c; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 6px; font: inherit; color-scheme: dark; }
 .sp-row { display: grid; grid-template-columns: 7em 1fr 3.5em; align-items: center; gap: 6px; margin: 4px 0; }
 body.remote-mode #stage { opacity: 0.25; }
 #remote { position: fixed; left: 16px; top: 16px; max-width: max(260px, calc(100vw - min(440px, 100vw) - 40px)); display: flex; z-index: 10; }
 #remote .box { background: var(--panel); border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; max-width: 640px; }
 #remote h3 { margin: 0 0 6px; color: var(--accent); }
 #remote pre { font: 12px/1.45 var(--mono); white-space: pre-wrap; color: #cfe; margin: 8px 0; }
+#remote .pv { margin: 6px 0; }
+#remote-preview { display: block; width: min(360px, 100%); aspect-ratio: auto; background: #000; border: 1px solid var(--line); border-radius: 6px; margin-bottom: 4px; }
 #out-hint { position: fixed; z-index: 30; left: 50%; top: 16px; transform: translateX(-50%); background: rgba(0,0,0,0.7); color: #fff; padding: 6px 14px; border-radius: 6px; font-size: 14px; pointer-events: none; }
 #fatal { position: fixed; z-index: 40; inset: 0; display: flex; align-items: center; justify-content: center; background: #000; color: #fff; padding: 24px; text-align: center; font-size: 16px; line-height: 1.7; }
 </style>
@@ -114,6 +184,7 @@ body.remote-mode #stage { opacity: 0.25; }
   <header>
     <h1>MOMOSAI VJ</h1>
     <span class="ver" id="ver"></span>
+    <button class="close" id="btn-guide" title="はじめてのガイド">?</button>
     <button class="close" id="panel-close" title="閉じる（M で開く）">×</button>
   </header>
   <div class="row" data-i18n-skip><span>言語 / Language</span><select id="opt-lang"><option value="auto">自動 / Auto</option><option value="ja">日本語</option><option value="en">English</option></select></div>
@@ -121,6 +192,7 @@ body.remote-mode #stage { opacity: 0.25; }
   <div id="resume-box" hidden>
     <div class="warnbox resume"><span id="resume-text"></span> <button id="btn-resume">前回の続きから再開</button> <button id="btn-resume-no">いいえ</button></div>
   </div>
+  <div id="guide" class="guide" hidden></div>
 
   <h2>① 音声入力</h2>
   <div class="row">
@@ -162,6 +234,9 @@ body.remote-mode #stage { opacity: 0.25; }
   <div class="meter"><span>R</span><div class="track"><div class="fill" id="mr"></div><div class="peak" id="mrp"></div></div><span id="mrv">—</span></div>
   <div class="lamps"><span class="lamp" id="lk">KICK</span><span class="lamp" id="ls">SNARE</span><span class="lamp" id="lh">HAT</span><span class="lamp" id="la">ACCENT</span><span class="lamp" id="lb">BEAT</span></div>
   <div class="hint">メーターが緑〜黄色の範囲で動けば OK。片方しか動かないときも「解析するチャンネル」はミックスのままで大丈夫です。</div>
+  <div class="row"><button id="btn-sc">サウンドチェック（自動調整）</button></div>
+  <div class="hint">リハで約 20 秒：音の大きさ・音割れ・会場の雑音を調べて、音楽のタイプと「無音とみなす音量」をおすすめします。</div>
+  <div id="sc-box" class="scbox" hidden></div>
 
   <h2>② 音楽のタイプ・テンポ</h2>
   <div class="row"><select id="opt-profile"></select></div>
@@ -172,13 +247,18 @@ body.remote-mode #stage { opacity: 0.25; }
   </div>
   <div class="row"><span>声</span><b id="voice-view" class="bpm">—</b><span class="hint" id="speech-view"></span></div>
 
-  <h2>③ バンド名・セットリスト・文字</h2>
-  <div class="row"><input type="text" id="band" placeholder="バンド名"></div>
+  <h2>③ 出演バンド・セットリスト・文字</h2>
+  <div class="bandlist" id="band-list"></div>
+  <div class="row"><button id="band-add">＋ バンドを追加</button><button id="band-next">次のバンドへ ▶（N）</button></div>
+  <div class="hint">バンドごとに名前・セットリスト・ロゴ・音楽のタイプ・色・開演時刻・テロップを覚えます。下の欄は「出演中」のバンドの内容です。</div>
+  <div class="row"><input type="text" id="band" placeholder="バンド名" style="flex: 1; width: auto"><span>開演</span><input type="time" id="opt-countdown" title="タイトルに「開演まで 05:00」を表示（1 曲目に進むと消えます）"></div>
+  <div class="row"><b class="sub">セットリスト</b><span class="hint">→ キーで次の曲（曲名とシーン・色が変わる）</span></div>
+  <div id="setlist-preview"></div>
+  <div class="hint">文字でまとめて入力・貼り付けもできます（上の表と同じ内容）：</div>
   <textarea id="setlist" spellcheck="false"></textarea>
   <div class="hint" data-i18n-html>1 行 1 曲：<code>曲名 | シーン | パレット</code>。シーンは 1〜9・Shift の段は s1〜s9、または名前（カンマで複数→オートで順番に）。<code>@end</code> で終演の文字。→ キーで次の曲。</div>
-  <div id="setlist-preview"></div>
   <details>
-    <summary>ロゴ画像・テロップ・開演カウントダウン</summary>
+    <summary>ロゴ画像・テロップ</summary>
     <div class="row">
       <span>ロゴ画像</span><input type="file" id="logo-file" accept="image/*">
       <button id="btn-logo-clear">消す</button>
@@ -200,7 +280,6 @@ body.remote-mode #stage { opacity: 0.25; }
     <div class="row msg"><kbd>W</kbd><input type="text" id="msg-1" placeholder="例：手拍子お願いします！"><button data-msg="1">表示</button></div>
     <div class="row msg"><kbd>E</kbd><input type="text" id="msg-2" placeholder="例：アンコールありがとう！"><button data-msg="2">表示</button></div>
     <div class="hint">キー（Q / W / E）かボタンで表示、もう一度押すと消えます。</div>
-    <div class="row"><span>開演時刻</span><input type="time" id="opt-countdown"><span class="hint">タイトルに「開演まで 05:00」を表示（1 曲目に進むと消えます）</span></div>
   </details>
 
   <h2>④ 表示（スクリーンに合わせる）</h2>
@@ -297,14 +376,21 @@ body.remote-mode #stage { opacity: 0.25; }
   </details>
 
   <h2>⑥ 本番</h2>
+  <div class="row"><button id="btn-precheck">本番前チェック</button></div>
+  <div id="precheck" class="scbox" hidden></div>
   <button class="big" id="btn-show">ショー開始（全画面）</button>
   <div class="hint" data-i18n-html>全画面・スリープ防止・Esc 長押しでのみ解除、がまとめて有効になります。<b>H</b> でキー一覧、<b>M</b> でこのパネル。</div>
+  <div class="row"><b class="sub">シーン</b><span class="hint">クリックで切替（次のビートで。もう一度押すとすぐ）</span></div>
+  <div class="scene-grid" id="scene-grid"></div>
   <div class="keys" id="keys-mini"></div>
+  <div class="row"><button id="btn-cheatsheet">キー早見表を印刷</button></div>
 
   <h2>⑦ 外部連携（スマホ・OSC・照明）</h2>
   <div class="hint" data-i18n-html>スマホからの操作・OSC・Art-Net には「ブリッジ」が要ります。単体アプリには入っています。ブラウザ版は <code>bridge</code> フォルダの起動ファイル（Node.js が必要）で起動します。</div>
   <div class="row"><label><input type="checkbox" id="net-on"> ブリッジにつなぐ</label><input type="text" id="net-url" spellcheck="false" style="flex: 1; width: auto"></div>
   <div class="status" id="net-status">つないでいません</div>
+  <div class="row"><button id="btn-qr" hidden>スマホ用の QR コードを表示</button></div>
+  <div id="net-qr" class="qrbox" hidden></div>
   <details>
     <summary>OSC（照明卓・TouchDesigner・Resolume など）</summary>
     <div class="hint" data-i18n-html>受信：ブリッジの UDP <b id="osc-in">9000</b> 番。<code>/vj/scene 3</code>・<code>/vj/flash</code>・<code>/vj/blackout 1</code>・<code>/vj/next</code>・<code>/vj/master 0.8</code> など（手順書参照）</div>
@@ -351,6 +437,7 @@ body.remote-mode #stage { opacity: 0.25; }
   <div class="box">
     <h3>出力ウィンドウで表示中</h3>
     <p class="hint" data-i18n-html>映像は出力ウィンドウに出ています。キー操作とこのパネルはそのまま使えます。出力ウィンドウはプロジェクター側へ移動して<b>ダブルクリック</b>（または F）で全画面に。閉じるとこの画面に戻ります。</p>
+    <div class="pv"><img id="remote-preview" alt="" hidden><label class="hint"><input type="checkbox" id="remote-preview-on" checked> プレビュー（出力の映像を小さく表示）</label></div>
     <pre id="remote-status"></pre>
     <button id="btn-output-close">出力ウィンドウを閉じる</button>
   </div>
@@ -370,7 +457,7 @@ body.remote-mode #stage { opacity: 0.25; }
   'use strict';
 
   VJ.version = '1.0.0';
-  VJ.buildTime = '2026-10-07 #c4e63f1';
+  VJ.buildTime = '2026-10-08 #bb83a9a';
 
   const LN10_20 = Math.LN10 / 20;
 
@@ -511,6 +598,9 @@ body.remote-mode #stage { opacity: 0.25; }
     net: { enabled: false, url: 'ws://127.0.0.1:8787/vj' }, // ブリッジ（スマホ操作・OSC・Art-Net）
     osc: { enabled: false, host: '127.0.0.1', port: 9001, rate: 30 }, // OSC で特徴量を送る
     dmx: { enabled: false, out: 'artnet', host: '255.255.255.255', universe: 0, type: 'drgb', count: 4, start: 1, max: 1, pulse: 0.5, flash: true }, // 照明
+    bands: [], // 出演バンド（bands.js）。いま出ているバンドの値は上の bandName・setlistText などにある
+    bandIdx: 0, // いま出ているバンドの番号
+    guide: true, // パネルの上に「はじめてのガイド」を出す
   };
 
   /** 英語で初めて開いたときのセットリストの見本 */
@@ -1206,6 +1296,143 @@ body.remote-mode #stage { opacity: 0.25; }
     "受信：ブリッジの UDP <b id=\"osc-in\">9000</b> 番。<code>/vj/scene 3</code>・<code>/vj/flash</code>・<code>/vj/blackout 1</code>・<code>/vj/next</code>・<code>/vj/master 0.8</code> など（手順書参照）": "Receive: bridge UDP port <b id=\"osc-in\">9000</b>. <code>/vj/scene 3</code>, <code>/vj/flash</code>, <code>/vj/blackout 1</code>, <code>/vj/next</code>, <code>/vj/master 0.8</code>, etc. (see the manual)",
     "映像は出力ウィンドウに出ています。キー操作とこのパネルはそのまま使えます。出力ウィンドウはプロジェクター側へ移動して<b>ダブルクリック</b>（または F）で全画面に。閉じるとこの画面に戻ります。": "The visuals are in the output window. Keys and this panel work as usual. Move the output window to the projector and <b>double-click</b> it (or press F) for fullscreen. Closing it returns to this screen.",
     "出力ウィンドウを閉じられませんでした。出力ウィンドウを直接閉じてください": "Could not close the output window. Please close it directly.",
+    "話し声が多い": "mostly speech",
+    "ドラムが無く、歌（声）が中心": "no drums, mostly vocals",
+    "ドラムが無い・静か": "no drums / quiet",
+    "4 つ打ちのドラム（{0} BPM）": "four-on-the-floor drums ({0} BPM)",
+    "ドラムあり（{0} BPM）": "drums ({0} BPM)",
+    "ドラムあり": "drums",
+    "演奏の音を測れませんでした（短すぎるか、音声入力が止まっています）": "Could not measure the performance (too short, or the audio input stopped)",
+    "音がほとんど入っていません。入力の選び方・ケーブル・ミキサーの出力を確認してください": "Almost no sound is coming in. Check the input selection, cables and mixer output",
+    "音が小さめです（{0} dBFS）。ミキサーの出力か PC の入力音量を上げてください": "The level is low ({0} dBFS). Turn up the mixer output or the PC input level",
+    "音の大きさ OK（{0} dBFS）": "Level OK ({0} dBFS)",
+    "音が割れています。ミキサーの出力か PC の入力音量を下げてください": "The sound is clipping. Turn down the mixer output or the PC input level",
+    "音の山が上限ぎりぎりです（{0} dBFS）。少し下げると安心です": "Peaks are close to the limit ({0} dBFS). Turning it down a little is safer",
+    "音割れなし（最大 {0} dBFS）": "No clipping (peak {0} dBFS)",
+    "片方のチャンネル（{0}）にしか音がありません。「解析するチャンネル」はミックスのままで大丈夫です": "Only one channel ({0}) has sound. You can leave \"Channel to analyze\" on mix",
+    "演奏の音が会場の雑音に近いです（差 {0} dB）。マイクを音の出る所に近づけるか、ミキサーからのライン入力を使ってください": "The performance is close to the room noise ({0} dB apart). Move the mic closer to the sound or use a line input from the mixer",
+    "会場の雑音 {0} dBFS。演奏と区別できないので「無音とみなす音量」は変えません": "Room noise {0} dBFS. It cannot be separated from the performance, so \"Silence threshold\" is left as is",
+    "会場の雑音は {0} dBFS。雑音に反応しないよう「無音とみなす音量」を {1} dBFS にするのがおすすめです": "Room noise is {0} dBFS. Setting \"Silence threshold\" to {1} dBFS is recommended so the visuals ignore it",
+    "会場の雑音 {0} dBFS（いまの設定で大丈夫）": "Room noise {0} dBFS (current setting is fine)",
+    "会場は静かです（雑音 {0} dBFS）": "The room is quiet (noise {0} dBFS)",
+    "会場の雑音は測りませんでした": "Room noise was not measured",
+    "音楽のタイプは「{0}」がおすすめです（{1}）": "Recommended music type: \"{0}\" ({1})",
+    "音楽のタイプ「{0}」で合っています（{1}）": "Music type \"{0}\" fits ({1})",
+    "次は {0}": "Next: {0}",
+    "次の出演": "Up next",
+    "出演：{0}": "Now on stage: {0}",
+    "「{0}」を一覧から消しますか？（セットリスト・ロゴも消えます）": "Remove \"{0}\" from the list? (Its setlist and logo are removed too)",
+    "（名前なし）": "(no name)",
+    "演奏中です。「{0}」に切り替えますか？": "A set is in progress. Switch to \"{0}\"?",
+    "これ以上追加できません": "No more bands can be added",
+    "演奏中です。次のバンドに切り替えますか？": "A set is in progress. Switch to the next band?",
+    "出演バンドが 1 つだけです（設定 M の ③ で追加）": "There is only one band (add more in ③ of the panel, M)",
+    "最後のバンドです": "This is the last band",
+    "最初のバンドです": "This is the first band",
+    "演奏中です。もう一度押すと「{0}」に切り替えます": "A set is in progress. Press again to switch to \"{0}\"",
+    "{0} 曲": "{0} songs",
+    "出演中": "on stage",
+    "上へ": "Move up",
+    "下へ": "Move down",
+    "本番前チェック": "Pre-show check",
+    "本番前チェックを閉じる": "Close pre-show check",
+    "はじめてのガイド": "Getting started",
+    "{0} / {1} 完了": "{0} / {1} done",
+    "ガイドを閉じる（右上の ? でまた開く）": "Close the guide (reopen with ? at the top right)",
+    "音声入力が始まっていません（① の「▶ 音声入力を開始」）": "Audio input has not started (\"▶ Start audio input\" in ①)",
+    "音声入力：{0}": "Audio input: {0}",
+    "入力中": "running",
+    "音が来ています": "Sound is coming in",
+    "いま音が来ていません（メーターが動くか確認。演奏が始まれば大丈夫です）": "No sound right now (check that the meters move; fine once the music starts)",
+    "音が割れているかもしれません（入力の音量を下げる）": "The sound may be clipping (turn the input level down)",
+    "リハで「サウンドチェック」をしておくと安心です（①）": "Running a \"Sound check\" at rehearsal is recommended (①)",
+    "サウンドチェックで問題がありました（① の結果を確認）": "The sound check found problems (see the result in ①)",
+    "サウンドチェック済み": "Sound check done",
+    "GPU が使われていません（ソフトウェア描画）。映像が重くなります": "The GPU is not being used (software rendering). Visuals will be slow",
+    "描画が重いです（{0} fps）。⑤ の「画質上限」を下げるか、フレームレートを 30 に": "Rendering is slow ({0} fps). Lower \"Max quality\" in ⑤ or set the frame rate to 30",
+    "描画 {0} fps": "Rendering at {0} fps",
+    "出力ウィンドウは全画面です": "The output window is fullscreen",
+    "出力ウィンドウが全画面ではありません（プロジェクター側でダブルクリック）": "The output window is not fullscreen (double-click it on the projector)",
+    "「ショー開始」で全画面になります（2 画面にするなら ④ の「出力ウィンドウを開く」）": "\"Start show\" goes fullscreen (for two screens, use \"Open output window\" in ④)",
+    "暗転中です（B で解除）": "Blackout is on (B to turn off)",
+    "テストパターンを表示中です（G で戻す）": "The test pattern is showing (G to go back)",
+    "出演：{0}（{1} 曲）": "On stage: {0} ({1} songs)",
+    "— {0} 組中 {1} 組目": "— band {1} of {0}",
+    "出演：{0}（曲が登録されていません。→ キーの曲送りは使えません）": "On stage: {0} (no songs entered; → for the next song will not work)",
+    "セットリストに読めない行があります（{0} 件。③ を確認）": "The setlist has lines that could not be read ({0}; check ③)",
+    "フラッシュを一切使わない設定です": "Flashes are turned off completely",
+    "フラッシュは 1 秒に 3 回まで（光過敏対策）。会場に「光の点滅があります」と掲示してください": "Flashes are limited to 3 per second (photosensitivity). Post a \"flashing lights\" notice at the venue",
+    "「ショー開始」で画面のスリープを止めます": "\"Start show\" keeps the screen awake",
+    "この環境では画面のスリープを止められません。PC の設定でスリープ・画面オフを「なし」に": "This environment cannot keep the screen awake. Set sleep and screen off to \"never\" in the PC settings",
+    "ブリッジに接続中（スマホ {0} 台）": "Connected to the bridge ({0} phones)",
+    "ブリッジにつながっていません（⑦）": "Not connected to the bridge (⑦)",
+    "照明（DMX）を送信中": "Sending lighting (DMX)",
+    "照明（DMX）を送れていません（⑦）": "Lighting (DMX) is not being sent (⑦)",
+    "要対応 {0} 件": "{0} to fix",
+    "注意 {0} 件": "{0} warnings",
+    "準備 OK": "Ready",
+    "音声入力を始める": "Start the audio input",
+    "① で入力（マイク / ライン・PC の音など）を選んで「▶ 音声入力を開始」": "Choose an input in ① (mic / line, PC audio, …) and press \"▶ Start audio input\"",
+    "音が来ているか確かめる": "Check that sound is coming in",
+    "メーターが動けば OK。リハでは「サウンドチェック」で自動調整": "OK if the meters move. At rehearsal, use \"Sound check\" to adjust automatically",
+    "スクリーンに合わせる": "Fit the screen",
+    "④ でテストパターン（G）を出して位置・大きさ・向きを合わせる。2 画面なら出力ウィンドウを開く": "Show the test pattern (G) in ④ and adjust position, size and orientation. For two screens, open the output window",
+    "出演バンドとセットリスト": "Bands and setlists",
+    "③ にバンド名・曲・開演時刻。出演者が複数なら「＋ バンドを追加」": "Enter the band name, songs and start time in ③. For several acts, use \"+ Add band\"",
+    "本番前チェック → ショー開始": "Pre-show check → Start show",
+    "⑥ の「本番前チェック」で確認してから「ショー開始」": "Check with \"Pre-show check\" in ⑥, then \"Start show\"",
+    "スマホ用の QR コードを表示": "Show QR code for phones",
+    "QR コードを作れません（ブリッジにつながっていないか、LAN に接続されていません）": "Cannot make a QR code (not connected to the bridge, or no LAN connection)",
+    "スマホのカメラで読み取ると、暗証番号を入れずにつながります。QR には暗証番号が入っているので、観客から見えるところでは表示しないでください。": "Scan with a phone camera to connect without typing the PIN. The QR code contains the PIN, so do not show it where the audience can see it.",
+    "QR コードを隠す": "Hide QR code",
+    "キー早見表": "Key cheat sheet",
+    "数字キー（⇧ は Shift を押しながら）で次のビートに切替。もう一度押すとすぐ。0 はタイトル。": "Number keys (⇧ = with Shift) switch on the next beat; press again to switch now. 0 is the title.",
+    "印刷できませんでした：": "Could not print: ",
+    "「{0}」を消しますか？": "Delete \"{0}\"?",
+    "新しい曲 {0}": "New song {0}",
+    "パレット：そのまま": "Palette: keep",
+    "外す": "Remove",
+    "シーン：オート": "Scenes: auto",
+    "選び終える": "Done",
+    "＋ シーン": "+ Scene",
+    "曲名を表示": "Show title",
+    "押した順に使います（2 つ以上ならオートで順番に）": "Used in the order you press them (with two or more, auto mode goes through them in order)",
+    "＋ 曲を追加": "+ Add song",
+    "やめる": "Stop",
+    "あと {0} 秒": "{0} s left",
+    "先に「▶ 音声入力を開始」を押してください": "Press \"▶ Start audio input\" first",
+    "サウンドチェックをやめる": "Stop sound check",
+    "① 会場を静かにしてください（雑音の大きさを測ります）": "① Please keep the room quiet (measuring the noise level)",
+    "飛ばす": "Skip",
+    "② 演奏してもらってください（いちばん大きい曲・サビがおすすめ）": "② Ask the band to play (the loudest song or a chorus works best)",
+    "ここで終える": "Finish now",
+    "サウンドチェックができませんでした：": "Sound check failed: ",
+    "サウンドチェック（自動調整）": "Sound check (auto adjust)",
+    "音楽のタイプ：{0}": "Music type: {0}",
+    "（いま：{0}）": "(now: {0})",
+    "無音とみなす音量：{0} dBFS": "Silence threshold: {0} dBFS",
+    "（いま：{0} dBFS）": "(now: {0} dBFS)",
+    "サウンドチェックの結果": "Sound check result",
+    "おすすめの設定": "Recommended settings",
+    "おすすめの設定にする": "Apply recommended settings",
+    "もう一度": "Again",
+    "閉じる": "Close",
+    "サウンドチェックのおすすめを設定しました": "Applied the sound check recommendations",
+    "設定しました": "Applied",
+    "次のバンド / 前のバンド（演奏中は 2 回押す）": "Next / previous band (press twice during a set)",
+    "クリックで切替（次のビートで。もう一度押すとすぐ）": "Click to switch (on the next beat; click again to switch now)",
+    "キー早見表を印刷": "Print key cheat sheet",
+    "③ 出演バンド・セットリスト・文字": "③ Bands, setlist & text",
+    "＋ バンドを追加": "+ Add band",
+    "次のバンドへ ▶（N）": "Next band ▶ (N)",
+    "バンドごとに名前・セットリスト・ロゴ・音楽のタイプ・色・開演時刻・テロップを覚えます。下の欄は「出演中」のバンドの内容です。": "Each band keeps its own name, setlist, logo, music type, colors, start time and captions. The fields below are for the band \"on stage\".",
+    "開演": "Start",
+    "ロゴ画像・テロップ": "Logo & captions",
+    "リハで約 20 秒：音の大きさ・音割れ・会場の雑音を調べて、音楽のタイプと「無音とみなす音量」をおすすめします。": "About 20 s at rehearsal: checks the level, clipping and room noise, and recommends a music type and \"Silence threshold\".",
+    "セットリスト": "Setlist",
+    "→ キーで次の曲（曲名とシーン・色が変わる）": "→ for the next song (shows the title and changes scenes & colors)",
+    "文字でまとめて入力・貼り付けもできます（上の表と同じ内容）：": "You can also type or paste it as text (same content as the table above):",
+    "プレビュー（出力の映像を小さく表示）": "Preview (small view of the output)",
   };
 })(globalThis.VJ = globalThis.VJ || {});
 </script>
@@ -1227,7 +1454,8 @@ body.remote-mode #stage { opacity: 0.25; }
       if (!(k in src)) continue;
       const bv = base[k], sv = src[k];
       if (Array.isArray(bv)) {
-        if (Array.isArray(sv) && sv.length === bv.length) out[k] = clone(sv);
+        // 出演バンドの一覧は長さが変わる（中身は sanitize で確かめる）
+        if (Array.isArray(sv) && (sv.length === bv.length || k === 'bands')) out[k] = clone(sv);
       } else if (isObj(bv)) {
         if (isObj(sv)) out[k] = clone(sv);
       } else if (typeof bv === typeof sv && (typeof sv !== 'number' || isFinite(sv))) {
@@ -1251,6 +1479,7 @@ body.remote-mode #stage { opacity: 0.25; }
     for (const [k, v] of Object.entries(s.autoScenes || {})) if (typeof v === 'boolean') as[k] = v;
     s.autoScenes = as;
     if (!s.messages.every((m) => typeof m === 'string')) s.messages = s.messages.map((m) => (typeof m === 'string' ? m : ''));
+    if (VJ.bands) VJ.bands.ensure(s);
     return s;
   }
 
@@ -2929,6 +3158,164 @@ body.remote-mode #stage { opacity: 0.25; }
   FeatureExtractor.TYPES = TYPES;
   FeatureExtractor.FLAG = FLAG;
   D.FeatureExtractor = FeatureExtractor;
+})(globalThis.VJ = globalThis.VJ || {});
+</script>
+<script>/* src/dsp/soundcheck.js */
+/* サウンドチェック（リハでの自動調整）。DOM を使わない計算部分。
+ *   1. 静かな状態（数秒）：会場の雑音の大きさ
+ *   2. 演奏（十数秒）：音の大きさ・割れ・左右・ドラムの有無・テンポ・声・話し声
+ * から、問題点（小さすぎ・割れ・雑音に近い）と、おすすめの設定（無音とみなす音量・音楽のタイプ）を出す。
+ * 測るのは音声を解析しているウィンドウ（2 画面のときは出力ウィンドウ）。結果は JSON にできる形。 */
+(function (VJ) {
+  'use strict';
+  const t = (...a) => VJ.t(...a);
+
+  /** 分位点（q = 0..1）。空なら -120 */
+  function pct(arr, q) {
+    if (!arr.length) return -120;
+    const a = Float64Array.from(arr).sort();
+    return a[Math.min(a.length - 1, Math.max(0, Math.round(q * (a.length - 1))))];
+  }
+
+  /** 1 区間ぶんの集計。描画フレームごとに push する */
+  class SoundCheckAcc {
+    constructor() {
+      this.n = 0;
+      this.rms = [];
+      this.act = [];
+      this.voiced = 0;
+      this.speechN = 0;
+      this.melN = 0;
+      this.conf = [];
+      this.bpm = [];
+      this.clipN = 0;
+      this.peakMax = -120;
+      this.lMax = -120;
+      this.rMax = -120;
+      this.mono = true;
+      this.first = null;
+      this.last = null;
+    }
+
+    /**
+     * @param f 特徴量（FeatureExtractor.computeFrame の結果）
+     * @param meter { l, r, lPeak, rPeak, mono }（dBFS。無ければ省略可）
+     */
+    push(f, meter) {
+      const snap = { t: f.audioTime, kick: f.kickN, snare: f.snareN, hat: f.hatN };
+      if (!this.first) this.first = snap;
+      this.last = snap;
+      this.n++;
+      this.rms.push(f.rmsDb);
+      if (f.active) this.act.push(f.rmsDb);
+      this.voiced += f.voiced || 0;
+      if (f.speech) this.speechN++;
+      if (f.melodic) this.melN++;
+      this.conf.push(f.beatConf || 0);
+      if (f.bpm && f.beatConf > 0.3) this.bpm.push(f.bpm);
+      if (meter) {
+        const pk = Math.max(meter.lPeak, meter.mono ? -120 : meter.rPeak);
+        if (pk > -0.5) this.clipN++;
+        if (pk > this.peakMax) this.peakMax = pk;
+        if (meter.l > this.lMax) this.lMax = meter.l;
+        if (!meter.mono) { this.mono = false; if (meter.r > this.rMax) this.rMax = meter.r; }
+      }
+    }
+
+    /** 集計（JSON にできる形） */
+    summary() {
+      const sec = this.first && this.last ? Math.max(1e-3, this.last.t - this.first.t) : 0;
+      const rate = (k) => (sec > 0.5 ? (this.last[k] - this.first[k]) / sec : 0);
+      const n = Math.max(1, this.n);
+      return {
+        n: this.n, sec,
+        activeFrac: this.act.length / n,
+        rmsP10: pct(this.rms, 0.1), rmsP90: pct(this.rms, 0.9), rmsMed: pct(this.rms, 0.5),
+        actMed: pct(this.act, 0.5), actP20: pct(this.act, 0.2),
+        kickRate: rate('kick'), snareRate: rate('snare'), hatRate: rate('hat'),
+        voicedFrac: this.voiced / n, speechFrac: this.speechN / n, melodicFrac: this.melN / n,
+        confMed: pct(this.conf, 0.5), bpm: this.bpm.length > this.n * 0.2 ? pct(this.bpm, 0.5) : 0,
+        clipFrac: this.clipN / n, peakMax: this.peakMax,
+        lMax: this.lMax, rMax: this.mono ? null : this.rMax,
+      };
+    }
+  }
+
+  const round = (x) => Math.round(x);
+
+  /** 音楽のタイプの見立て：[タイプの id, 理由] */
+  function guessProfile(m) {
+    // ドラムの有無：解析が「ドラムの無い曲」と判断していた時間が長い（このときはメロディの立ち上がりもキックに数える）
+    // か、キックが少ない・拍がはっきりしない
+    const drums = m.melodicFrac < 0.5 && m.kickRate >= 0.4 && m.confMed >= 0.35;
+    if (m.speechFrac > 0.4) return ['speech', t('話し声が多い')];
+    if (!drums && m.voicedFrac > 0.45) return ['voice', t('ドラムが無く、歌（声）が中心')];
+    if (!drums) return ['acoustic', t('ドラムが無い・静か')];
+    // 4 つ打ち（ほぼ 1 拍ごとにキック）で速め → ダンス（8 ビートのロックはキックが拍の半分ほど）
+    if (m.bpm >= 115 && m.kickRate >= 0.68 * (m.bpm / 60)) return ['dance', t('4 つ打ちのドラム（{0} BPM）', round(m.bpm))];
+    return ['auto', m.bpm ? t('ドラムあり（{0} BPM）', round(m.bpm)) : t('ドラムあり')];
+  }
+
+  /**
+   * 結果とおすすめ。
+   * @param quiet 静かな区間の summary（測らなかったら null）
+   * @param music 演奏の区間の summary
+   * @param settings いまの設定（gateDb・profile）
+   * @returns { items: [{level: 'ok'|'warn'|'bad'|'info', text}], rec: { gateDb?, profile? }, worst }
+   */
+  function analyze(quiet, music, settings) {
+    const items = [], rec = {};
+    const add = (level, text) => items.push({ level, text });
+    // 足りるかは時間で見る（描画が重い PC ではフレームが少ない）
+    if (!music || music.n < 10 || music.sec < 2) {
+      add('bad', t('演奏の音を測れませんでした（短すぎるか、音声入力が止まっています）'));
+      return { items, rec, worst: 'bad' };
+    }
+    // 1) 大きさ
+    if (music.activeFrac < 0.3) add('bad', t('音がほとんど入っていません。入力の選び方・ケーブル・ミキサーの出力を確認してください'));
+    else if (music.actMed < -48) add('warn', t('音が小さめです（{0} dBFS）。ミキサーの出力か PC の入力音量を上げてください', round(music.actMed)));
+    else add('ok', t('音の大きさ OK（{0} dBFS）', round(music.actMed)));
+    // 2) 割れ
+    if (music.clipFrac > 0.01) add('bad', t('音が割れています。ミキサーの出力か PC の入力音量を下げてください'));
+    else if (music.peakMax > -1) add('warn', t('音の山が上限ぎりぎりです（{0} dBFS）。少し下げると安心です', music.peakMax.toFixed(1)));
+    else if (music.activeFrac >= 0.3) add('ok', t('音割れなし（最大 {0} dBFS）', round(music.peakMax)));
+    // 3) 左右
+    if (music.rMax !== null && music.lMax > -100 && Math.abs(music.lMax - music.rMax) > 24) {
+      add('info', t('片方のチャンネル（{0}）にしか音がありません。「解析するチャンネル」はミックスのままで大丈夫です', music.lMax > music.rMax ? 'L' : 'R'));
+    }
+    // 4) 雑音と「無音とみなす音量」
+    if (quiet && quiet.n >= 10 && quiet.sec >= 1) {
+      const noise = quiet.rmsP90;
+      if (music.activeFrac >= 0.3 && music.actMed - noise < 12) {
+        add('warn', t('演奏の音が会場の雑音に近いです（差 {0} dB）。マイクを音の出る所に近づけるか、ミキサーからのライン入力を使ってください', round(music.actMed - noise)));
+      }
+      if (noise > -66) {
+        // 雑音より少し上。ただし演奏の小さいところ（20%）より 6dB 以上下に
+        let g = Math.min(round(noise + 4), round(music.actP20 - 6));
+        g = Math.max(-70, Math.min(-20, g));
+        // 演奏の小さいところが雑音に埋もれているときは分けられない（上の警告だけ）
+        if (g < noise + 2) add('info', t('会場の雑音 {0} dBFS。演奏と区別できないので「無音とみなす音量」は変えません', round(noise)));
+        else if (g > settings.gateDb + 2) {
+          rec.gateDb = g;
+          add('info', t('会場の雑音は {0} dBFS。雑音に反応しないよう「無音とみなす音量」を {1} dBFS にするのがおすすめです', round(noise), g));
+        } else add('ok', t('会場の雑音 {0} dBFS（いまの設定で大丈夫）', round(noise)));
+      } else add('ok', t('会場は静かです（雑音 {0} dBFS）', round(noise)));
+    } else {
+      add('info', t('会場の雑音は測りませんでした'));
+    }
+    // 5) 音楽のタイプ
+    const [prof, why] = guessProfile(music);
+    const name = VJ.profileName(VJ.profileById(prof));
+    if (prof !== settings.profile) {
+      rec.profile = prof;
+      add('info', t('音楽のタイプは「{0}」がおすすめです（{1}）', name, why));
+    } else add('ok', t('音楽のタイプ「{0}」で合っています（{1}）', name, why));
+    const order = { ok: 0, info: 1, warn: 2, bad: 3 };
+    const worst = items.reduce((w, x) => (order[x.level] > order[w] ? x.level : w), 'ok');
+    return { items, rec, worst };
+  }
+
+  VJ.soundcheck = { SoundCheckAcc, analyze, guessProfile, pct };
 })(globalThis.VJ = globalThis.VJ || {});
 </script>
 <script>/* src/audio/synth.js */
@@ -6732,7 +7119,177 @@ void main() {
     return out;
   }
 
-  VJ.setlist = { parse, normalize };
+  /** 1 曲目より前のコメント行（# …）。表で編集して書き直すときに残す */
+  function headComments(text) {
+    const out = [];
+    for (const raw of String(text || '').split(/\r?\n/)) {
+      const line = normalize(raw).trim();
+      if (!line || line.startsWith('@')) continue;
+      if (!line.startsWith('#')) break;
+      out.push(raw.trim());
+    }
+    return out;
+  }
+
+  /** 解析結果 → 文字（表で編集したとき）。シーンはキー（1〜9・s1〜s9・0）、パレットは英字の名前で書く */
+  function serialize(p, comments) {
+    const lines = [];
+    if (p.band) lines.push('@band ' + p.band);
+    for (const c of comments || []) lines.push(c);
+    p.songs.forEach((s, i) => {
+      // 区切りの「|」と改行は曲名に入れられない。行頭に番号を付ける（数字で始まる曲名が番号と間違われないように）
+      const title = String(s.title || '').replace(/[|｜￨│]/g, '/').replace(/[\r\n]+/g, ' ').trim() || '?';
+      const sc = (s.scenes || []).map((id) => (VJ.scenes.byId[id] ? VJ.scenes.byId[id].key : id)).join(',');
+      const pal = s.palette !== null && s.palette !== undefined && VJ.palettes[s.palette] ? VJ.palettes[s.palette].id : '';
+      const parts = [`${i + 1}. ${title}`];
+      if (sc || pal || s.notitle) parts.push(sc);
+      if (pal || s.notitle) parts.push(pal);
+      if (s.notitle) parts.push('notitle');
+      lines.push(parts.join(' | '));
+    });
+    if (p.end) lines.push('@end ' + p.end);
+    return lines.join('\n');
+  }
+
+  VJ.setlist = { parse, normalize, serialize, headComments };
+})(globalThis.VJ = globalThis.VJ || {});
+</script>
+<script>/* src/show/bands.js */
+/* 出演バンド（タイムテーブル）。バンドごとに「名前・セットリスト・ロゴ・音楽のタイプ・色・開演時刻・テロップ」を持ち、
+ * 1 回の操作で切り替える。いま出ているバンドの値は設定の上の階層（bandName・setlistText など）にあり、
+ * パネルの入力欄はそれを直接編集する。bands[bandIdx] は空の印（{}）で、ほかのバンドに切り替えるときに中身を移す
+ * （ロゴ画像を 2 重に保存しないため）。DOM は使わない（単体テストから呼べる）。 */
+(function (VJ) {
+  'use strict';
+
+  const KEYS = ['bandName', 'setlistText', 'logo', 'logoMode', 'profile', 'paletteIdx', 'countdownTo', 'messages'];
+  const MAX = 40;
+  const clone = (v) => JSON.parse(JSON.stringify(v));
+
+  /** 1 バンド分の値の形を確かめる（壊れた設定ファイル・古い版でも動くように） */
+  function cleanBand(b) {
+    const D = VJ.defaultSettings, out = {};
+    if (!b || typeof b !== 'object' || Array.isArray(b)) return out;
+    for (const k of KEYS) {
+      const v = b[k];
+      if (v === undefined) continue;
+      if (k === 'messages') {
+        if (Array.isArray(v)) out.messages = [0, 1, 2].map((i) => (typeof v[i] === 'string' ? v[i] : ''));
+      } else if (k === 'logo') {
+        if (typeof v === 'string' && (v === '' || /^data:image\//.test(v))) out.logo = v;
+      } else if (k === 'paletteIdx') {
+        if (typeof v === 'number' && isFinite(v)) out.paletteIdx = Math.max(0, Math.round(v));
+      } else if (typeof v === typeof D[k]) {
+        out[k] = v;
+      }
+    }
+    return out;
+  }
+
+  const bands = {
+    KEYS,
+    MAX,
+    cleanBand,
+
+    /** bands / bandIdx を使える形にする（無ければ、いまの設定を 1 組目にする） */
+    ensure(s) {
+      if (!Array.isArray(s.bands)) s.bands = [];
+      s.bands = s.bands.slice(0, MAX).map(cleanBand);
+      if (!s.bands.length) s.bands.push({});
+      s.bandIdx = Math.max(0, Math.min(s.bands.length - 1, Math.round(+s.bandIdx || 0)));
+      s.bands[s.bandIdx] = {};
+      return s;
+    },
+
+    /** いまの設定から、バンドの値だけを取り出す */
+    snapshot(s) {
+      const out = {};
+      for (const k of KEYS) out[k] = clone(s[k] === undefined ? VJ.defaultSettings[k] : s[k]);
+      return out;
+    },
+
+    /** i 番目のバンドの値（いま出ているバンドは設定の上の階層から） */
+    get(s, i) {
+      bands.ensure(s);
+      if (i === s.bandIdx) return bands.snapshot(s);
+      const b = s.bands[i];
+      if (!b) return null;
+      const D = VJ.defaultSettings, out = {};
+      for (const k of KEYS) out[k] = clone(b[k] === undefined ? (k === 'setlistText' ? '' : k === 'bandName' ? '' : D[k]) : b[k]);
+      return out;
+    },
+
+    /** 表示用の名前（セットリストの @band が優先） */
+    nameOf(s, i) {
+      const b = bands.get(s, i);
+      if (!b) return '';
+      const p = VJ.setlist.parse(b.setlistText);
+      return p.band || b.bandName || '';
+    },
+
+    /** 一覧（パネル・スマホ用） */
+    list(s) {
+      bands.ensure(s);
+      return s.bands.map((_, i) => {
+        const b = bands.get(s, i);
+        const p = VJ.setlist.parse(b.setlistText);
+        return { i, name: p.band || b.bandName || '', start: b.countdownTo || '', songs: p.songs.length, current: i === s.bandIdx, logo: !!b.logo };
+      });
+    },
+
+    /** i 番目のバンドに切り替える（いまのバンドの値は保存する）。変わったら true */
+    select(s, i) {
+      bands.ensure(s);
+      i = Math.round(+i);
+      if (!(i >= 0 && i < s.bands.length) || i === s.bandIdx) return false;
+      s.bands[s.bandIdx] = bands.snapshot(s);
+      const b = s.bands[i];
+      const D = VJ.defaultSettings;
+      for (const k of KEYS) s[k] = clone(b[k] === undefined ? (k === 'setlistText' || k === 'bandName' ? '' : D[k]) : b[k]);
+      if (!Array.isArray(s.messages) || s.messages.length !== 3) s.messages = ['', '', ''];
+      if (!(s.paletteIdx < VJ.palettes.length)) s.paletteIdx = 0;
+      s.bands[i] = {};
+      s.bandIdx = i;
+      return true;
+    },
+
+    /** バンドを追加（音楽のタイプなどはいまのバンドに合わせ、名前・セットリスト・ロゴ・テロップは空）。追加した番号 */
+    add(s, name) {
+      bands.ensure(s);
+      if (s.bands.length >= MAX) return -1;
+      const cur = bands.snapshot(s);
+      s.bands.push({
+        bandName: String(name || ''), setlistText: '', logo: '', logoMode: cur.logoMode, profile: cur.profile,
+        paletteIdx: cur.paletteIdx, countdownTo: '', messages: ['', '', ''],
+      });
+      return s.bands.length - 1;
+    },
+
+    /** i 番目を消す（最後の 1 組は消さない）。いま出ているバンドを消すときは隣に切り替える */
+    remove(s, i) {
+      bands.ensure(s);
+      if (s.bands.length <= 1 || !(i >= 0 && i < s.bands.length)) return false;
+      if (i === s.bandIdx) bands.select(s, i > 0 ? i - 1 : 1);
+      s.bands.splice(i, 1);
+      if (s.bandIdx > i) s.bandIdx--;
+      return true;
+    },
+
+    /** i 番目を d（-1 / +1）だけ動かす（いま出ているバンドの番号もずらす） */
+    move(s, i, d) {
+      bands.ensure(s);
+      const j = i + d;
+      if (!(i >= 0 && i < s.bands.length && j >= 0 && j < s.bands.length)) return false;
+      const a = s.bands[i];
+      s.bands[i] = s.bands[j];
+      s.bands[j] = a;
+      if (s.bandIdx === i) s.bandIdx = j;
+      else if (s.bandIdx === j) s.bandIdx = i;
+      return true;
+    },
+  };
+
+  VJ.bands = bands;
 })(globalThis.VJ = globalThis.VJ || {});
 </script>
 <script>/* src/show/safety.js */
@@ -7314,6 +7871,35 @@ void main() {
 
     titleText() { return this.state.endState ? this.endText() : this.bandName(); }
 
+    /** タイトルの下の小さな文字：開演までのカウントダウン。出演バンドが複数あるときは「次の出演」、
+     *  終演のあとは「次は ○○」 */
+    titleSub(nowDate) {
+      const cd = this.countdownText(nowDate);
+      if (cd) return cd;
+      const s = this.settings, n = Array.isArray(s.bands) ? s.bands.length : 0;
+      if (n < 2 || !VJ.bands) return '';
+      if (this.state.endState) {
+        const next = (s.bandIdx | 0) + 1 < n ? VJ.bands.nameOf(s, (s.bandIdx | 0) + 1) : '';
+        return next ? t('次は {0}', next) : '';
+      }
+      return this.state.songIdx < 0 ? t('次の出演') : '';
+    }
+
+    /** 出演バンドを切り替えたとき：開演前（タイトル）に戻す */
+    resetShow() {
+      const s = this.state;
+      s.songIdx = -1;
+      s.endState = false;
+      s.text = null;
+      s.msg = null;
+      s.pending = null;
+      s.beforeTest = null;
+      this.director.silentFrom = null;
+      this._applyScene('title');
+      this._toast(t('出演：{0}', this.bandName() || '—'));
+      return true;
+    }
+
     /** 動きの大きさを掛けた特徴量（オブジェクトは使い回す） */
     _scaled(f) {
       const k = this.react();
@@ -7374,7 +7960,7 @@ void main() {
       fr.titleLogo = isTitle && !s.endState && (logo === 'title' || logo === 'both');
       // バンド名の文字：タイトルと、文字を使うシーン（声の輪など。def.title）で
       const usesTitle = isTitle || fr.scene.title || (this.xfade && VJ.scenes.byId[this.xfade.id] && (this.xfade.id === 'title' || VJ.scenes.byId[this.xfade.id].title));
-      fr.titleTex = usesTitle && getText ? getText(this.titleText(), this.countdownText()).tex : null;
+      fr.titleTex = usesTitle && getText ? getText(this.titleText(), this.titleSub()).tex : null;
       fr.logoCorner = (logo === 'corner' || (logo === 'both' && !isTitle)) && s.sceneId !== 'test' ? this.settings.logoCorner || 'br' : '';
       fr.latSq = this.settings.latencySquare ? s.latSq : -1;
       fr.vignette = s.sceneId === 'test' ? 0 : 0.6;
@@ -7425,6 +8011,7 @@ void main() {
     ['→ / ←', '次の曲 / 前の曲（曲名を表示）'], ['Space', 'フラッシュ'], ['S（押している間）', 'ストロボ'],
     ['B', '暗転 ON/OFF'], ['C / Shift+C', 'パレット 次 / 前'], ['↑ / ↓', '感度'], ['Shift+↑ / ↓', '全体の明るさ'],
     ['A', 'オート ON/OFF'], ['Enter', 'タップテンポ（拍に合わせて 3 回以上）'], ['Q / W / E', 'テロップ 1〜3 を表示・消す'],
+    ['N / Shift+N', '次のバンド / 前のバンド（演奏中は 2 回押す）'],
     ['T', '曲名をもう一度表示'], ['G', 'テストパターン（位置合わせ）'], ['F', '全画面にする'], ['D', '診断表示'],
     ['H', 'このヘルプ'], ['M', '設定パネル'], ['L', 'ロック（長押しで解除）'], ['R（2 秒長押し）', 'ソフトリセット'],
     ['Esc', 'パネルを閉じる（全画面中は長押しで解除）'],
@@ -7496,6 +8083,7 @@ void main() {
       else if (code === 'ArrowDown') (shift ? show.nudgeMaster(-1) : show.nudgeSensitivity(-1));
       else if (code === 'KeyA') show.toggleAuto();
       else if (code === 'KeyT') show.showSongTitle();
+      else if (code === 'KeyN') { if (VJ.bandsUI) VJ.bandsUI.step(shift ? -1 : 1); }
       else if (code === 'Enter' || code === 'NumpadEnter') show.tap();
       else if (code === 'KeyQ') show.toggleMessage(0);
       else if (code === 'KeyW') show.toggleMessage(1);
@@ -7857,7 +8445,7 @@ void main() {
 
   const SHOW_METHODS = ['selectScene', 'nextSong', 'prevSong', 'flash', 'setStrobe', 'toggleBlackout', 'setBlackout', 'cyclePalette',
     'nudgeSensitivity', 'nudgeMaster', 'toggleAuto', 'lock', 'unlock', 'showSongTitle', 'tap', 'toggleMessage', 'showMessage',
-    'toggleTestPattern', 'restoreSession', 'setMaster', 'setSensitivity', 'setPalette'];
+    'toggleTestPattern', 'restoreSession', 'setMaster', 'setSensitivity', 'setPalette', 'resetShow'];
   // 出力側から操作側へ反映してよい設定（型も確認する）
   const PATCH_KEYS = { paletteIdx: 'number', sensitivity: 'number', master: 'number', auto: 'boolean' };
 
@@ -7924,6 +8512,8 @@ void main() {
     seq: 0,
     lastStatus: null,
     _poll: null,
+    wantPreview: false, // 出力側：操作側がプレビューを見ているか
+    PREVIEW_MS: 250, // プレビューの間隔（1 秒に 4 回）
 
     send(msg) {
       if (!link.peer || link.peer.closed) return false;
@@ -7988,6 +8578,7 @@ void main() {
       document.body.classList.add('remote-mode');
       document.getElementById('btn-output').textContent = VJ.t('出力ウィンドウを前面に');
       document.getElementById('btn-output-stop').hidden = false;
+      link._previewOn();
       clearInterval(link._poll);
       link._poll = setInterval(() => { if (link.peer && link.peer.closed) link.closeOutput(true); }, 500);
       if (!fresh) {
@@ -8043,6 +8634,7 @@ void main() {
       if (d.t === 'hello') {
         // 出力ウィンドウが開いた／再読み込みされた：設定・曲の位置・音声入力を渡す
         link.send({ t: 'settings', settings: app.settings });
+        link._previewOn();
         const first = link.local.fresh;
         link.local.fresh = false;
         const sess = first ? link.local.session : app.show.session();
@@ -8076,10 +8668,19 @@ void main() {
         }
         if (changed) { VJ.panel.syncFromSettings(); VJ.panel.save(); }
         link._features = d.f;
+      } else if (d.t === 'preview') {
+        // 出力ウィンドウの縮小映像（JPEG の data URL）
+        const img = document.getElementById('remote-preview'), cb = document.getElementById('remote-preview-on');
+        // 切ったあとに届いた分は出さない
+        if (img && (!cb || cb.checked) && typeof d.url === 'string' && d.url.startsWith('data:image/jpeg;base64,')) { img.src = d.url; img.hidden = false; }
       } else if (d.t === 'engine') {
         app.engine._set(d.status, d.message);
       } else if (d.t === 'toast') {
         app.ui.toast(d.msg, d.kind);
+      } else if (d.t === 'band' && VJ.bandsUI) {
+        // 出力ウィンドウで受けたバンドの切替（スマホ・OSC・キー）。設定はこちらが持っているのでこちらで
+        if (typeof d.i === 'number') VJ.bandsUI.switchTo(d.i);
+        else if (d.d === 1 || d.d === -1) VJ.bandsUI.step(d.d, { force: !!d.force });
       } else if (d.t === 'res') {
         const p = link.pending.get(d.id);
         if (p) { link.pending.delete(d.id); if (d.error) p.reject(Object.assign(new Error(d.error), { name: d.errorName })); else p.resolve(d.value); }
@@ -8151,8 +8752,31 @@ void main() {
       link.send({ t: 'hello' });
     },
 
+    /** 操作側：プレビューの ON/OFF を出力側へ */
+    _previewOn() {
+      const cb = document.getElementById('remote-preview-on');
+      const on = !cb || cb.checked;
+      link.send({ t: 'preview', on });
+      const img = document.getElementById('remote-preview');
+      if (img && !on) img.hidden = true;
+    },
+
+    /** 出力側：描画した直後に呼ぶ（WebGL の画面は描いた直後でないと読めない）。縮小して操作側へ送る */
+    previewFrame(canvas, ts) {
+      if (!link.wantPreview || !link.peer || link.peer.closed || ts - (link._pvT || 0) < link.PREVIEW_MS) return;
+      link._pvT = ts;
+      const w = 240, h = Math.max(1, Math.round((w * canvas.height) / Math.max(1, canvas.width)));
+      let c = link._pv;
+      if (!c) c = link._pv = document.createElement('canvas');
+      if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+      const g = c.getContext('2d');
+      g.drawImage(canvas, 0, 0, w, h);
+      link.send({ t: 'preview', url: c.toDataURL('image/jpeg', 0.6) });
+    },
+
     async _onOutputMessage(d) {
       const app = link.app;
+      if (d.t === 'preview') { link.wantPreview = !!d.on; return; }
       if (d.t === 'settings') {
         for (const k of Object.keys(d.settings)) app.settings[k] = d.settings[k];
         app.applySettings();
@@ -8241,12 +8865,21 @@ void main() {
       let ws;
       try { ws = new WebSocket(net.url); } catch (e) { net.status = 'error'; net.error = e.message; return; }
       net.ws = ws;
-      ws.onopen = () => { net.status = 'on'; net.error = ''; net._cfgKey = ''; net._sendConfig(); };
+      ws.onopen = () => {
+        net.status = 'on'; net.error = ''; net._cfgKey = ''; net._sendConfig();
+        // スマホの操作画面に出すシーンの見本画像（つないだときに 1 回だけ。ブリッジが覚えておく）
+        if (VJ.thumbs) net.send({ t: 'thumbs', d: VJ.thumbs });
+      };
       ws.onmessage = (e) => {
         let m;
         try { m = JSON.parse(e.data); } catch (err) { return; }
         if (!m || typeof m !== 'object') return;
-        if (m.t === 'info') net.info = { pin: String(m.pin || ''), urls: Array.isArray(m.urls) ? m.urls.map(String) : [], oscPort: m.oscPort | 0, phones: m.phones | 0 };
+        if (m.t === 'info') {
+          net.info = { pin: String(m.pin || ''), urls: Array.isArray(m.urls) ? m.urls.map(String) : [], oscPort: m.oscPort | 0, phones: m.phones | 0 };
+          // スマホ用の QR コード（SVG）。形を確かめて、画像として表示する
+          net.qr = (Array.isArray(m.qr) ? m.qr : []).filter((q) => q && typeof q.url === 'string' && typeof q.svg === 'string' && /^<svg[\s>]/.test(q.svg) && q.svg.length < 100000)
+            .slice(0, 3).map((q) => ({ url: q.url, img: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(q.svg) }));
+        }
         else if (m.t === 'cmd') net.exec(m.name, m.args, m.from);
       };
       ws.onerror = () => { net.error = VJ.t('ブリッジにつながりません'); };
@@ -8320,6 +8953,14 @@ void main() {
           net._strobeUntil = a0 && from === 'phone' ? performance.now() + 1500 : 0;
           break;
         case 'test': show.toggleTestPattern(); break;
+        case 'band': {
+          // 'next' / 'prev' か、1 から始まる番号（スマホは確認してから送る）
+          if (!VJ.bandsUI) return false;
+          if (a0 === 'next' || a0 === 'prev') VJ.bandsUI.step(a0 === 'next' ? 1 : -1, { force: true });
+          else if (num(a0, 1, 99) !== null && Number.isInteger(a0)) VJ.bandsUI.switchTo(a0 - 1);
+          else return false;
+          break;
+        }
         default: return false;
       }
       if (app.onAction) app.onAction('net:' + (from || ''));
@@ -8342,8 +8983,9 @@ void main() {
             song: song ? `M${s.songIdx + 1} ${song.title}` : s.endState ? VJ.t('（終演）') : VJ.t('（開演前）'),
             bpm: f.bpm && f.beatConf > 0.2 ? f.bpm : 0, speech: !!f.speech,
             auto: !!s.auto, blackout: !!s.blackout, master: s.master, sens: s.sens,
-            scenes: VJ.scenes.list.filter((d) => !d.hidden).map((d) => ({ id: d.id, key: d.key.replace('s', '⇧'), name: VJ.sceneName(d) })),
+            scenes: (VJ.scenePick ? VJ.scenePick.list() : VJ.scenes.list.filter((d) => !d.hidden)).map((d) => ({ id: d.id, key: d.key.replace('s', '⇧'), name: VJ.sceneName(d) })),
             lang: VJ.i18n.lang,
+            band: VJ.bandsUI ? VJ.bandsUI.state(app.settings) : null,
           },
         });
       }
@@ -8364,6 +9006,8 @@ void main() {
 
     /** パネル表示用 */
     state() { return { status: net.status, info: net.info, error: net.error || '' }; },
+    /** スマホ用の QR コード [{ url, img }]（状態の通知には入れない。大きいので必要なときだけ） */
+    qrCodes() { return net.status === 'on' && net.info ? net.qr || [] : []; },
   };
 
   VJ.net = net;
@@ -8578,6 +9222,667 @@ void main() {
   VJ.dmx = dmx;
 })(globalThis.VJ = globalThis.VJ || {});
 </script>
+<script>/* src/ui/thumbs.js */
+/* シーンの見本画像（160×90 WebP）。自動生成：node tools/thumbs.mjs（シーンを追加・変更したら作り直す） */
+(function (VJ) {
+  'use strict';
+  VJ.thumbs = {
+    title: 'data:image/webp;base64,UklGRvAEAABXRUJQVlA4WAoAAAAgAAAAnwAAWQAASUNDUMgBAAAAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADZWUDggAgMAALARAJ0BKqAAWgA+tVSmTqckI6IkWflg4BaJZ0R3IA3Xqsrft3gD4cXAXT++DsCbwPAD6W61cYPzzPUXsFDLEh1RUCjKXqTIdbyMb8nSvDr0zI5qZ6LTIq/vkXeRaFahTQFfkPdCEV/oHCsqK/HGRQR+LoW8A2Ouk0+9k65Q2TmGIGD5MOssu9KLkor+N7lYlr9wj43kAAD+9uVzw+lSndypeZ/NjwwN26K7JGjCF6nuRZwbn+VaU5xBBS4zhPBzJ3E97lBW8FB+LZzT3+lH6VKBsbdit4PPi1sP7S2fMU98416D2/Ljn/UKpfYri4qh2JfgWD/OHAmpj9Vb3j1idwG+1tw83WOnzDavciVu4GXNFPnCtuQ8pB/rWdnlYQQMq4E8N57n4MdQ4Gen/sReMYO53lhTu5LeUsTXXm5lwJ/mJZgjXXh/axMlOC4Su0JT7zIaVqcbjIiDzK8/6vJ//u7PV6wIRBlURGvo5C423ssy7tozhkCN17zIIJdrqP50QjqEgNYdAlGANy7E2RBTAcTM8Tn9KZSdzG4LvPM+kMWu6P9X+mMbnI35SRhF8XD0Ho93+ybuIF0CmH6cvvC0YWT/SI1ua8voUeZg2Tv9De23t78jOVdUXeTpVlO6/BF6jBZFEOTc1sUQpz6b+VBftACLZt+7qNvC9mwan5ZBoH/IoXGdI+SX8gmtq1e13sMkxMSYnuWI54deI424cygQj+UsGeRylj7P8VgJi6XPiN9ubSnaLSDdp/SdGEe59hw4+km8rEKNvzl8Z4osXSTfsK7yxti1pgkNOUBkdKoOybgrziYMtTC4mJwzyX/dJG+Bu5pvaprDNI0C2HfPqqq+j4v5gmHhrgRunXbSOB7+tY/dKfD5D0VJm8a4fiEDVeQYCCQQLpdiVgjeZ9jI8E5myDKml70RgnT5oZzgRsgALfHjQvlFbZnKf25BJ8B6DT/aPqelDeaGCRCOPbqBCsxtIaQrh3g39kfNxZt6vz53ysaqorsxCySFWDWlP88w6NtrYAAA',
+    ripple: 'data:image/webp;base64,UklGRoADAABXRUJQVlA4WAoAAAAgAAAAnwAAWQAASUNDUMgBAAAAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADZWUDggkgEAAPALAJ0BKqAAWgA+tVqoTyclI6MitmkA4BaJZwDSsbC2otuCZqu/OWCqzF4yYEl6ufwVjU96MfAGQtELQY+0Ms6ZLt0fwNeYCpG5364Wp7EKfr16wlqn5BKH9OjMsWw2/MxKV/jOp58AAP73F5Uy3r4a2//vJqIwKg59wOmsstg2c3Wd6aT+PdkTe4UMyy821eZfc8XXGX4ejr+EQtsWw11b/T62uDE9dg6oeqx6wMYt3q28m/+OtUq2NKj0VrqM8yr5Kpt7K4jWExelBo0Pu+YEMMUJcvw9GM2VF/v91WezkXUXaw2sBKL4mhV97eAfknlmmLis871rUufAY+FJRYJ0PIyLWPpCWLcIuLXJoFOciMOAwyTDdhkOjbZIH3O2bGQLwaJ9oWK02CBti4teqdQfkfk1p5XGQh0gPwpT7TMm1z+3jKq6sxs4yKRtVuFuHsmtW7lrOn9ZAORJ44Tntk5o4opax1YZ6SE7UDTlWJIjcS6Pr1aCAThusKPqNiZOnHq1lTSUOKS9loFwlBNaEwAAAA==',
+    tunnel: 'data:image/webp;base64,UklGRqwFAABXRUJQVlA4WAoAAAAgAAAAnwAAWQAASUNDUMgBAAAAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADZWUDggvgMAALAZAJ0BKqAAWgA+tVagTKckoqIptjno4BaJQBkQ3vpeTY8BXpP/0u7H54b0vf53flt58/yH+3gFDnCZEEYY451CXAPsJkFALMzFYaHhdf1mTa5y+Cn6M9krCAuEa1k7RM3IDRhLVAdw1laPhZR0ytCEM7CD8Ah5GWjQYFG1pKY12qtqNFp4SNZYAP+AGVu7LTJD3tNsj7RLCzXL/F+rIBbDOtfe5crGzTlnPeJLaVlZFu1PX6Tp5J/fBTSrm+We0WceOq5dEe8Tsm65vP9ZaDtu8IPVvgAA/voRzCZmwwobUvdxnM+4+J1mG7nDepfogG8/MK/F4GcIcQVIpke66Q6TBdeSS6Lt+T4iJ0epWu+f/y8G61b0rMsogbQIIKfq4T46sA8aL4mqmdKo3bpzI9/pzHFbSg0eVaeaohoIlnmBny53gS+BrFPALvf8s8fr7u+u7/wOLdu7qmgkVz6TYL/boe8afVkV+aMtrAoiCt/A8NdhuwudXrSXrrzga1DElhU2KrenghOSvKhZTuWJ80xdDcAGFAbl93IEdXHNj10XDJZyYASWSosDRAT/mYqP5xdgkd+Eqko8V/eeAK/Z6Lv/kRtYfvSBFuLMRwIYpZCHuM0Kx4ETE4gBmBxUEsFghf5brGEYKlwaTtEn5SIyZTOeURcn+j9LiUVl82JchV5IHNlsNdY30T3fzKI9/Jgj19LB2/K867bkKG4pCuvoO3Dlpqiu0eOqpIdQFquqhFhmYsU4laUIfQZLRJFd9e1epW5g4IJwYh8ox7vFAtxNR+jCkE/5bVZdgkFE8Tf0GVFRZAQhl9Zvpa3ey9cZHzSs/zu655mS+PxR/K5IyKamslnqPSXksTL3sRAFm5aKKgMKlv2xtmcQvYJ7ukkpdqN6ftbZftfwZDHf9rKGFovT73u8NLENKut0AXVwiscCiCONxM7pZZYt39lbKZp4sW3dSm9qwkO56z1Vf02s1rgV0nNjFVF9YXRl4eqNM6mo2+eCQ3XGTAcVAZpaKwnaGh/KaLSpLkFdr3LBZnDWAFdnfdyzxV0bb6LLNIR3Qm4wWctKoO3Q5moFczMJgCONrSheDahAra+wCEyvvIMTKOxq8LSVlpIIee+rMG98b3OJxztL3DAZKoX4xH/ML9Fv5aASLiuS01tMnUU+fbw325dL7fckLJWaKQBmLizrGianYbBBpKgZwjl6YflTkuAz/Hmu5ciQTid/jKit8JoEGnfUJh4NP/yNFHh0SYIllFbxOFSM2rY/ElLBdV4iOp5wAAA=',
+    horizon: 'data:image/webp;base64,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',
+    aurora: 'data:image/webp;base64,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',
+    kaleido: 'data:image/webp;base64,UklGRgoEAABXRUJQVlA4WAoAAAAgAAAAnwAAWQAASUNDUMgBAAAAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADZWUDggHAIAADAPAJ0BKqAAWgA+tVqnTyclI6IiO/lI4BaJYwDUARzkB8oc5bbpXcBtIBH7hxWuX4UAI4OVqFKdwRjEIFJQKoLGq5GAdzTetXZl/FLvLnwNJJdtrPkvbl5E9PyCMS12mjBktmk6e53QIewX9g/kVxKR28fHirZ11TfG5lyYx40/IaAA/vtlABC2yg1faNO7p54XldiiZFAZuhEcavRi2ZnVsJ7ZO0zf/XXJEVLWCB58FkN/XDDeg9wZKu2mZHrILWSv7Tf2Zqy2zodxJUMpRLY3D8V1oeFPYSXuufScOm7Lxpc1PKUmvs3SSuXGurzt3y9Pv1uwwDNv2ou60X6ipGG+VWMuPPCBL2ccWSGsfbK8zwFoUvP4nSx+ru7DF1NYiGTy3ycA8OMwHsndqao1hjB53X1TLMFvSHhDP3ir8bMYymZ7ez62+fLPl/SeZDyVp6jMpoQzWDAVv6vSDVyx7QawowSUp/Hwu/XTwoJHFgbaV7H0o0Pw8eYKct+AFspJbbDu0Jj3ZNiXQgt8a391oonN1l3YtitD0D2Nbu/juvKQ/Oim3gwH2eOdWYw1JPm3ccrjLlixZOTZgE435+WIiVgyRyXrsIZGj+TYYCU/QbaLr1Kj/hzVfr/z5X8I69HEkKLQ0NYFJJ5J+AXP+At1e4G9JPxnGCFdpb+yKTmE3x0OSYQ3PhYQWgCQ0pYhgBVAB+5pJkaBMnNOPAAAAA==',
+    glitch: 'data:image/webp;base64,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',
+    eq: 'data:image/webp;base64,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',
+    stars: 'data:image/webp;base64,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',
+    scope: 'data:image/webp;base64,UklGRiQEAABXRUJQVlA4WAoAAAAgAAAAnwAAWQAASUNDUMgBAAAAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADZWUDggNgIAANARAJ0BKqAAWgA+tVikTiclI6Inkkk44BaJYwDVKW74G/5eHHnsdMAA2Xv8qGL7ivz8KUAmFuo2ziIVYgvWCbDOw0WzInj2gPG38j36no26G/vgvibziByZ/X6Yv773x3NHZ7cvOXIX5li3uSGjw+sfN7wshQsxdmpwgXjDSUBusNxtBwALfXHlqnaGSEX5tN0a3r/KOAAA/vjOFgCzCI92rdl/psFs+e5HJ8yt4ZJBh0XI4dWPna2KCSgWF42DWX+qinPfwd1vo4lEegwLPIJbwe5ml6lQVrjWmrURm6aPW10hSeJPdqVZ+l47MKFtkj2ToGLGlOxtYTAT2KsiVDJ2LnDd+Oq6VZiL+WoK1bCjjthS2SkGyj846LEKOKynF57Qe/z9xXK4Qoze3PLbAEbZ8PSybQJAyJXNntagOm5FKi2SlCIn0BuoikwN6/1iqhk8l031T6XQ/XChUcGb8eKrJ5WuQxGG5s0AiJHaUn+jWU7GzjZQu71NAvdqAMvFBYZNGvtxJoBlM4sbFLZ7kIIfmROSNJUZDEDYTsD2/Ho+n8nmIztm6FHgcni5yTBiVDgjGRhY02OLloQCjctbGFsociBlHQ9Rz0023huCTC3sqpE7YxdJ4nkZNpGKnWuLMN//foUUYgQf/s25KNp4Nd15iERFpdP0JId5QE4mSyd/Mdm8ajZTHgjYR6e7Cfx4R5AAwuoakxGdQokYu1nr5eN8CCLfVVLgniFM9ec+AAHmAdd8AAAA',
+    orb: 'data:image/webp;base64,UklGRowFAABXRUJQVlA4WAoAAAAgAAAAnwAAWQAASUNDUMgBAAAAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADZWUDggngMAAPATAJ0BKqAAWgA+tVqnTqclI6Ml8ujQ4BaJZQDOMOzPImdPD33SKQ3ufB7SBe6/PF6M2ff6a9gnpQDlUAxCXdvzML+3S6RPGgdtnvjnD4AwZT/XNdueH8lEor3twA+VEBQWwigWszrqNXGgGkgpui4m77/AE8Z7KVIpebVJ5obXBJPOPllXQ/Oo8jNKofVBc+p6X3ZXWyxV/gOIqr/61N1kXLNsamOIAAD+93otCdMy/W/13sJhXsep20nTGQ4nS8YSAGg9m0zCIf7ShFlu2o1ahyIZnexHdLFlxdZ6CHMd9FDbj0tCIUDbJjinB+k5mTmVEB3SP5EFf+6N4DoxnbeiI+sIopmenkMGjfpp6+BtP9NrFQ3yoiGV008yFECmjmH56WNli58QOl/E7ajfiXAuLiUOQxLzdEDgdmd6AqZ9xFi9w7/V8tS0iHQl4tGkzZDDgKGOdBCB1ZnBedMeBhd+r4tIBaRagiikWAShHOnVwaykXfSQBw6Xj+61khRHJdua1fHjB6WB81++LJp+L+zLCUqWaRAjlX9UQXKCDZywxJ+/c3qGZ2PkEM2YLJtd31YpYP91W6FanDf9ijzaeebIEtt//dMmj0Uvc7/HJLhrIE8+YF3LxgEMT2vH48s1PnGu1Km3LLW/y3x9PxLKayMd5F3IEobV8xnpM9hoHpowkBrgHlvMNW6OFeqe/3g6Z1V7M+/1B9CX7HLpYBymu92E5XAFZt4MLfFmi2/TkTa/PnjcqUEO/lXF98W7aQVzVW6IUQXnZp7HhdEq67YPxlYweSFEFQqrw6y3uIwRBQj3YRuYZvhrdVIIJka61IZ6LD7lhwN2sG9D6MORYXvsftz5t54HAUPI7Oezfrvotu2CXGfMbWFuA7MklcpdoUAdjEg1tbuAZgFEO4uu6np4nEuLf/LHuy6dqpSB+3Nf3LLJpbkEmHXRbJIGii//WAC0TMmNUXQWWuSHjInDySjR1dPVtX6Y9jmtQlxwEn9FO+LeloiVqictF1FbpnvZi1nsf3mJQpyUxu82iM2vb7NRa36LxAFALzis6RRhNHwv92EAB9BeJuNsmVUIRH1ZjFOzoB4m0UM5+J5G+eb5B9sLNVLdx5E2mAvcTDPB0Gl7WCvaNuabln/jYJh/nfGrLoZl+KCkRdvmwHWz9WqFj8oR/AoK57jWdLKbAiiHc4l8feBwZjILUZI23jF7qgEy04muI9xd3jbvgehDc5paMugA',
+    melody: 'data:image/webp;base64,UklGRuoDAABXRUJQVlA4WAoAAAAgAAAAnwAAWQAASUNDUMgBAAAAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADZWUDgg/AEAAPAOAJ0BKqAAWgA+tVqlTiclI6Ylezig4BaJZS+DqYHG+rFXa9TO2j8wB62A1xzyoYPmW18txltY24S26zvz06aHNi1mWS1g9p+pYWOggSnz4AhgT0y9pFg46ctaWk7fELbwfDPkrHIWnaL0wGdaMdb8i9Cv9TcKV5qY4x+eD/gAAP7b9QKQSoqIxXfQbzxA05Vkk/XnzZc5JLW8P4R8DLPWZQYFN/XJP2g+LIw8SkflY4Uo2eQoVF10VfxYVhMhluDc+y0RLIyAKDjkQSPUgAQscmU5NZ10ZJ2vlR8KY0y4JW2HGd7LOccls0LhXhGvKIWh16Hs1njndoG83JmjSIBC+L5t7AKP87UKz0TIwcBxAQTiH4HRg1QXCbVigaGNk2fxcVqZ8aBlAgvrq2G0n4W1sNMNW1jleYfTYhNcr8XOMeXrya46KAPvcKrbX+9QBfEAILXpF2Igt//5JOy7Z+oqIOHXQrDNRwEo3mOoxtcz5Dvb2JcNTl7u85SXhNiPjaqBih+rtkrEIfrxf57tClPVwvupAIulQRy60kOKpqfKa+boT0AHMMNd0ZZ1Td9WU9XFb5Oqu7wwA0zTBduu63WqjZKlLMGb1ysnI9Myk1h3UjhF+2tS9Jfh0BRjcLvHlWIGPT82mGDcWzb8d3/pfDaK5QvQw8kCqvkAAAA=',
+    fireworks: 'data:image/webp;base64,UklGRvADAABXRUJQVlA4WAoAAAAgAAAAnwAAWQAASUNDUMgBAAAAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADZWUDggAgIAABANAJ0BKqAAWgA+tVqkUCclIyMgiaDgFolnbhHW0OKdCR1hj4AQ1L1Jv7XY88CKAWFSlmUBuMQ9kPmIeDO1BnVJNv07d5f9tR3lM+Uhit1NbFLuRipR5gkEl8J+0Xnz7+j2AteGnuJXHbskokC7CHTgAP74s7Y4YPUkAQQRvX4bpKAKiSijfyJv67XruZaL6nNkKDad4NjuzrEk0bgPWCz68C8wp+yAgSx3IRHv8Co7afA+pX/F50z+JccQOy16DVlzbSNWOmrq2ejIaIKGBTBlRxdNL26m8zOZRqzGn+xnvOGQ+YorMFvERBBQaAe7rieHTaoVxkftQfBzckneN9+WxYNlEtoBsft37Vcpxm9h/C8wI0icEpI8AfH3bDrjGO2bnBWVe6tZhr1LxA3PPK0J9E6xgm2j7avQQ5zj9a3fAtWF0E2XFZ/VMBxh6oGueBjeePeAiBGmxYHEh/cCgAN+LA7IuJrMbDgjmZKb7FLz1MXq1l08Di4skMYHatmZyQnRinlGFGJlpx5wcSjFY7nD7BmnmuHfau8y6l4WrJQt16cQ6CstaAPx2pCXMxx1wYKQ8lrWlrqvq+5vJXtUr9K6+KQOzr2gAAEsO3gmbytQJSkMHOiTzAGlqVIyhjez2cwMn/FAY0unOlmpDKqqVpa2IrVWD9Bi5LxAbCLwbiJAAAA=',
+    bokeh: 'data:image/webp;base64,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',
+    waves: 'data:image/webp;base64,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',
+    smoke: 'data:image/webp;base64,UklGRoIDAABXRUJQVlA4WAoAAAAgAAAAnwAAWQAASUNDUMgBAAAAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADZWUDgglAEAADAPAJ0BKqAAWgA+tVakTSckq6iomAlJcBaJZQDSVc2G2bQUSZLLEIHJiK6fN/bJj23jXcF72nBf4izt8dRizsskWFHABmxBRlFpKTIwQfSzM22p4AeO5mAaxq646rpbLc6lvxT5DkGQXaLFo+pMlAgEgedme0nIvUmEugW0DbIDqCAA/vxDhBQCQgIGppIPmLmWga7e2UAAcczOnX7v5Exo3dolZGdsg9U6+3sa7Wuf4CQTB8u7J7Q3sg1k0waQIiExPNKq28UMyKFg3IFya2BS/vV3Dkje3WXkE01oguyCy9U6qh+vVCXlVuuhqx/pH8n9YWd04Kh9dmw6QXRPpgU6wzSYQuLCoI6QgPU2yMOV3U+YDNtsrN7x3YQOjwgZO0dzetbpqw357WRn7bttlua5M+niJu9ZKSPE4HKiuJwbpf+CC5AULLSuPnZSvxEvzK5Vj1HNdHg5vx7GOlwlhg34kXuny12t3JC1henN7TzVjciFiTSSEN7mWmqtD0+EG32lWK6wrtjWMDfC7Y6xJ+i9cAAA',
+    circle: 'data:image/webp;base64,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',
+    petals: 'data:image/webp;base64,UklGRowGAABXRUJQVlA4WAoAAAAgAAAAnwAAWQAASUNDUMgBAAAAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADZWUDggngQAAPAaAJ0BKqAAWgA+tVCiTackIyIoERvo4BaJZWxEWap/iHvPvc8hpm+8xf6hg6Di0JpwjIv+jfyb6vw3RcXhv2WFDkqC/UoxzE2cIsw3lIbxw/V2AIPAs5kh7JVP0oe11o+jOxp/usxRK5+R+IY5WXfB7scpcI3Z25ZK6/Wo23uLQn7umfYfhaS3PmNiF0RhnBpX12pzRO+H20ZrZt4gRdstV0dx62+AA11eN0E97EQHPLNCYiAgUW27gdC1Qhq4EayPVmla6p8QJpD9NBURzpAoOxF21i/ns3WVLSr39BGAAP7586C5nXBHQIwTfK1IcabHlWs9oYp9K5uoVATqLnbEiL6Vax0fQ9wGergr6j3XPgC7Qwfr7ui6xfCp/Fhy4Hd1v+46D9T99au+6/T2j93IKymKlcxURFPSFKJGblCHOfCx/nxscHXz6Xp96QbmgjGCoJloiBkNgAFmeuOFBWsk6bdO8oM/1CoTsLfIxZwlw4vSF6/VMUM0tBz8PdHhLy25P4E4+FQH+JUGhvLWYMdxXqVfy9uF7OmJOgQVDIoAfBJPfa3Wjik3MRKgA9e6FLSeiJgwbAxWNr/1VLVcf1AU0FeMn9VgVeJnk+GzC66QrU60YUum7diN06hdrBdV+FV0Rs7n6KpjGYOCDpF4+iEth9m5P5WMyYbwT6oIm6hwAbbekPwpEIhpcXx8QweMu4sG1j5SEFcf98qlQ9pOErHNorstFDZtzz+ydgAIJ5O/qlpWKPQasO15V/B1yb/feA/3Vp6O0gSulcvVLH14cIcvp/6VHU0S7xsMw+LVNvev/tN1OOM6ufl7i9sej4LSV3m0Ra33RVm4OUFSIDhWXQE67qtpy2fDPdVU132ds5BLpI7WaEpq+uhEde6zegWwkAP3GrqhtkEv+33YXhrBPJmOWAdxVi/hUO+VxbWDOaWlp6LDiWmbFhf6voZTLQqIa+bCRqtNj8kBM0MS/hbB1r8F0Pk16XlJwqTDjJd/5AuUeoxZkMd7jx2E0J+YaAW4Kw4LrCEBjf/LahRbC+y471AwcMA6GBpNnap2BvuID3MooqlLdOXJkE1a4EgEZX3CZhmjpa+eooJAoWFW/+O+XN/67rUyFgKIqMHIG81fgkXT34kdM35MMbXCkiCfNtXEMl7l4GiQYIuLfS4ZfiMAJVI5c5QU/CECtnlSxUPV3Fikt8dwJyzHqcb+RASt9hEmYGprpNHwf2qpWdox7Q5grqQIz1sqFQIg7YyYFeL+1LFPNCk29es3NfFUxCfdxJGaZAgABjot8Ub6y1v0H5BPcDQA3mk+GBBy+crPxKypu/E/hU5UONFM0kiZxeAKQyXZRXjeAB8ACF6nttPNf9kslHWV3/7hnILMezKqVbnNrH2UUEfiXJJ0yb4iouvpkP63DSft4puBP1wRtxIgSfF0J5hYN/BSz9PyAt4+G+LCaMR5waE8Nt/1puLLiXSBK1GsRvJ4DS4SSDxdyfdLQ9oJiLHvZwEC9UhIcNhtBOi2U7YsotxflZZB0fxN+QyNiRvAFG/MbPqXSyCXyDQPyCoyZHurSnT2D5CG4U33smgAAA==',
+    voiceprint: 'data:image/webp;base64,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',
+  };
+})(globalThis.VJ = globalThis.VJ || {});
+</script>
+<script>/* src/ui/scenepick.js */
+/* シーンを絵で選ぶ：見本画像（VJ.thumbs）つきのボタン一覧（パネル ⑥）と、印刷用のキー早見表。
+ * ボタンを押すとキーと同じ動き（次のビートで切替。もう一度押すとすぐ。タイトルはすぐ）。
+ * セットリストの表（setlisted.js）のシーン選びもここの部品を使う。 */
+(function (VJ) {
+  'use strict';
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const t = (...a) => VJ.t(...a);
+
+  /** キーの表示（'s3' → '⇧3'） */
+  const keyLabel = (d) => (d.key.startsWith('s') ? '⇧' + d.key.slice(1) : d.key);
+
+  const pick = {
+    /** 見本にするシーン（テストパターンなどの隠しシーンは除く）。キーの順（0, 1〜9, ⇧1〜⇧9） */
+    list() {
+      const order = (d) => (d.id === 'title' ? -1 : d.key.startsWith('s') ? 10 + +d.key.slice(1) : +d.key || 50);
+      return VJ.scenes.list.filter((d) => !d.hidden).sort((a, b) => order(a) - order(b));
+    },
+
+    thumb(id) { return (VJ.thumbs && VJ.thumbs[id]) || ''; },
+
+    /** 1 つのシーンのボタン（data-scene） */
+    button(d, extra) {
+      const img = pick.thumb(d.id);
+      return `<button type="button" class="scene-btn${extra ? ' ' + extra : ''}" data-scene="${esc(d.id)}" title="${esc(VJ.sceneName(d))}">`
+        + (img ? `<img src="${img}" alt="" draggable="false">` : '<span class="noimg"></span>')
+        + `<span class="sk">${esc(keyLabel(d))}</span><span class="sn">${esc(VJ.sceneName(d))}</span></button>`;
+    },
+
+    /** パネルの一覧を描く（言語を切り替えたときも呼ぶ） */
+    render(app) {
+      pick.app = app;
+      const el = document.getElementById('scene-grid');
+      if (!el) return;
+      el.innerHTML = pick.list().map((d) => pick.button(d)).join('');
+      pick._sig = '';
+      pick.update(true);
+    },
+
+    install(app) {
+      pick.app = app;
+      const el = document.getElementById('scene-grid');
+      el.addEventListener('click', (e) => {
+        const b = e.target.closest('button[data-scene]');
+        if (!b) return;
+        const id = b.dataset.scene;
+        const show = pick.app.show;
+        if (show.state && show.state.locked) { pick.app.ui.toast(t('ロック中（L 長押しで解除 / B は暗転）'), 'warn'); return; }
+        show.selectScene(id, { immediate: id === 'title' });
+        if (pick.app.onAction) pick.app.onAction('scene-grid');
+        pick.update(true);
+      });
+      document.getElementById('btn-cheatsheet').addEventListener('click', () => pick.printSheet());
+      pick.render(app);
+    },
+
+    /** いまのシーン・切替待ちのシーンに印を付ける（パネルの更新ごと） */
+    update(force) {
+      const st = pick.app && pick.app.show && pick.app.show.state;
+      if (!st) return;
+      const sig = st.sceneId + '|' + (st.pending ? st.pending.id : '');
+      if (!force && sig === pick._sig) return;
+      pick._sig = sig;
+      for (const b of document.querySelectorAll('#scene-grid button[data-scene]')) {
+        b.classList.toggle('on', b.dataset.scene === st.sceneId);
+        b.classList.toggle('pending', !!st.pending && b.dataset.scene === st.pending.id);
+      }
+    },
+
+    /** 印刷用の早見表（A4 横 1 枚）。単体アプリでも使えるよう、別ウィンドウではなくページ内の枠で印刷する */
+    sheetHtml() {
+      const app = pick.app, s = app ? app.settings : {};
+      const name = (app && app.show && app.show.bandName && app.show.bandName()) || s.bandName || '';
+      const cell = (d) => `<div class="c"><div class="im">${pick.thumb(d.id) ? `<img src="${pick.thumb(d.id)}">` : ''}<b>${esc(keyLabel(d))}</b></div><span>${esc(VJ.sceneName(d))}</span></div>`;
+      const keys = VJ.keys.KEY_HELP.filter(([k]) => !/^(1〜9|Shift\+1〜9|0)$/.test(k))
+        .map(([k, v]) => `<tr><td><kbd>${esc(t(k))}</kbd></td><td>${esc(t(v))}</td></tr>`).join('');
+      return `<!doctype html><html lang="${VJ.i18n.lang}"><head><meta charset="utf-8"><title>${esc(t('キー早見表'))}</title><style>
+@page { size: A4 landscape; margin: 10mm; }
+* { box-sizing: border-box; }
+body { margin: 0; font: 11px/1.35 "Hiragino Sans", "Yu Gothic UI", "Meiryo", "Noto Sans JP", sans-serif; color: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+h1 { font-size: 16px; margin: 0 0 6px; } h1 small { font-weight: normal; color: #555; margin-left: 8px; }
+.wrap { display: grid; grid-template-columns: 1fr 64mm; gap: 6mm; }
+.scenes { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3mm; align-content: start; }
+.c span { display: block; text-align: center; font-size: 10px; }
+.im { position: relative; aspect-ratio: 16 / 9; background: #111; border-radius: 2mm; overflow: hidden; }
+.im img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.im b { position: absolute; left: 1mm; top: 1mm; background: #fff; color: #000; border-radius: 1mm; padding: 0 1.5mm; font-size: 13px; }
+table { border-collapse: collapse; width: 100%; } td { border-bottom: 0.2mm solid #bbb; padding: 0.8mm 1mm; vertical-align: top; }
+kbd { font-family: ui-monospace, Menlo, Consolas, monospace; border: 0.2mm solid #888; border-radius: 1mm; padding: 0 1mm; white-space: nowrap; }
+p { margin: 4px 0 0; color: #444; }
+</style></head><body><h1>MOMOSAI VJ — ${esc(t('キー早見表'))}${name ? `<small>${esc(name)}</small>` : ''}</h1>
+<div class="wrap"><div><div class="scenes">${pick.list().map(cell).join('')}</div>
+<p>${esc(t('数字キー（⇧ は Shift を押しながら）で次のビートに切替。もう一度押すとすぐ。0 はタイトル。'))}</p></div>
+<div><table>${keys}</table></div></div></body></html>`;
+    },
+
+    printSheet() {
+      const old = document.getElementById('print-frame');
+      if (old) old.remove();
+      const f = document.createElement('iframe');
+      f.id = 'print-frame';
+      f.setAttribute('aria-hidden', 'true');
+      f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
+      document.body.appendChild(f);
+      const doc = f.contentDocument;
+      doc.open();
+      doc.write(pick.sheetHtml());
+      doc.close();
+      const go = () => { try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { pick.app.ui.toast(t('印刷できませんでした：') + e.message, 'warn'); } };
+      // 画像を読み込んでから印刷
+      const imgs = Array.from(doc.images);
+      Promise.all(imgs.map((im) => (im.complete ? 0 : new Promise((r) => { im.onload = r; im.onerror = r; })))).then(() => setTimeout(go, 50));
+    },
+  };
+
+  pick.keyLabel = keyLabel;
+  VJ.scenePick = pick;
+})(globalThis.VJ = globalThis.VJ || {});
+</script>
+<script>/* src/ui/bandsui.js */
+/* 出演バンドの一覧（パネル ③）と切替。キー N / Shift+N・スマホ・OSC からも呼ばれる。
+ * 2 画面のときは操作ウィンドウが設定を持っているので、出力ウィンドウで受けた切替（スマホ・OSC・キー）は操作側へ回す。 */
+(function (VJ) {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const t = (...a) => VJ.t(...a);
+  const CONFIRM_SEC = 3;
+
+  const ui = {
+    app: null,
+    _armed: -1e9, // 演奏中に N を 1 回押した時刻（秒。もう一度で切替）
+
+    install(app) {
+      ui.app = app;
+      $('band-list').addEventListener('click', (e) => {
+        const row = e.target.closest('[data-i]');
+        if (!row) return;
+        const i = +row.dataset.i, s = app.settings;
+        const act = e.target.closest('button') && e.target.closest('button').dataset.act;
+        if (act === 'up' || act === 'down') {
+          VJ.bands.move(s, i, act === 'up' ? -1 : 1);
+          ui.render();
+          VJ.panel.save();
+        } else if (act === 'del') {
+          if (!confirm(t('「{0}」を一覧から消しますか？（セットリスト・ロゴも消えます）', VJ.bands.nameOf(s, i) || t('（名前なし）')))) return;
+          const wasCur = i === s.bandIdx;
+          VJ.bands.remove(s, i);
+          if (wasCur) ui._applied(); else { ui.render(); VJ.panel.save(); }
+        } else if (i !== s.bandIdx) {
+          if (ui.midSet() && !confirm(t('演奏中です。「{0}」に切り替えますか？', VJ.bands.nameOf(s, i) || t('（名前なし）')))) return;
+          ui.switchTo(i);
+        }
+      });
+      $('band-add').addEventListener('click', () => {
+        const i = VJ.bands.add(app.settings, '');
+        if (i < 0) { app.ui.toast(t('これ以上追加できません'), 'warn'); return; }
+        ui.switchTo(i);
+        const el = $('band');
+        el.focus();
+      });
+      $('band-next').addEventListener('click', () => {
+        if (ui.midSet() && !confirm(t('演奏中です。次のバンドに切り替えますか？'))) return;
+        ui.step(1, { force: true });
+      });
+      ui.render();
+    },
+
+    /** 曲の途中（1 曲目〜最後の曲）か */
+    midSet() {
+      const st = ui.app.show.state;
+      return st.songIdx >= 0 && !st.endState;
+    },
+
+    /** d（+1 / -1）だけ隣のバンドへ。演奏中にキーで押したときは 2 回目で切り替える（誤操作の防止） */
+    step(d, opts) {
+      opts = opts || {};
+      const app = ui.app, s = app.settings;
+      if (VJ.link.role === 'output') { VJ.link.send({ t: 'band', d, force: !!opts.force }); return true; }
+      VJ.bands.ensure(s);
+      const i = s.bandIdx + d;
+      if (i < 0 || i >= s.bands.length) {
+        app.ui.toast(s.bands.length < 2 ? t('出演バンドが 1 つだけです（設定 M の ③ で追加）') : d > 0 ? t('最後のバンドです') : t('最初のバンドです'), 'warn');
+        return false;
+      }
+      if (!opts.force && ui.midSet()) {
+        const now = performance.now() / 1000;
+        if (now - ui._armed > CONFIRM_SEC) {
+          ui._armed = now;
+          app.ui.toast(t('演奏中です。もう一度押すと「{0}」に切り替えます', VJ.bands.nameOf(s, i) || t('（名前なし）')), 'warn');
+          return false;
+        }
+      }
+      ui._armed = -1e9;
+      return ui.switchTo(i);
+    },
+
+    /** i 番目のバンドにする（スマホ・OSC からは番号で） */
+    switchTo(i) {
+      const app = ui.app, s = app.settings;
+      if (VJ.link.role === 'output') { VJ.link.send({ t: 'band', i }); return true; }
+      if (!VJ.bands.select(s, i)) return false;
+      ui._applied();
+      return true;
+    },
+
+    /** 設定のバンドの値が入れ替わったあと：入力欄・映像（2 画面なら出力側も）を合わせ、開演前に戻す */
+    _applied() {
+      const app = ui.app;
+      VJ.panel.replaceSettings(app.settings);
+      app.show.resetShow();
+      ui.render();
+    },
+
+    render() {
+      const app = ui.app;
+      if (!app || !$('band-list')) return;
+      const list = VJ.bands.list(app.settings);
+      const n = list.length;
+      // 名前・時刻は入力された文字なので訳さない
+      $('band-list').innerHTML = list.map((b) => `<div class="band-row${b.current ? ' on' : ''}" data-i="${b.i}">`
+        + `<span class="bi">${b.i + 1}</span><span class="bt" data-i18n-skip>${esc(b.start || '')}</span>`
+        + `<span class="bn" data-i18n-skip>${esc(b.name || t('（名前なし）'))}</span>`
+        + `<span class="bs">${esc(t('{0} 曲', b.songs))}${b.current ? ' · ' + esc(t('出演中')) : ''}</span>`
+        + `<button data-act="up" title="${esc(t('上へ'))}"${b.i === 0 ? ' disabled' : ''}>▲</button>`
+        + `<button data-act="down" title="${esc(t('下へ'))}"${b.i === n - 1 ? ' disabled' : ''}>▼</button>`
+        + `<button data-act="del" title="${esc(t('消す'))}"${n < 2 ? ' disabled' : ''}>✕</button></div>`).join('');
+      $('band-next').disabled = n < 2;
+    },
+
+    /** スマホ・HUD 用の状態 */
+    state(s) {
+      VJ.bands.ensure(s);
+      return { i: s.bandIdx, n: s.bands.length, name: VJ.bands.nameOf(s, s.bandIdx), next: s.bandIdx + 1 < s.bands.length ? VJ.bands.nameOf(s, s.bandIdx + 1) : '' };
+    },
+  };
+
+  VJ.bandsUI = ui;
+})(globalThis.VJ = globalThis.VJ || {});
+</script>
+<script>/* src/ui/soundcheck.js */
+/* サウンドチェック（パネル ①）：静かな状態 5 秒 → 演奏 15 秒 を測り、結果とおすすめの設定を出す。
+ * 測るのは app.scBegin / scEnd（main.js。2 画面のときは出力ウィンドウ）、判定は VJ.soundcheck.analyze。 */
+(function (VJ) {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const t = (...a) => VJ.t(...a);
+  const ICON = { ok: '✅', info: '💡', warn: '⚠️', bad: '❌' };
+
+  const sc = {
+    app: null,
+    running: false,
+    last: null, // { at, worst }（本番前チェックで使う）
+    cfg: { quiet: 5, music: 15, musicMin: 6 }, // 秒（テストでは短くする）
+    _timer: null,
+    _endEarly: null,
+
+    install(app) {
+      sc.app = app;
+      $('btn-sc').addEventListener('click', () => (sc.running ? sc.cancel() : sc.start()));
+    },
+
+    _box(html) {
+      const el = $('sc-box');
+      el.hidden = false;
+      el.innerHTML = html;
+      return el;
+    },
+
+    /** sec 秒待つ（進み具合の棒を動かす）。opts.minSec を過ぎたら「ここで終える」を押せる */
+    _wait(sec, title, opts) {
+      opts = opts || {};
+      return new Promise((resolve) => {
+        const t0 = performance.now();
+        const el = sc._box(`<div class="sc-step">${title}</div><div class="sc-bar"><i style="width:0%"></i></div>`
+          + `<div class="row"><span class="hint" id="sc-left"></span>`
+          + (opts.skip ? `<button id="sc-skip">${esc(opts.skip)}</button>` : '')
+          + `<button id="sc-cancel">${esc(t('やめる'))}</button></div>`);
+        const bar = el.querySelector('.sc-bar i'), left = el.querySelector('#sc-left'), skip = el.querySelector('#sc-skip');
+        const done = (how) => { clearInterval(sc._timer); sc._timer = null; sc._endEarly = null; resolve(how); };
+        sc._endEarly = done;
+        if (skip) skip.addEventListener('click', () => { if (!skip.disabled) done('skip'); });
+        el.querySelector('#sc-cancel').addEventListener('click', () => done('cancel'));
+        const tick = () => {
+          const e = (performance.now() - t0) / 1000;
+          bar.style.width = Math.min(100, (e / sec) * 100).toFixed(1) + '%';
+          left.textContent = t('あと {0} 秒', Math.max(0, Math.ceil(sec - e)));
+          if (skip && opts.minSec) skip.disabled = e < opts.minSec;
+          if (e >= sec) done('time');
+        };
+        tick();
+        sc._timer = setInterval(tick, 100);
+      });
+    },
+
+    async start() {
+      const app = sc.app;
+      if (!app.engine.running) { app.ui.toast(t('先に「▶ 音声入力を開始」を押してください'), 'warn'); return; }
+      sc.running = true;
+      $('btn-sc').textContent = t('サウンドチェックをやめる');
+      let quiet = null, music = null;
+      try {
+        await app.scBegin();
+        const q = await sc._wait(sc.cfg.quiet, esc(t('① 会場を静かにしてください（雑音の大きさを測ります）')), { skip: t('飛ばす') });
+        const qs = await app.scEnd();
+        if (q === 'cancel') return sc._close();
+        if (q === 'time') quiet = qs;
+        await app.scBegin();
+        const m = await sc._wait(sc.cfg.music, esc(t('② 演奏してもらってください（いちばん大きい曲・サビがおすすめ）')), { skip: t('ここで終える'), minSec: sc.cfg.musicMin });
+        music = await app.scEnd();
+        if (m === 'cancel') return sc._close();
+        sc.showResult(VJ.soundcheck.analyze(quiet, music, app.settings));
+      } catch (e) {
+        sc._box(`<div class="err">${esc(t('サウンドチェックができませんでした：') + ((e && e.message) || e))}</div>`);
+      } finally {
+        sc.running = false;
+        $('btn-sc').textContent = t('サウンドチェック（自動調整）');
+      }
+    },
+
+    cancel() { if (sc._endEarly) sc._endEarly('cancel'); },
+
+    _close() { $('sc-box').hidden = true; $('sc-box').innerHTML = ''; },
+
+    showResult(r) {
+      const app = sc.app, s = app.settings;
+      sc.last = { at: Date.now(), worst: r.worst };
+      const recs = [];
+      if (r.rec.profile) recs.push(['profile', t('音楽のタイプ：{0}', VJ.profileName(VJ.profileById(r.rec.profile))) + ' ' + t('（いま：{0}）', VJ.profileName(VJ.profileById(s.profile)))]);
+      if (r.rec.gateDb !== undefined) recs.push(['gateDb', t('無音とみなす音量：{0} dBFS', r.rec.gateDb) + ' ' + t('（いま：{0} dBFS）', s.gateDb)]);
+      const el = sc._box(`<div class="sc-step">${esc(t('サウンドチェックの結果'))}</div>`
+        + `<ul class="sc-items">${r.items.map((i) => `<li class="${i.level}"><span>${ICON[i.level]}</span><span>${esc(i.text)}</span></li>`).join('')}</ul>`
+        + (recs.length ? `<div class="hint">${esc(t('おすすめの設定'))}</div>`
+          + recs.map(([k, label]) => `<div class="row"><label><input type="checkbox" data-rec="${k}" checked> ${esc(label)}</label></div>`).join('') : '')
+        + `<div class="row">${recs.length ? `<button class="primary" id="sc-apply">${esc(t('おすすめの設定にする'))}</button>` : ''}`
+        + `<button id="sc-again">${esc(t('もう一度'))}</button><button id="sc-close">${esc(t('閉じる'))}</button></div>`);
+      const apply = el.querySelector('#sc-apply');
+      if (apply) apply.addEventListener('click', () => {
+        for (const cb of el.querySelectorAll('input[data-rec]')) if (cb.checked) s[cb.dataset.rec] = r.rec[cb.dataset.rec];
+        VJ.panel.replaceSettings(s);
+        app.ui.toast(t('サウンドチェックのおすすめを設定しました'));
+        apply.disabled = true;
+        apply.textContent = t('設定しました');
+      });
+      el.querySelector('#sc-again').addEventListener('click', () => sc.start());
+      el.querySelector('#sc-close').addEventListener('click', () => sc._close());
+    },
+  };
+
+  VJ.soundcheckUI = sc;
+})(globalThis.VJ = globalThis.VJ || {});
+</script>
+<script>/* src/ui/guide.js */
+/* はじめてのガイド（パネルの上に 5 つの手順。終わったものは自動で ✓）と、本番前チェック（⑥。緑/黄/赤の一覧）。 */
+(function (VJ) {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const t = (...a) => VJ.t(...a);
+  const ICON = { ok: '✅', info: '💡', warn: '⚠️', bad: '❌' };
+
+  // [手順, 説明, 移動先の見出し（パネルの h2 の番号）]
+  const STEPS = [
+    ['音声入力を始める', '① で入力（マイク / ライン・PC の音など）を選んで「▶ 音声入力を開始」', 1],
+    ['音が来ているか確かめる', 'メーターが動けば OK。リハでは「サウンドチェック」で自動調整', 1],
+    ['スクリーンに合わせる', '④ でテストパターン（G）を出して位置・大きさ・向きを合わせる。2 画面なら出力ウィンドウを開く', 4],
+    ['出演バンドとセットリスト', '③ にバンド名・曲・開演時刻。出演者が複数なら「＋ バンドを追加」', 3],
+    ['本番前チェック → ショー開始', '⑥ の「本番前チェック」で確認してから「ショー開始」', 6],
+  ];
+
+  const guide = {
+    app: null,
+    done: [false, false, false, false, false],
+    _activeT: 0,
+    _testSeen: false,
+    _precheckSeen: false,
+
+    install(app) {
+      guide.app = app;
+      $('btn-guide').addEventListener('click', () => { app.settings.guide = !app.settings.guide; guide.render(); VJ.panel.save(); });
+      $('guide').addEventListener('click', (e) => {
+        if (e.target.closest('#guide-close')) { app.settings.guide = false; guide.render(); VJ.panel.save(); return; }
+        const li = e.target.closest('li[data-sec]');
+        if (li) guide.scrollTo(+li.dataset.sec);
+      });
+      $('btn-precheck').addEventListener('click', () => {
+        const box = $('precheck');
+        box.hidden = !box.hidden;
+        guide._precheckSeen = true;
+        $('btn-precheck').textContent = box.hidden ? t('本番前チェック') : t('本番前チェックを閉じる');
+        guide.renderPrecheck();
+      });
+      guide.render();
+    },
+
+    /** パネルの n 番の見出しまでスクロールして、少し光らせる */
+    scrollTo(n) {
+      const h = Array.from(document.querySelectorAll('#panel h2')).find((x) => x.textContent.trim().startsWith('①②③④⑤⑥⑦'[n - 1]));
+      if (!h) return;
+      h.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      h.classList.remove('flash-h');
+      void h.offsetWidth;
+      h.classList.add('flash-h');
+    },
+
+    /** 手順が終わったか（パネルの更新ごと。一度終わったものは戻さない） */
+    check(f) {
+      const app = guide.app, s = app.settings, st = app.show.state || {};
+      const d = guide.done;
+      if (app.engine.running) d[0] = true;
+      if (f && f.active) guide._activeT += 0.05; // 20Hz で呼ばれる
+      if (guide._activeT > 2 || (VJ.soundcheckUI && VJ.soundcheckUI.last)) d[1] = true;
+      if (st.sceneId === 'test') guide._testSeen = true;
+      if (guide._testSeen || VJ.link.role === 'control') d[2] = true;
+      const D = VJ.defaultSettings;
+      if ((s.setlistText !== D.setlistText && s.setlistText !== VJ.defaultSetlistEn) || s.bandName !== D.bandName || (Array.isArray(s.bands) && s.bands.length > 1)) d[3] = true;
+      if (guide._precheckSeen || VJ.guard.showing) d[4] = true;
+    },
+
+    render() {
+      const app = guide.app, el = $('guide');
+      if (!el) return;
+      el.hidden = !app.settings.guide;
+      $('btn-guide').classList.toggle('on', !!app.settings.guide);
+      if (el.hidden) return;
+      const next = guide.done.indexOf(false);
+      el.innerHTML = `<div class="g-head"><b>${esc(t('はじめてのガイド'))}</b><span class="hint">${esc(t('{0} / {1} 完了', guide.done.filter(Boolean).length, STEPS.length))}</span>`
+        + `<button id="guide-close" title="${esc(t('ガイドを閉じる（右上の ? でまた開く）'))}">×</button></div><ol>`
+        + STEPS.map(([title, desc, sec], i) => `<li data-sec="${sec}" class="${guide.done[i] ? 'done' : i === next ? 'next' : ''}">`
+          + `<span class="g-mark">${guide.done[i] ? '✓' : i + 1}</span><span><b>${esc(t(title))}</b><br><span class="hint">${esc(t(desc))}</span></span></li>`).join('')
+        + '</ol>';
+      guide._sig = guide.done.join();
+    },
+
+    /** パネルの更新（20Hz）から */
+    tick(f) {
+      const app = guide.app;
+      if (!app) return;
+      guide.check(f);
+      if (app.settings.guide && guide.done.join() !== guide._sig) guide.render();
+      if (!$('precheck').hidden && performance.now() - (guide._pcT || 0) > 500) { guide._pcT = performance.now(); guide.renderPrecheck(); }
+    },
+
+    /** 本番前チェックの項目 [{ level, text }] */
+    items() {
+      const app = guide.app, s = app.settings, e = app.engine, st = app.show.state || {};
+      const out = [];
+      const add = (level, text) => out.push({ level, text });
+      const remote = VJ.link.role === 'control';
+      const ls = VJ.link.lastStatus || {};
+      // 音
+      if (!e.running) add('bad', t('音声入力が始まっていません（① の「▶ 音声入力を開始」）'));
+      else {
+        add('ok', t('音声入力：{0}', (e.diagnostics().device || '') || t('入力中')));
+        const f = remote ? VJ.link._features : app.lastFeatures;
+        const m = e.updateMeters ? e.meter : null;
+        if (f && f.active) add('ok', t('音が来ています'));
+        else add('warn', t('いま音が来ていません（メーターが動くか確認。演奏が始まれば大丈夫です）'));
+        if (m && Math.max(m.lPeak, m.mono ? -120 : m.rPeak) > -0.5) add('warn', t('音が割れているかもしれません（入力の音量を下げる）'));
+      }
+      const scl = VJ.soundcheckUI && VJ.soundcheckUI.last;
+      if (!scl) add('info', t('リハで「サウンドチェック」をしておくと安心です（①）'));
+      else add(scl.worst === 'bad' ? 'warn' : 'ok', scl.worst === 'bad' ? t('サウンドチェックで問題がありました（① の結果を確認）') : t('サウンドチェック済み'));
+      // 映像
+      const r = remote ? { fps: ls.fps, software: false } : app.renderer.info();
+      if (r.software) add('warn', t('GPU が使われていません（ソフトウェア描画）。映像が重くなります'));
+      if (r.fps && r.fps < 40) add('warn', t('描画が重いです（{0} fps）。⑤ の「画質上限」を下げるか、フレームレートを 30 に', Math.round(r.fps)));
+      else if (r.fps) add('ok', t('描画 {0} fps', Math.round(r.fps)));
+      if (remote) {
+        if (ls.fullscreen) add('ok', t('出力ウィンドウは全画面です'));
+        else add('warn', t('出力ウィンドウが全画面ではありません（プロジェクター側でダブルクリック）'));
+      } else add('info', t('「ショー開始」で全画面になります（2 画面にするなら ④ の「出力ウィンドウを開く」）'));
+      if (st.blackout) add('warn', t('暗転中です（B で解除）'));
+      if (st.sceneId === 'test') add('warn', t('テストパターンを表示中です（G で戻す）'));
+      // 出演・曲
+      const p = app.show.setlist || { songs: [], errors: [] };
+      const bs = VJ.bandsUI ? VJ.bandsUI.state(s) : null;
+      const who = (bs && bs.name) || app.show.bandName() || '—';
+      if (p.songs.length) add('ok', t('出演：{0}（{1} 曲）', who, p.songs.length) + (bs && bs.n > 1 ? ' ' + t('— {0} 組中 {1} 組目', bs.n, bs.i + 1) : ''));
+      else add('info', t('出演：{0}（曲が登録されていません。→ キーの曲送りは使えません）', who));
+      if (p.errors.length) add('warn', t('セットリストに読めない行があります（{0} 件。③ を確認）', p.errors.length));
+      // 光
+      if (s.noFlash) add('info', t('フラッシュを一切使わない設定です'));
+      else add('ok', t('フラッシュは 1 秒に 3 回まで（光過敏対策）。会場に「光の点滅があります」と掲示してください'));
+      // スリープ
+      if (VJ.compat.features().wakeLock) add('ok', t('「ショー開始」で画面のスリープを止めます'));
+      else add('warn', t('この環境では画面のスリープを止められません。PC の設定でスリープ・画面オフを「なし」に'));
+      // 外部連携
+      const io = remote ? ls.io || {} : { net: VJ.net.state(), dmx: VJ.dmx.state() };
+      if (s.net && s.net.enabled) {
+        const n = io.net || {};
+        if (n.status === 'on' && n.info) add('ok', t('ブリッジに接続中（スマホ {0} 台）', n.info.phones));
+        else add('bad', t('ブリッジにつながっていません（⑦）'));
+      }
+      if (s.dmx && s.dmx.enabled) {
+        const d = io.dmx || {};
+        if (d.status === 'on') add('ok', t('照明（DMX）を送信中'));
+        else add('warn', t('照明（DMX）を送れていません（⑦）'));
+      }
+      return out;
+    },
+
+    renderPrecheck() {
+      const items = guide.items();
+      const bad = items.filter((i) => i.level === 'bad').length, warn = items.filter((i) => i.level === 'warn').length;
+      const head = bad ? t('要対応 {0} 件', bad) + (warn ? ' / ' + t('注意 {0} 件', warn) : '') : warn ? t('注意 {0} 件', warn) : t('準備 OK');
+      $('precheck').innerHTML = `<div class="sc-step ${bad ? 'bad' : warn ? 'warn' : 'ok'}">${esc(head)}</div>`
+        + `<ul class="sc-items">${items.map((i) => `<li class="${i.level}"><span>${ICON[i.level]}</span><span>${esc(i.text)}</span></li>`).join('')}</ul>`;
+    },
+  };
+
+  VJ.guide = guide;
+})(globalThis.VJ = globalThis.VJ || {});
+</script>
+<script>/* src/ui/setlisted.js */
+/* セットリストを表で編集（パネル ③）。曲名・シーン（見本画像から選ぶ）・パレット・曲名表示を 1 曲ずつ。
+ * 並べ替え・追加・削除。編集すると上の文字の欄（セットリストの書式）を書き直す。文字の欄を直接書いてもよい。 */
+(function (VJ) {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const t = (...a) => VJ.t(...a);
+
+  const ed = {
+    app: null,
+    model: null, // { band, end, songs: [{ title, scenes, palette, notitle }] }
+    _picking: -1, // シーンを選んでいる曲の番号
+
+    install(app) {
+      ed.app = app;
+      const el = $('setlist-preview');
+      el.addEventListener('click', (e) => {
+        const b = e.target.closest('button[data-act]');
+        if (!b) return;
+        const i = +b.dataset.i, act = b.dataset.act, songs = ed.model.songs;
+        if (act === 'up' && i > 0) [songs[i - 1], songs[i]] = [songs[i], songs[i - 1]];
+        else if (act === 'down' && i < songs.length - 1) [songs[i + 1], songs[i]] = [songs[i], songs[i + 1]];
+        else if (act === 'del') { if (!confirm(t('「{0}」を消しますか？', songs[i].title))) return; songs.splice(i, 1); }
+        else if (act === 'add') { songs.push({ title: t('新しい曲 {0}', songs.length + 1), scenes: [], palette: null, notitle: false }); ed._focusLast = true; }
+        else if (act === 'pick') { ed._picking = ed._picking === i ? -1 : i; ed.render(true); return; }
+        else if (act === 'unpick') { const k = +b.dataset.k; songs[i].scenes.splice(k, 1); }
+        else if (act === 'done') { ed._picking = -1; ed.render(true); return; }
+        else return;
+        ed.commit(true);
+      });
+      el.addEventListener('click', (e) => {
+        // シーンの選択欄：押すと追加（同じシーンを続けては入れない）
+        const sb = e.target.closest('.sl-picker button[data-scene]');
+        if (!sb || ed._picking < 0) return;
+        const song = ed.model.songs[ed._picking];
+        if (song.scenes[song.scenes.length - 1] !== sb.dataset.scene) song.scenes.push(sb.dataset.scene);
+        ed.commit(true);
+      });
+      el.addEventListener('input', (e) => {
+        const inp = e.target.closest('input[data-f="title"]');
+        if (!inp) return;
+        ed.model.songs[+inp.dataset.i].title = inp.value;
+        ed.commit(false);
+      });
+      el.addEventListener('change', (e) => {
+        const x = e.target;
+        if (x.matches('select[data-f="palette"]')) ed.model.songs[+x.dataset.i].palette = x.value === '' ? null : +x.value;
+        else if (x.matches('input[data-f="showtitle"]')) ed.model.songs[+x.dataset.i].notitle = !x.checked;
+        else return;
+        ed.commit(false);
+      });
+    },
+
+    /** 表の内容 → 文字の欄・設定。rerender で表も描き直す（並べ替えなど） */
+    commit(rerender) {
+      const s = ed.app.settings;
+      const text = VJ.setlist.serialize(ed.model, VJ.setlist.headComments(s.setlistText));
+      s.setlistText = text;
+      $('setlist').value = text;
+      if (rerender) ed.render(true);
+      VJ.panel.applyShow();
+    },
+
+    /** 解析結果から表を作る。入力中（表の中にフォーカスがある）は作り直さない（文字が消えないように） */
+    render(force) {
+      const app = ed.app, el = $('setlist-preview');
+      if (!app || !el) return;
+      if (!force && el.contains(document.activeElement) && document.activeElement !== document.body) return;
+      const p = VJ.setlist.parse(app.settings.setlistText);
+      ed.model = { band: p.band, end: p.end, songs: p.songs.map((x) => ({ title: x.title, scenes: x.scenes.slice(), palette: x.palette, notitle: x.notitle })) };
+      if (ed._picking >= ed.model.songs.length) ed._picking = -1;
+      const pals = `<option value="">${esc(t('パレット：そのまま'))}</option>` + VJ.palettes.map((q, i) => `<option value="${i}">${esc(t(q.name))}</option>`).join('');
+      const chip = (id, i, k) => {
+        const d = VJ.scenes.byId[id];
+        if (!d) return '';
+        const img = VJ.scenePick.thumb(id);
+        return `<span class="sl-chip">${img ? `<img src="${img}" alt="">` : ''}<span>${esc(VJ.scenePick.keyLabel(d))} ${esc(VJ.sceneName(d))}</span>`
+          + `<button data-act="unpick" data-i="${i}" data-k="${k}" title="${esc(t('外す'))}">×</button></span>`;
+      };
+      let html = '';
+      // バンド名・曲名は入力された文字なので訳さない（data-i18n-skip）
+      if (p.band) html += `<div class="hint">${esc(t('バンド名：'))}<b data-i18n-skip>${esc(p.band)}</b>${esc(t('（@band が優先）'))}</div>`;
+      html += '<div class="sl-list">';
+      ed.model.songs.forEach((x, i) => {
+        html += `<div class="sl-song${ed._picking === i ? ' picking' : ''}"><div class="sl-row1"><span class="sl-no">M${i + 1}</span>`
+          + `<input type="text" data-f="title" data-i="${i}" value="${esc(x.title)}" data-i18n-skip spellcheck="false" aria-label="${esc(t('曲名'))}">`
+          + `<button data-act="up" data-i="${i}" title="${esc(t('上へ'))}"${i === 0 ? ' disabled' : ''}>▲</button>`
+          + `<button data-act="down" data-i="${i}" title="${esc(t('下へ'))}"${i === ed.model.songs.length - 1 ? ' disabled' : ''}>▼</button>`
+          + `<button data-act="del" data-i="${i}" title="${esc(t('消す'))}">✕</button></div>`
+          + `<div class="sl-row2">${x.scenes.length ? x.scenes.map((id, k) => chip(id, i, k)).join('<span class="sl-arrow">→</span>') : `<span class="hint">${esc(t('シーン：オート'))}</span>`}`
+          + `<button data-act="pick" data-i="${i}">${esc(ed._picking === i ? t('選び終える') : t('＋ シーン'))}</button></div>`
+          + `<div class="sl-row3"><select data-f="palette" data-i="${i}">${pals}</select>`
+          + `<label><input type="checkbox" data-f="showtitle" data-i="${i}"${x.notitle ? '' : ' checked'}> ${esc(t('曲名を表示'))}</label></div>`;
+        if (ed._picking === i) {
+          html += `<div class="sl-picker"><div class="hint">${esc(t('押した順に使います（2 つ以上ならオートで順番に）'))}</div>`
+            + `<div class="scene-grid">${VJ.scenePick.list().map((d) => VJ.scenePick.button(d)).join('')}</div>`
+            + `<button data-act="done" data-i="${i}">${esc(t('選び終える'))}</button></div>`;
+        }
+        html += '</div>';
+      });
+      html += `</div><div class="row"><button data-act="add" data-i="-1">${esc(t('＋ 曲を追加'))}</button>`
+        + (ed.model.songs.length ? '' : `<span class="hint">${esc(t('曲が登録されていません（→ キーの曲送りは使えません）'))}</span>`) + '</div>';
+      if (p.end) html += `<div class="hint">${esc(t('終演の文字：'))}<b data-i18n-skip>${esc(p.end)}</b></div>`;
+      for (const e of p.errors) html += `<div class="err">${esc(t('{0} 行目：{1}', e.line, e.msg))}</div>`;
+      el.innerHTML = html;
+      el.querySelectorAll('select[data-f="palette"]').forEach((sel) => { const x = ed.model.songs[+sel.dataset.i]; sel.value = x.palette === null ? '' : String(x.palette); });
+      if (ed._focusLast) {
+        ed._focusLast = false;
+        const inputs = el.querySelectorAll('input[data-f="title"]');
+        const last = inputs[inputs.length - 1];
+        if (last) { last.focus(); last.select(); }
+      }
+    },
+  };
+
+  VJ.setlistEd = ed;
+})(globalThis.VJ = globalThis.VJ || {});
+</script>
 <script>/* src/ui/panel.js */
 /* 設定パネル（開始画面兼用）。映像は背後で動き続けるので、設定しながら見え方を確認できる。
  * 操作はすべて app 経由（app.show / app.engine / app.applySettings）。出力ウィンドウ（2 画面）のときは
@@ -8712,6 +10017,7 @@ void main() {
       $('btn-output').addEventListener('click', () => VJ.link.openOutput(app));
       $('btn-output-close').addEventListener('click', () => VJ.link.closeOutput());
       $('btn-output-stop').addEventListener('click', () => VJ.link.closeOutput());
+      $('remote-preview-on').addEventListener('change', () => VJ.link._previewOn());
 
       // ⑤ オプション
       const bindCheck = (id, key, after) => {
@@ -8783,8 +10089,13 @@ void main() {
       $('btn-resume').addEventListener('click', () => { app.show.restoreSession(panel._resume); $('resume-box').hidden = true; });
       $('btn-resume-no').addEventListener('click', () => { $('resume-box').hidden = true; });
 
-      // キー一覧
+      // キー一覧・シーンを絵で選ぶ・出演バンド
       panel.renderKeys();
+      VJ.scenePick.install(app);
+      VJ.bandsUI.install(app);
+      VJ.soundcheckUI.install(app);
+      VJ.guide.install(app);
+      VJ.setlistEd.install(app);
 
       // 前回の音声入力の種類を選んでおく
       const last = s.lastSource;
@@ -8892,6 +10203,8 @@ void main() {
       $('lh').classList.toggle('on', perfNow - L.h < 120);
       $('la').classList.toggle('on', perfNow - L.a < 200);
       $('lb').classList.toggle('on', perfNow - L.b < 120);
+      VJ.scenePick.update();
+      VJ.guide.tick(f);
       if (perfNow - (panel._syncT || 0) > 500) { panel._syncT = perfNow; panel.syncFromSettings(); }
       if (f) {
         $('bpm-view').textContent = f.bpm && f.beatConf > 0.2 ? `${Math.round(f.bpm)} BPM${f.tempoManual ? t('（タップ）') : ''}` : '— BPM';
@@ -8909,6 +10222,7 @@ void main() {
       const run = () => {
         panel.app.applySettings();
         panel.renderSetlist();
+        VJ.bandsUI.render();
         panel.save();
       };
       if (immediate) run(); else panel._prevT = setTimeout(run, 200);
@@ -8919,27 +10233,8 @@ void main() {
       $('profile-desc').textContent = VJ.profileDesc(p);
     },
 
-    renderSetlist() {
-      const p = panel.app.show.setlist;
-      const name = (id) => (VJ.scenes.byId[id] ? VJ.scenes.byId[id].key + ' ' + VJ.sceneName(VJ.scenes.byId[id]) : id);
-      let html = '';
-      // 曲名・バンド名は入力された文字なので訳さない（data-i18n-skip）
-      if (p.band) html += `<div class="hint">${esc(t('バンド名：'))}<b data-i18n-skip>${esc(p.band)}</b>${esc(t('（@band が優先）'))}</div>`;
-      if (p.songs.length) {
-        html += `<table class="setlist"><tr><th>#</th><th>${esc(t('曲名'))}</th><th>${esc(t('シーン'))}</th><th>${esc(t('パレット'))}</th></tr>`;
-        p.songs.forEach((s, i) => {
-          html += `<tr><td>M${i + 1}</td><td><span data-i18n-skip>${esc(s.title)}</span>${s.notitle ? ` <span class="hint">${esc(t('(曲名なし)'))}</span>` : ''}</td>`
-            + `<td>${s.scenes.length ? s.scenes.map(name).map(esc).join(' → ') : `<span class="hint">${esc(t('オート'))}</span>`}</td>`
-            + `<td>${s.palette !== null ? esc(t(VJ.palettes[s.palette].name)) : '<span class="hint">—</span>'}</td></tr>`;
-        });
-        html += '</table>';
-      } else {
-        html += `<div class="hint">${esc(t('曲が登録されていません（→ キーの曲送りは使えません）'))}</div>`;
-      }
-      if (p.end) html += `<div class="hint">${esc(t('終演の文字：'))}<b data-i18n-skip>${esc(p.end)}</b></div>`;
-      for (const e of p.errors) html += `<div class="err">${esc(t('{0} 行目：{1}', e.line, e.msg))}</div>`;
-      $('setlist-preview').innerHTML = html;
-    },
+    /** セットリストの表（setlisted.js。入力中は作り直さない） */
+    renderSetlist() { VJ.setlistEd.render(); },
 
     renderCustom() {
       const s = panel.app.settings, el = $('custom-colors');
@@ -8989,6 +10284,10 @@ void main() {
       panel.renderSceneParams(true);
       if ($('midi-map-box').open) panel.renderMidiMap();
       panel.renderKeys();
+      VJ.scenePick.render(app);
+      VJ.bandsUI.render();
+      VJ.guide.render();
+      if (!$('precheck').hidden) VJ.guide.renderPrecheck();
       panel.renderWarnings();
       panel.renderIo();
       panel.renderStatus(app.engine.status, app.engine.message);
@@ -9031,6 +10330,17 @@ void main() {
         v.textContent = Math.round(el.value * 100) + '%';
         el.addEventListener('input', () => { s.dmx[k] = +el.value; v.textContent = Math.round(el.value * 100) + '%'; panel.applyShow(); });
       }
+      $('btn-qr').addEventListener('click', async () => {
+        const box = $('net-qr');
+        if (!box.hidden) { box.hidden = true; $('btn-qr').textContent = t('スマホ用の QR コードを表示'); return; }
+        let codes = [];
+        try { codes = (await panel.app.netQr()) || []; } catch (e) { codes = []; }
+        if (!codes.length) { panel.app.ui.toast(t('QR コードを作れません（ブリッジにつながっていないか、LAN に接続されていません）'), 'warn'); return; }
+        box.innerHTML = codes.map((q) => `<figure><img src="${esc(q.img)}" alt="QR"><figcaption data-i18n-skip>${esc(q.url)}</figcaption></figure>`).join('')
+          + `<div class="hint">${esc(t('スマホのカメラで読み取ると、暗証番号を入れずにつながります。QR には暗証番号が入っているので、観客から見えるところでは表示しないでください。'))}</div>`;
+        box.hidden = false;
+        $('btn-qr').textContent = t('QR コードを隠す');
+      });
       $('dmx-port').addEventListener('click', async () => {
         try {
           const port = await VJ.dmx.chooseSerial();
@@ -9052,12 +10362,14 @@ void main() {
       const io = VJ.link.role === 'control' ? (VJ.link.lastStatus && VJ.link.lastStatus.io) || {} : { net: VJ.net.state(), dmx: VJ.dmx.state() };
       const n = io.net || { status: 'off' };
       const el = $('net-status');
+      if (!(n.status === 'on' && n.info)) { $('btn-qr').hidden = true; $('net-qr').hidden = true; $('btn-qr').textContent = t('スマホ用の QR コードを表示'); }
       if (!(s.net && s.net.enabled)) { el.className = 'status'; el.textContent = t('つないでいません'); }
       else if (n.status === 'on' && n.info) {
         el.className = 'status ok';
         el.textContent = t('ブリッジに接続中。スマホで {0} を開き、暗証番号 {1} を入力', n.info.urls.length ? n.info.urls.join(' / ') : t('（LAN に接続されていません）'), n.info.pin)
           + t('（接続中のスマホ {0} 台・OSC 受信 {1} 番）', n.info.phones, n.info.oscPort);
         if ($('osc-in')) $('osc-in').textContent = n.info.oscPort || '—';
+        $('btn-qr').hidden = false;
       } else {
         el.className = 'status warn';
         el.textContent = n.status === 'connecting' ? t('接続中…') : t('ブリッジが見つかりません（起動しているか、アドレスを確認）。2 秒ごとに再接続します');
@@ -9132,7 +10444,8 @@ void main() {
       if (s.logo) img.src = s.logo; else img.removeAttribute('src');
     },
 
-    /** ロゴ画像を読み込み、長辺 1024px 以下に縮めて data URL にする（設定に保存できる大きさに） */
+    /** ロゴ画像を読み込み、長辺 1024px 以下に縮めて data URL にする（設定に保存できる大きさに。
+     *  出演バンドごとにロゴを持つので、大きいときは WebP にして 1 枚 400KB 程度までにする） */
     async loadLogo(e) {
       const f = e.target.files[0];
       if (!f) return;
@@ -9145,7 +10458,11 @@ void main() {
         c.height = Math.max(1, Math.round(img.naturalHeight * k));
         c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
         let out = c.toDataURL('image/png');
-        if (out.length > 1.5e6) out = c.toDataURL('image/webp', 0.9);
+        for (const q of [0.92, 0.8, 0.65]) {
+          if (out.length <= 4e5) break;
+          const w = c.toDataURL('image/webp', q);
+          if (w.startsWith('data:image/webp') && w.length < out.length) out = w;
+        }
         panel.app.settings.logo = out;
         if (panel.app.settings.logoMode === 'off') { panel.app.settings.logoMode = 'title'; $('opt-logomode').value = 'title'; }
         panel.renderLogo();
@@ -9376,6 +10693,20 @@ void main() {
       return true;
     };
     app.getSettings = () => JSON.parse(JSON.stringify(app.settings));
+    // サウンドチェックの測定（音声を解析しているウィンドウで。2 画面のときは出力側に頼む）
+    app.scBegin = () => {
+      if (remote()) return link.request({ t: 'cmd', target: 'app', name: 'scBegin', args: [] });
+      app._sc = new VJ.soundcheck.SoundCheckAcc();
+      return true;
+    };
+    app.scEnd = () => {
+      if (remote()) return link.request({ t: 'cmd', target: 'app', name: 'scEnd', args: [] });
+      const r = app._sc ? app._sc.summary() : null;
+      app._sc = null;
+      return r;
+    };
+    // スマホ用の QR コード（ブリッジにつないでいるウィンドウから）
+    app.netQr = () => (remote() ? link.request({ t: 'cmd', target: 'app', name: 'netQr', args: [] }) : VJ.net.qrCodes());
     // 操作側から出力ウィンドウを閉じる前に呼ばれる（離脱確認を外す）
     app.releaseGuard = () => { VJ.guard.showing = false; return true; };
     app.show.onTap = () => (app.extractor ? app.extractor.tap() : 0);
@@ -9494,12 +10825,22 @@ void main() {
         if (pulled.gapped) fx.resync();
         if (pulled.samples.length) fx.process(pulled.samples);
         f = fx.computeFrame(engine.running ? engine.latest() : silent, now, dt);
+        if (app._sc && engine.running) {
+          // このフレームの新しい音の山（割れの検出）と、メーターの左右の大きさ
+          let pk = 0;
+          const x = pulled.samples;
+          for (let i = 0; i < x.length; i++) { const a = x[i] < 0 ? -x[i] : x[i]; if (a > pk) pk = a; }
+          const m = engine.meter || {};
+          const pkDb = VJ.util.linToDb(pk);
+          app._sc.push(f, { l: m.l, r: m.r, lPeak: Math.max(pkDb, m.lPeak || -120), rPeak: m.rPeak || -120, mono: !!m.mono });
+        }
         app.show.update(f, dt, now);
         // フレームレート上限（非力な PC 向け）：解析と演出は毎フレーム、描画だけ間引く
         const cap = settings.fpsCap;
         if (!cap || ts - lastRender >= 1000 / cap - 4) {
           lastRender = ts;
           app.renderer.render(app.show.frame(f, dt, app.getText), ts);
+          if (link.role === 'output') link.previewFrame(app.renderer.canvas, ts);
         }
         app.lastFeatures = f;
         if (app.onFeatures) app.onFeatures(f);

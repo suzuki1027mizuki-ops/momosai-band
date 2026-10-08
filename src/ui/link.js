@@ -9,7 +9,7 @@
 
   const SHOW_METHODS = ['selectScene', 'nextSong', 'prevSong', 'flash', 'setStrobe', 'toggleBlackout', 'setBlackout', 'cyclePalette',
     'nudgeSensitivity', 'nudgeMaster', 'toggleAuto', 'lock', 'unlock', 'showSongTitle', 'tap', 'toggleMessage', 'showMessage',
-    'toggleTestPattern', 'restoreSession', 'setMaster', 'setSensitivity', 'setPalette'];
+    'toggleTestPattern', 'restoreSession', 'setMaster', 'setSensitivity', 'setPalette', 'resetShow'];
   // 出力側から操作側へ反映してよい設定（型も確認する）
   const PATCH_KEYS = { paletteIdx: 'number', sensitivity: 'number', master: 'number', auto: 'boolean' };
 
@@ -76,6 +76,8 @@
     seq: 0,
     lastStatus: null,
     _poll: null,
+    wantPreview: false, // 出力側：操作側がプレビューを見ているか
+    PREVIEW_MS: 250, // プレビューの間隔（1 秒に 4 回）
 
     send(msg) {
       if (!link.peer || link.peer.closed) return false;
@@ -140,6 +142,7 @@
       document.body.classList.add('remote-mode');
       document.getElementById('btn-output').textContent = VJ.t('出力ウィンドウを前面に');
       document.getElementById('btn-output-stop').hidden = false;
+      link._previewOn();
       clearInterval(link._poll);
       link._poll = setInterval(() => { if (link.peer && link.peer.closed) link.closeOutput(true); }, 500);
       if (!fresh) {
@@ -195,6 +198,7 @@
       if (d.t === 'hello') {
         // 出力ウィンドウが開いた／再読み込みされた：設定・曲の位置・音声入力を渡す
         link.send({ t: 'settings', settings: app.settings });
+        link._previewOn();
         const first = link.local.fresh;
         link.local.fresh = false;
         const sess = first ? link.local.session : app.show.session();
@@ -228,10 +232,19 @@
         }
         if (changed) { VJ.panel.syncFromSettings(); VJ.panel.save(); }
         link._features = d.f;
+      } else if (d.t === 'preview') {
+        // 出力ウィンドウの縮小映像（JPEG の data URL）
+        const img = document.getElementById('remote-preview'), cb = document.getElementById('remote-preview-on');
+        // 切ったあとに届いた分は出さない
+        if (img && (!cb || cb.checked) && typeof d.url === 'string' && d.url.startsWith('data:image/jpeg;base64,')) { img.src = d.url; img.hidden = false; }
       } else if (d.t === 'engine') {
         app.engine._set(d.status, d.message);
       } else if (d.t === 'toast') {
         app.ui.toast(d.msg, d.kind);
+      } else if (d.t === 'band' && VJ.bandsUI) {
+        // 出力ウィンドウで受けたバンドの切替（スマホ・OSC・キー）。設定はこちらが持っているのでこちらで
+        if (typeof d.i === 'number') VJ.bandsUI.switchTo(d.i);
+        else if (d.d === 1 || d.d === -1) VJ.bandsUI.step(d.d, { force: !!d.force });
       } else if (d.t === 'res') {
         const p = link.pending.get(d.id);
         if (p) { link.pending.delete(d.id); if (d.error) p.reject(Object.assign(new Error(d.error), { name: d.errorName })); else p.resolve(d.value); }
@@ -303,8 +316,31 @@
       link.send({ t: 'hello' });
     },
 
+    /** 操作側：プレビューの ON/OFF を出力側へ */
+    _previewOn() {
+      const cb = document.getElementById('remote-preview-on');
+      const on = !cb || cb.checked;
+      link.send({ t: 'preview', on });
+      const img = document.getElementById('remote-preview');
+      if (img && !on) img.hidden = true;
+    },
+
+    /** 出力側：描画した直後に呼ぶ（WebGL の画面は描いた直後でないと読めない）。縮小して操作側へ送る */
+    previewFrame(canvas, ts) {
+      if (!link.wantPreview || !link.peer || link.peer.closed || ts - (link._pvT || 0) < link.PREVIEW_MS) return;
+      link._pvT = ts;
+      const w = 240, h = Math.max(1, Math.round((w * canvas.height) / Math.max(1, canvas.width)));
+      let c = link._pv;
+      if (!c) c = link._pv = document.createElement('canvas');
+      if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+      const g = c.getContext('2d');
+      g.drawImage(canvas, 0, 0, w, h);
+      link.send({ t: 'preview', url: c.toDataURL('image/jpeg', 0.6) });
+    },
+
     async _onOutputMessage(d) {
       const app = link.app;
+      if (d.t === 'preview') { link.wantPreview = !!d.on; return; }
       if (d.t === 'settings') {
         for (const k of Object.keys(d.settings)) app.settings[k] = d.settings[k];
         app.applySettings();

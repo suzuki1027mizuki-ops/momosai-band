@@ -24,6 +24,11 @@ button.big { font-size: 18px; font-weight: 800; }
 button.flash { background: linear-gradient(90deg, #00b8d0, #c8109c); border: 0; color: #fff; }
 button.black.on { background: #000; color: var(--warn); border-color: var(--warn); box-shadow: none; }
 button small { display: block; color: var(--muted); font-size: 11px; }
+#scenes button { padding: 0; min-height: 0; overflow: hidden; position: relative; display: flex; flex-direction: column; }
+#scenes img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; display: block; background: #000; pointer-events: none; }
+#scenes .nm { font-size: 12px; padding: 4px 4px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#scenes .ky { position: absolute; left: 4px; top: 4px; background: rgba(0,0,0,0.7); color: #fff; font-size: 11px; padding: 0 5px; border-radius: 4px; }
+#scenes button:not(:has(img)) .nm { padding: 14px 4px; }
 .row { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
 .row span { min-width: 4.5em; color: var(--muted); font-size: 13px; }
 input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); }
@@ -56,6 +61,15 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); }
   <button data-cmd="next" data-en="Next ▶">次の曲 ▶</button>
 </div>
 
+<div id="band-box" hidden>
+<h2 data-en="Bands">出演バンド</h2>
+<div class="grid">
+  <button data-cmd="band-prev" data-en="◀ Prev band">◀ 前のバンド</button>
+  <button id="band-now" disabled style="opacity: 1"></button>
+  <button data-cmd="band-next" data-en="Next band ▶">次のバンド ▶</button>
+</div>
+</div>
+
 <h2 data-en="Scenes">シーン</h2>
 <div class="grid" id="scenes"></div>
 
@@ -79,8 +93,14 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); }
 (function () {
   'use strict';
   const $ = (id) => document.getElementById(id);
-  let ws = null, authed = false, retry = null, st = null;
+  let ws = null, authed = false, retry = null, st = null, thumbs = {};
   let pin = sessionStorage.getItem('vj-pin') || '';
+  // QR コードから開いたとき：URL の #p=1234 を暗証番号として使い、アドレス欄からは消す（画面写真に残らないように）
+  const hp = /(?:^#|&)p=(\d{4})(?:&|$)/.exec(location.hash || '');
+  if (hp) {
+    pin = hp[1];
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* noop */ }
+  }
   // スマホの言語が日本語でなければ英語で表示
   const EN = !/^ja/i.test(navigator.language || 'ja');
   const L = (ja, en) => (EN ? en : ja);
@@ -111,6 +131,10 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); }
       } else if (m.t === 'status') {
         st = m.s;
         render();
+      } else if (m.t === 'thumbs' && m.d && typeof m.d === 'object') {
+        thumbs = m.d;
+        $('scenes').dataset.sig = '';
+        render();
       }
     };
     ws.onclose = () => {
@@ -134,6 +158,9 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); }
     setStatus(lines.join('\n'), st.connected === false);
     $('btn-black').classList.toggle('on', !!st.blackout);
     $('btn-auto').classList.toggle('on', !!st.auto);
+    const bd = st.band;
+    $('band-box').hidden = !(bd && bd.n > 1);
+    if (bd) $('band-now').innerHTML = esc(bd.name || '—') + '<small>' + (bd.i + 1) + ' / ' + bd.n + '</small>';
     $('btn-auto').textContent = L('オート ', 'Auto ') + (st.auto ? 'ON' : 'OFF');
     if (document.activeElement !== $('master') && typeof st.master === 'number') $('master').value = st.master;
     if (document.activeElement !== $('sens') && typeof st.sens === 'number') $('sens').value = st.sens;
@@ -141,7 +168,8 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); }
     const sig = list.map((s) => s.id).join(',');
     if ($('scenes').dataset.sig !== sig) {
       $('scenes').dataset.sig = sig;
-      $('scenes').innerHTML = list.map((s) => `<button data-scene="${esc(s.id)}">${esc(s.name)}<small>${esc(s.key)}</small></button>`).join('');
+      const img = (id) => (typeof thumbs[id] === 'string' && /^data:image\/(webp|png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(thumbs[id]) ? `<img src="${thumbs[id]}" alt="">` : '');
+      $('scenes').innerHTML = list.map((s) => `<button data-scene="${esc(s.id)}">${img(s.id)}<span class="nm">${esc(s.name)}</span><span class="ky">${esc(s.key)}</span></button>`).join('');
     }
     $('scenes').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.scene === st.scene));
   }
@@ -157,6 +185,12 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); }
     if (b.dataset.scene) send('scene', [b.dataset.scene]);
     else if (b.dataset.cmd === 'msg') send('msg', [+b.dataset.arg]);
     else if (b.dataset.cmd === 'palette') send('palette', []);
+    else if (b.dataset.cmd === 'band-next' || b.dataset.cmd === 'band-prev') {
+      const next = b.dataset.cmd === 'band-next';
+      const bd = st && st.band;
+      const target = bd ? (next ? bd.next : '') : '';
+      if (confirm(next ? L('次のバンド' + (target ? '「' + target + '」' : '') + 'に切り替えますか？', 'Switch to the next band' + (target ? ' "' + target + '"' : '') + '?') : L('前のバンドに戻しますか？', 'Go back to the previous band?'))) send('band', [next ? 'next' : 'prev']);
+    }
     else if (b.dataset.cmd) send(b.dataset.cmd, []);
   });
   $('pin').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btn-login').click(); });

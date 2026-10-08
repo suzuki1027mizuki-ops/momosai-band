@@ -65,6 +65,20 @@
       return true;
     };
     app.getSettings = () => JSON.parse(JSON.stringify(app.settings));
+    // サウンドチェックの測定（音声を解析しているウィンドウで。2 画面のときは出力側に頼む）
+    app.scBegin = () => {
+      if (remote()) return link.request({ t: 'cmd', target: 'app', name: 'scBegin', args: [] });
+      app._sc = new VJ.soundcheck.SoundCheckAcc();
+      return true;
+    };
+    app.scEnd = () => {
+      if (remote()) return link.request({ t: 'cmd', target: 'app', name: 'scEnd', args: [] });
+      const r = app._sc ? app._sc.summary() : null;
+      app._sc = null;
+      return r;
+    };
+    // スマホ用の QR コード（ブリッジにつないでいるウィンドウから）
+    app.netQr = () => (remote() ? link.request({ t: 'cmd', target: 'app', name: 'netQr', args: [] }) : VJ.net.qrCodes());
     // 操作側から出力ウィンドウを閉じる前に呼ばれる（離脱確認を外す）
     app.releaseGuard = () => { VJ.guard.showing = false; return true; };
     app.show.onTap = () => (app.extractor ? app.extractor.tap() : 0);
@@ -183,12 +197,22 @@
         if (pulled.gapped) fx.resync();
         if (pulled.samples.length) fx.process(pulled.samples);
         f = fx.computeFrame(engine.running ? engine.latest() : silent, now, dt);
+        if (app._sc && engine.running) {
+          // このフレームの新しい音の山（割れの検出）と、メーターの左右の大きさ
+          let pk = 0;
+          const x = pulled.samples;
+          for (let i = 0; i < x.length; i++) { const a = x[i] < 0 ? -x[i] : x[i]; if (a > pk) pk = a; }
+          const m = engine.meter || {};
+          const pkDb = VJ.util.linToDb(pk);
+          app._sc.push(f, { l: m.l, r: m.r, lPeak: Math.max(pkDb, m.lPeak || -120), rPeak: m.rPeak || -120, mono: !!m.mono });
+        }
         app.show.update(f, dt, now);
         // フレームレート上限（非力な PC 向け）：解析と演出は毎フレーム、描画だけ間引く
         const cap = settings.fpsCap;
         if (!cap || ts - lastRender >= 1000 / cap - 4) {
           lastRender = ts;
           app.renderer.render(app.show.frame(f, dt, app.getText), ts);
+          if (link.role === 'output') link.previewFrame(app.renderer.canvas, ts);
         }
         app.lastFeatures = f;
         if (app.onFeatures) app.onFeatures(f);

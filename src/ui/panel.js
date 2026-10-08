@@ -131,6 +131,7 @@
       $('btn-output').addEventListener('click', () => VJ.link.openOutput(app));
       $('btn-output-close').addEventListener('click', () => VJ.link.closeOutput());
       $('btn-output-stop').addEventListener('click', () => VJ.link.closeOutput());
+      $('remote-preview-on').addEventListener('change', () => VJ.link._previewOn());
 
       // ⑤ オプション
       const bindCheck = (id, key, after) => {
@@ -202,8 +203,13 @@
       $('btn-resume').addEventListener('click', () => { app.show.restoreSession(panel._resume); $('resume-box').hidden = true; });
       $('btn-resume-no').addEventListener('click', () => { $('resume-box').hidden = true; });
 
-      // キー一覧
+      // キー一覧・シーンを絵で選ぶ・出演バンド
       panel.renderKeys();
+      VJ.scenePick.install(app);
+      VJ.bandsUI.install(app);
+      VJ.soundcheckUI.install(app);
+      VJ.guide.install(app);
+      VJ.setlistEd.install(app);
 
       // 前回の音声入力の種類を選んでおく
       const last = s.lastSource;
@@ -311,6 +317,8 @@
       $('lh').classList.toggle('on', perfNow - L.h < 120);
       $('la').classList.toggle('on', perfNow - L.a < 200);
       $('lb').classList.toggle('on', perfNow - L.b < 120);
+      VJ.scenePick.update();
+      VJ.guide.tick(f);
       if (perfNow - (panel._syncT || 0) > 500) { panel._syncT = perfNow; panel.syncFromSettings(); }
       if (f) {
         $('bpm-view').textContent = f.bpm && f.beatConf > 0.2 ? `${Math.round(f.bpm)} BPM${f.tempoManual ? t('（タップ）') : ''}` : '— BPM';
@@ -328,6 +336,7 @@
       const run = () => {
         panel.app.applySettings();
         panel.renderSetlist();
+        VJ.bandsUI.render();
         panel.save();
       };
       if (immediate) run(); else panel._prevT = setTimeout(run, 200);
@@ -338,27 +347,8 @@
       $('profile-desc').textContent = VJ.profileDesc(p);
     },
 
-    renderSetlist() {
-      const p = panel.app.show.setlist;
-      const name = (id) => (VJ.scenes.byId[id] ? VJ.scenes.byId[id].key + ' ' + VJ.sceneName(VJ.scenes.byId[id]) : id);
-      let html = '';
-      // 曲名・バンド名は入力された文字なので訳さない（data-i18n-skip）
-      if (p.band) html += `<div class="hint">${esc(t('バンド名：'))}<b data-i18n-skip>${esc(p.band)}</b>${esc(t('（@band が優先）'))}</div>`;
-      if (p.songs.length) {
-        html += `<table class="setlist"><tr><th>#</th><th>${esc(t('曲名'))}</th><th>${esc(t('シーン'))}</th><th>${esc(t('パレット'))}</th></tr>`;
-        p.songs.forEach((s, i) => {
-          html += `<tr><td>M${i + 1}</td><td><span data-i18n-skip>${esc(s.title)}</span>${s.notitle ? ` <span class="hint">${esc(t('(曲名なし)'))}</span>` : ''}</td>`
-            + `<td>${s.scenes.length ? s.scenes.map(name).map(esc).join(' → ') : `<span class="hint">${esc(t('オート'))}</span>`}</td>`
-            + `<td>${s.palette !== null ? esc(t(VJ.palettes[s.palette].name)) : '<span class="hint">—</span>'}</td></tr>`;
-        });
-        html += '</table>';
-      } else {
-        html += `<div class="hint">${esc(t('曲が登録されていません（→ キーの曲送りは使えません）'))}</div>`;
-      }
-      if (p.end) html += `<div class="hint">${esc(t('終演の文字：'))}<b data-i18n-skip>${esc(p.end)}</b></div>`;
-      for (const e of p.errors) html += `<div class="err">${esc(t('{0} 行目：{1}', e.line, e.msg))}</div>`;
-      $('setlist-preview').innerHTML = html;
-    },
+    /** セットリストの表（setlisted.js。入力中は作り直さない） */
+    renderSetlist() { VJ.setlistEd.render(); },
 
     renderCustom() {
       const s = panel.app.settings, el = $('custom-colors');
@@ -408,6 +398,10 @@
       panel.renderSceneParams(true);
       if ($('midi-map-box').open) panel.renderMidiMap();
       panel.renderKeys();
+      VJ.scenePick.render(app);
+      VJ.bandsUI.render();
+      VJ.guide.render();
+      if (!$('precheck').hidden) VJ.guide.renderPrecheck();
       panel.renderWarnings();
       panel.renderIo();
       panel.renderStatus(app.engine.status, app.engine.message);
@@ -450,6 +444,17 @@
         v.textContent = Math.round(el.value * 100) + '%';
         el.addEventListener('input', () => { s.dmx[k] = +el.value; v.textContent = Math.round(el.value * 100) + '%'; panel.applyShow(); });
       }
+      $('btn-qr').addEventListener('click', async () => {
+        const box = $('net-qr');
+        if (!box.hidden) { box.hidden = true; $('btn-qr').textContent = t('スマホ用の QR コードを表示'); return; }
+        let codes = [];
+        try { codes = (await panel.app.netQr()) || []; } catch (e) { codes = []; }
+        if (!codes.length) { panel.app.ui.toast(t('QR コードを作れません（ブリッジにつながっていないか、LAN に接続されていません）'), 'warn'); return; }
+        box.innerHTML = codes.map((q) => `<figure><img src="${esc(q.img)}" alt="QR"><figcaption data-i18n-skip>${esc(q.url)}</figcaption></figure>`).join('')
+          + `<div class="hint">${esc(t('スマホのカメラで読み取ると、暗証番号を入れずにつながります。QR には暗証番号が入っているので、観客から見えるところでは表示しないでください。'))}</div>`;
+        box.hidden = false;
+        $('btn-qr').textContent = t('QR コードを隠す');
+      });
       $('dmx-port').addEventListener('click', async () => {
         try {
           const port = await VJ.dmx.chooseSerial();
@@ -471,12 +476,14 @@
       const io = VJ.link.role === 'control' ? (VJ.link.lastStatus && VJ.link.lastStatus.io) || {} : { net: VJ.net.state(), dmx: VJ.dmx.state() };
       const n = io.net || { status: 'off' };
       const el = $('net-status');
+      if (!(n.status === 'on' && n.info)) { $('btn-qr').hidden = true; $('net-qr').hidden = true; $('btn-qr').textContent = t('スマホ用の QR コードを表示'); }
       if (!(s.net && s.net.enabled)) { el.className = 'status'; el.textContent = t('つないでいません'); }
       else if (n.status === 'on' && n.info) {
         el.className = 'status ok';
         el.textContent = t('ブリッジに接続中。スマホで {0} を開き、暗証番号 {1} を入力', n.info.urls.length ? n.info.urls.join(' / ') : t('（LAN に接続されていません）'), n.info.pin)
           + t('（接続中のスマホ {0} 台・OSC 受信 {1} 番）', n.info.phones, n.info.oscPort);
         if ($('osc-in')) $('osc-in').textContent = n.info.oscPort || '—';
+        $('btn-qr').hidden = false;
       } else {
         el.className = 'status warn';
         el.textContent = n.status === 'connecting' ? t('接続中…') : t('ブリッジが見つかりません（起動しているか、アドレスを確認）。2 秒ごとに再接続します');
@@ -551,7 +558,8 @@
       if (s.logo) img.src = s.logo; else img.removeAttribute('src');
     },
 
-    /** ロゴ画像を読み込み、長辺 1024px 以下に縮めて data URL にする（設定に保存できる大きさに） */
+    /** ロゴ画像を読み込み、長辺 1024px 以下に縮めて data URL にする（設定に保存できる大きさに。
+     *  出演バンドごとにロゴを持つので、大きいときは WebP にして 1 枚 400KB 程度までにする） */
     async loadLogo(e) {
       const f = e.target.files[0];
       if (!f) return;
@@ -564,7 +572,11 @@
         c.height = Math.max(1, Math.round(img.naturalHeight * k));
         c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
         let out = c.toDataURL('image/png');
-        if (out.length > 1.5e6) out = c.toDataURL('image/webp', 0.9);
+        for (const q of [0.92, 0.8, 0.65]) {
+          if (out.length <= 4e5) break;
+          const w = c.toDataURL('image/webp', q);
+          if (w.startsWith('data:image/webp') && w.length < out.length) out = w;
+        }
         panel.app.settings.logo = out;
         if (panel.app.settings.logoMode === 'off') { panel.app.settings.logoMode = 'title'; $('opt-logomode').value = 'title'; }
         panel.renderLogo();

@@ -52,5 +52,37 @@
     return out;
   }
 
-  VJ.setlist = { parse, normalize };
+  /** 1 曲目より前のコメント行（# …）。表で編集して書き直すときに残す */
+  function headComments(text) {
+    const out = [];
+    for (const raw of String(text || '').split(/\r?\n/)) {
+      const line = normalize(raw).trim();
+      if (!line || line.startsWith('@')) continue;
+      if (!line.startsWith('#')) break;
+      out.push(raw.trim());
+    }
+    return out;
+  }
+
+  /** 解析結果 → 文字（表で編集したとき）。シーンはキー（1〜9・s1〜s9・0）、パレットは英字の名前で書く */
+  function serialize(p, comments) {
+    const lines = [];
+    if (p.band) lines.push('@band ' + p.band);
+    for (const c of comments || []) lines.push(c);
+    p.songs.forEach((s, i) => {
+      // 区切りの「|」と改行は曲名に入れられない。行頭に番号を付ける（数字で始まる曲名が番号と間違われないように）
+      const title = String(s.title || '').replace(/[|｜￨│]/g, '/').replace(/[\r\n]+/g, ' ').trim() || '?';
+      const sc = (s.scenes || []).map((id) => (VJ.scenes.byId[id] ? VJ.scenes.byId[id].key : id)).join(',');
+      const pal = s.palette !== null && s.palette !== undefined && VJ.palettes[s.palette] ? VJ.palettes[s.palette].id : '';
+      const parts = [`${i + 1}. ${title}`];
+      if (sc || pal || s.notitle) parts.push(sc);
+      if (pal || s.notitle) parts.push(pal);
+      if (s.notitle) parts.push('notitle');
+      lines.push(parts.join(' | '));
+    });
+    if (p.end) lines.push('@end ' + p.end);
+    return lines.join('\n');
+  }
+
+  VJ.setlist = { parse, normalize, serialize, headComments };
 })(globalThis.VJ = globalThis.VJ || {});

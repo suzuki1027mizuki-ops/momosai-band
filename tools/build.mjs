@@ -40,6 +40,7 @@ copy('launcher/start-mac.command', 'start-mac.command', 0o755);
 // ブリッジ（スマホ操作・OSC・Art-Net。Node.js で動かす）
 fs.mkdirSync(path.join(DIST, 'bridge'), { recursive: true });
 copy('bridge/server.mjs', 'bridge/server.mjs');
+copy('bridge/qr.mjs', 'bridge/qr.mjs');
 copy('bridge/remote.html', 'bridge/remote.html');
 copy('launcher/start-bridge-windows.bat', 'start-bridge-windows.bat');
 copy('launcher/start-bridge-mac.command', 'start-bridge-mac.command', 0o755);
