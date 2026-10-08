@@ -229,7 +229,7 @@ body.remote-mode #stage { opacity: 0.25; }
     <select id="device"><option value="">（既定のデバイス）</option></select>
     <button id="btn-refresh" title="デバイス一覧を更新">↻</button>
   </div>
-  <div class="hint" id="display-opts" hidden data-i18n-html>YouTube・音楽アプリ・DJ ソフトなど PC で流している音に反応します。開始すると共有する画面を聞かれるので、<b>「システム音声を共有」</b>（タブなら「タブの音声も共有」）をオンにして選んでください。Mac は Chrome のタブの音だけ使えます。</div>
+  <div class="hint" id="display-opts" hidden data-i18n-html>YouTube・音楽アプリ・DJ ソフトなど PC で流している音に反応します。開始すると共有する画面を聞かれるので、<b>「システム音声を共有」</b>（タブなら「タブの音声も共有」）をオンにして選んでください。サイトのタブが一覧に無いときは<b>「画面全体」</b>を選びます（Windows）。2 画面のときは、選ぶ画面が出力ウィンドウに出ます。Mac は Chrome のタブの音だけ使えます。</div>
   <div class="row" id="file-opts" hidden>
     <input type="file" id="file" multiple accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac">
     <button id="btn-skip" title="次の曲（複数選んだとき）" hidden>次の曲 ▶▶</button>
@@ -509,7 +509,7 @@ body.remote-mode #stage { opacity: 0.25; }
   'use strict';
 
   VJ.version = '1.0.0';
-  VJ.buildTime = '2026-10-08 #ad63137';
+  VJ.buildTime = '2026-10-08 #934f745';
 
   const LN10_20 = Math.LN10 / 20;
 
@@ -1060,6 +1060,7 @@ body.remote-mode #stage { opacity: 0.25; }
     "出力ウィンドウを開く（2 画面）": "Open output window (2 screens)",
     "出力ウィンドウを閉じました（この画面に戻しました。音声は ▶ 開始 で再開）": "Output window closed (back to this screen; press ▶ Start to resume audio)",
     "出力ウィンドウが閉じられました": "The output window was closed",
+    "出力ウィンドウに、共有する画面を選ぶ画面が出ています。出力ウィンドウで、共有する画面（またはタブ）と音声を選んでください。": "The screen-sharing dialog is open in the output window. Choose the screen (or tab) and its audio there.",
     "シーン  {0}{1}": "Scene   {0}{1}",
     "（次のビートで切替待ち）": " (switching on the next beat)",
     "テンポ  {0}   {1}": "Tempo   {0}   {1}",
@@ -1345,7 +1346,7 @@ body.remote-mode #stage { opacity: 0.25; }
     "例：次は〇〇です": "e.g. Next up: ○○",
     "例：手拍子お願いします！": "e.g. Clap along!",
     "例：アンコールありがとう！": "e.g. Thanks for the encore!",
-    "YouTube・音楽アプリ・DJ ソフトなど PC で流している音に反応します。開始すると共有する画面を聞かれるので、<b>「システム音声を共有」</b>（タブなら「タブの音声も共有」）をオンにして選んでください。Mac は Chrome のタブの音だけ使えます。": "Reacts to audio playing on this PC (YouTube, music apps, DJ software…). When starting you will be asked which screen to share — turn on <b>\"Share system audio\"</b> (for a tab, \"Also share tab audio\") and choose it. On a Mac only Chrome tab audio can be captured.",
+    "YouTube・音楽アプリ・DJ ソフトなど PC で流している音に反応します。開始すると共有する画面を聞かれるので、<b>「システム音声を共有」</b>（タブなら「タブの音声も共有」）をオンにして選んでください。サイトのタブが一覧に無いときは<b>「画面全体」</b>を選びます（Windows）。2 画面のときは、選ぶ画面が出力ウィンドウに出ます。Mac は Chrome のタブの音だけ使えます。": "Reacts to audio playing on this PC (YouTube, music apps, DJ software…). When starting you will be asked which screen to share — turn on <b>\"Share system audio\"</b> (for a tab, \"Also share tab audio\") and choose it. If the site's tab is not in the list, choose <b>\"Entire screen\"</b> (Windows). With two screens, the dialog opens in the output window. On a Mac only Chrome tab audio can be captured.",
     "1 行 1 曲：<code>曲名 | シーン | パレット</code>。シーンは 1〜9・Shift の段は s1〜s9、または名前（カンマで複数→オートで順番に）。<code>@end</code> で終演の文字。→ キーで次の曲。": "One song per line: <code>title | scenes | palette</code>. Scenes are 1–9, the Shift row is s1–s9, or names (comma-separated → played in order by Auto). <code>@end</code> sets the end text. → goes to the next song.",
     "全画面・スリープ防止・Esc 長押しでのみ解除、がまとめて有効になります。<b>H</b> でキー一覧、<b>M</b> でこのパネル。": "Fullscreen, keep-awake, and exit only by holding Esc are all enabled. <b>H</b> for keys, <b>M</b> for this panel.",
     "スマホからの操作・OSC・Art-Net には「ブリッジ」が要ります。単体アプリには入っています。ブラウザ版は <code>bridge</code> フォルダの起動ファイル（Node.js が必要）で起動します。": "Phone control, OSC and Art-Net need the \"bridge\". The desktop app includes it. For the browser version, start it with the launcher in the <code>bridge</code> folder (requires Node.js).",
@@ -9002,10 +9003,11 @@ void main() {
         link.local.fresh = false;
         const sess = first ? link.local.session : app.show.session();
         link.send({ t: 'cmd', target: 'show', name: 'restoreSession', args: [sess] });
-        // 動いていた入力を出力側で再開（画面共有・ファイルは出力側での操作が必要なので除く）
+        // 動いていた入力を出力側で再開（ファイルは出力側に渡していないので除く）。
+        // 「PC で再生中の音」の共有はウィンドウをまたいで引き継げないので、出力ウィンドウで選び直してもらう
         const st = link.lastStatus;
         const o = first ? (link.local.wasRunning ? link.local.opts : null) : (st && st.engineStatus === 'running' ? st.engineOpts : null);
-        if (o && (o.source === 'mic' || o.source === 'demo')) {
+        if (o && (o.source === 'mic' || o.source === 'demo' || o.source === 'display')) {
           app.startAudio({ source: o.source, deviceId: o.deviceId, deviceLabel: o.deviceLabel, channel: o.channel || app.settings.channel, monitor: app.settings.monitor }).catch(() => {});
         }
       } else if (d.t === 'status') {
@@ -9085,7 +9087,16 @@ void main() {
       setTimeout(() => { hint.hidden = true; }, 8000);
       document.addEventListener('dblclick', () => { VJ.guard.enterFullscreen(); hint.hidden = true; });
       app.show.on((msg, kind) => link.send({ t: 'toast', msg, kind }));
-      app.engine.on((status, message) => link.send({ t: 'engine', status, message }));
+      app.engine.on((status, message) => {
+        link.send({ t: 'engine', status, message });
+        // 共有する画面を選ぶ画面はこのウィンドウに出て、操作ウィンドウからは見えない。待ちが続いたら操作側に案内を出す
+        clearTimeout(link._pickT);
+        if (status === 'starting' && app.engine.opts.source === 'display') {
+          link._pickT = setTimeout(() => {
+            if (app.engine.status === 'starting') link.send({ t: 'engine', status: 'starting', message: VJ.t('出力ウィンドウに、共有する画面を選ぶ画面が出ています。出力ウィンドウで、共有する画面（またはタブ）と音声を選んでください。') });
+          }, 700);
+        }
+      });
       let hits = 0;
       app.onFeatures = (f) => { hits |= f.onsetFlags; };
       setInterval(() => {
@@ -10756,7 +10767,7 @@ p { margin: 4px 0 0; color: #444; }
       if (st === 'running') {
         const d = e.diagnostics();
         el.textContent = t('入力中：{0}（{1}Hz / {2}ch）', d.device, d.sampleRate, d.channels) + (msg ? ' — ' + msg : '');
-      } else if (st === 'starting') el.textContent = t('開始中…（マイクや画面共有の許可を求められたら「許可」）');
+      } else if (st === 'starting') el.textContent = msg || t('開始中…（マイクや画面共有の許可を求められたら「許可」）');
       else if (st === 'error') el.textContent = msg || t('エラー');
       else if (st === 'lost' || st === 'reconnecting') el.textContent = msg || t('再接続中…');
       else el.textContent = t('まだ開始していません');
@@ -11292,7 +11303,11 @@ p { margin: 4px 0 0; color: #444; }
       if (link.role === 'output' && VJ.i18n.resolve(s.lang) !== VJ.i18n.lang) VJ.i18n.setLang(VJ.i18n.resolve(s.lang));
     };
     app.startAudio = async (opts) => {
-      if (remote()) return link.request({ t: 'cmd', target: 'app', name: 'startAudio', args: [opts] });
+      if (remote()) {
+        // 「PC で再生中の音」：共有する画面を選ぶ画面は出力ウィンドウに出るので、前面に出す
+        if (opts && opts.source === 'display') { try { link.peer.focus(); } catch (e) { /* noop */ } }
+        return link.request({ t: 'cmd', target: 'app', name: 'startAudio', args: [opts] });
+      }
       await app.engine.start(opts);
       app.ensureExtractor().resync();
       return true;

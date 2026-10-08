@@ -66,7 +66,11 @@
       if (link.role === 'output' && VJ.i18n.resolve(s.lang) !== VJ.i18n.lang) VJ.i18n.setLang(VJ.i18n.resolve(s.lang));
     };
     app.startAudio = async (opts) => {
-      if (remote()) return link.request({ t: 'cmd', target: 'app', name: 'startAudio', args: [opts] });
+      if (remote()) {
+        // 「PC で再生中の音」：共有する画面を選ぶ画面は出力ウィンドウに出るので、前面に出す
+        if (opts && opts.source === 'display') { try { link.peer.focus(); } catch (e) { /* noop */ } }
+        return link.request({ t: 'cmd', target: 'app', name: 'startAudio', args: [opts] });
+      }
       await app.engine.start(opts);
       app.ensureExtractor().resync();
       return true;

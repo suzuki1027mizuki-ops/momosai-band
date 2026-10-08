@@ -303,7 +303,7 @@
       if (st === 'running') {
         const d = e.diagnostics();
         el.textContent = t('入力中：{0}（{1}Hz / {2}ch）', d.device, d.sampleRate, d.channels) + (msg ? ' — ' + msg : '');
-      } else if (st === 'starting') el.textContent = t('開始中…（マイクや画面共有の許可を求められたら「許可」）');
+      } else if (st === 'starting') el.textContent = msg || t('開始中…（マイクや画面共有の許可を求められたら「許可」）');
       else if (st === 'error') el.textContent = msg || t('エラー');
       else if (st === 'lost' || st === 'reconnecting') el.textContent = msg || t('再接続中…');
       else el.textContent = t('まだ開始していません');
