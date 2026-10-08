@@ -37,9 +37,15 @@ if not exist "%PAGE%" (
   exit /b 1
 )
 
-set "URL=!PAGE:\=/!"
-set "URL=!URL: =%%20!"
-set "URL=file:///!URL!"
+rem Chrome ignores --app and opens a new tab when the URL has raw non-ASCII characters
+rem (e.g. a Japanese folder name such as the Desktop under OneDrive), so percent-encode the path.
+set "URL="
+for /f "usebackq delims=" %%U in (`powershell -NoProfile -Command "([Uri]$env:PAGE).AbsoluteUri" 2^>nul`) do set "URL=%%U"
+if not defined URL (
+  set "URL=!PAGE:\=/!"
+  set "URL=!URL: =%%20!"
+  set "URL=file:///!URL!"
+)
 
 start "" "%BROWSER%" --user-data-dir="%PROFILE%" --no-first-run --no-default-browser-check --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --disable-features=CalculateNativeWinOcclusion,Translate --autoplay-policy=no-user-gesture-required --app="!URL!"
 
