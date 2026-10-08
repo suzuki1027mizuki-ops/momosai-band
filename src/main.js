@@ -51,7 +51,14 @@
     app.applySettings = () => {
       const s = app.settings;
       app.show.applySettings(s);
-      if (remote()) { link.send({ t: 'settings', settings: s }); return; }
+      if (remote()) {
+        // 出演バンドの一覧（ロゴを含むので大きい）は、変わったときだけ送る
+        const msg = Object.assign({}, s);
+        if (link._bandsSent && link._bandsSent.ref === s.bands && link._bandsSent.ver === VJ.bands.version) delete msg.bands;
+        else link._bandsSent = { ref: s.bands, ver: VJ.bands.version };
+        link.send({ t: 'settings', settings: msg });
+        return;
+      }
       app.renderer.setOutput(s.output);
       app.renderer.setLogo(s.logo);
       app.renderer.setMaxScale(s.maxScale);

@@ -69,20 +69,54 @@
     const lines = [];
     if (p.band) lines.push('@band ' + p.band);
     for (const c of comments || []) lines.push(c);
-    p.songs.forEach((s, i) => {
-      // 区切りの「|」と改行は曲名に入れられない。行頭に番号を付ける（数字で始まる曲名が番号と間違われないように）
-      const title = String(s.title || '').replace(/[|｜￨│]/g, '/').replace(/[\r\n]+/g, ' ').trim() || '?';
-      const sc = (s.scenes || []).map((id) => (VJ.scenes.byId[id] ? VJ.scenes.byId[id].key : id)).join(',');
-      const pal = s.palette !== null && s.palette !== undefined && VJ.palettes[s.palette] ? VJ.palettes[s.palette].id : '';
-      const parts = [`${i + 1}. ${title}`];
-      if (sc || pal || s.notitle) parts.push(sc);
-      if (pal || s.notitle) parts.push(pal);
-      if (s.notitle) parts.push('notitle');
-      lines.push(parts.join(' | '));
-    });
+    p.songs.forEach((x, i) => lines.push(songLine(x, i)));
     if (p.end) lines.push('@end ' + p.end);
     return lines.join('\n');
   }
 
-  VJ.setlist = { parse, normalize, serialize, headComments };
+  /** 1 曲を 1 行に（k は 0 から始まる順番） */
+  function songLine(s, k) {
+    // 区切りの「|」と改行は曲名に入れられない。行頭に番号を付ける（数字で始まる曲名が番号と間違われないように）
+    const title = String(s.title || '').replace(/[|｜￨│]/g, '/').replace(/[\r\n]+/g, ' ').trim() || '?';
+    const sc = (s.scenes || []).map((id) => (VJ.scenes.byId[id] ? VJ.scenes.byId[id].key : id)).join(',');
+    const pal = s.palette !== null && s.palette !== undefined && VJ.palettes[s.palette] ? VJ.palettes[s.palette].id : '';
+    const parts = [`${k + 1}. ${title}`];
+    if (sc || pal || s.notitle) parts.push(sc);
+    if (pal || s.notitle) parts.push(pal);
+    if (s.notitle) parts.push('notitle');
+    return parts.join(' | ');
+  }
+
+  /**
+   * 表で編集した曲の並び → 文字。元の文字を行ごとに残し、曲の行だけを入れ替える
+   * （コメント・@band / @end・読めなかった行・空行はそのまま。曲の途中のコメントも残る）。
+   * songs: [{ title, scenes, palette, notitle, line（元の行番号。新しい曲は null）, dirty（編集した） }]
+   * 編集していない曲は元の行をそのまま使う（読めなかったシーン名なども消さない。行頭の番号だけ付け直す）。
+   */
+  function rewrite(text, songs) {
+    const lines = String(text || '').split(/\r?\n/);
+    const slots = parse(text).songs.map((x) => x.line - 1);
+    const fmt = (x, k) => {
+      if (x.dirty || !x.line || !lines[x.line - 1]) return songLine(x, k);
+      const raw = lines[x.line - 1];
+      return /^\s*[0-9０-９]{1,3}\s*[.)．:：]/.test(raw) ? raw.replace(/^(\s*)[0-9０-９]{1,3}(\s*[.)．:：])/, `$1${k + 1}$2`) : raw;
+    };
+    const out = lines.slice();
+    const n = Math.min(slots.length, songs.length);
+    for (let k = 0; k < n; k++) out[slots[k]] = fmt(songs[k], k);
+    // 減った曲の行を消す（後ろから。前の行の位置がずれないように）
+    for (let k = slots.length - 1; k >= songs.length; k--) out.splice(slots[k], 1);
+    if (songs.length > slots.length) {
+      // 増えた曲は最後の曲の次に。曲が無ければ @end の前か末尾に
+      let at = slots.length ? slots[slots.length - 1] + 1 : out.findIndex((l) => /^@end\b/i.test(normalize(l).trim()));
+      if (at < 0) {
+        at = out.length;
+        while (at > 0 && !out[at - 1].trim()) at--;
+      }
+      out.splice(at, 0, ...songs.slice(slots.length).map((x, j) => fmt(x, slots.length + j)));
+    }
+    return out.join('\n');
+  }
+
+  VJ.setlist = { parse, normalize, serialize, headComments, rewrite, songLine };
 })(globalThis.VJ = globalThis.VJ || {});

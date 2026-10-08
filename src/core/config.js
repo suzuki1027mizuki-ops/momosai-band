@@ -54,6 +54,7 @@
     dmx: { enabled: false, out: 'artnet', host: '255.255.255.255', universe: 0, type: 'drgb', count: 4, start: 1, max: 1, pulse: 0.5, flash: true }, // 照明
     bands: [], // 出演バンド（bands.js）。いま出ているバンドの値は上の bandName・setlistText などにある
     bandIdx: 0, // いま出ているバンドの番号
+    bandPalette: -1, // いま出ているバンドの色（パネルで選んだもの。-1 = 決めていない）
     guide: true, // パネルの上に「はじめてのガイド」を出す
   };
 

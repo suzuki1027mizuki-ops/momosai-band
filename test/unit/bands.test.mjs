@@ -13,7 +13,8 @@ test('出演バンド：追加・切替で名前・セットリスト・ロゴ�
   s.setlistText = 'a1 | 1\na2 | 2';
   s.logo = 'data:image/png;base64,AAAA';
   s.profile = 'dance';
-  s.paletteIdx = 3;
+  s.bandPalette = 3; // パネルで選んだバンドの色
+  s.paletteIdx = 5; // 曲ごとの色・C キーで変わった、いまの色（覚えない）
   s.countdownTo = '13:00';
   s.messages = ['qa', '', ''];
   const i = VJ.bands.add(s, 'B');
@@ -35,7 +36,8 @@ test('出演バンド：追加・切替で名前・セットリスト・ロゴ�
   assert.equal(s.setlistText, 'a1 | 1\na2 | 2');
   assert.equal(s.logo, 'data:image/png;base64,AAAA');
   assert.equal(s.profile, 'dance');
-  assert.equal(s.paletteIdx, 3);
+  assert.equal(s.bandPalette, 3);
+  assert.equal(s.paletteIdx, 3, 'バンドの色に戻る');
   assert.equal(s.countdownTo, '13:00');
   assert.deepEqual(s.messages, ['qa', '', '']);
   const list = VJ.bands.list(s);
@@ -71,7 +73,7 @@ test('出演バンド：セットリストの @band が名前より優先。設�
   VJ.bands.select(s, 0);
   assert.equal(VJ.bands.nameOf(s, 1), 'Real Name');
   const loaded = VJ.storage.fromJSON(JSON.stringify(Object.assign({}, s, {
-    bands: [...s.bands, { bandName: 3, setlistText: 'ok', logo: 'javascript:alert(1)', paletteIdx: 'x', messages: [1, 'm'] }, 'junk'],
+    bands: [...s.bands, { bandName: 3, setlistText: 'ok', logo: 'javascript:alert(1)', bandPalette: 'x', messages: [1, 'm'] }, 'junk'],
   })));
   assert.equal(loaded.bands.length, 4);
   assert.equal(loaded.bands[2].bandName, undefined);
@@ -81,7 +83,7 @@ test('出演バンド：セットリストの @band が名前より優先。設�
   assert.ok(VJ.bands.select(loaded, 2));
   assert.equal(loaded.setlistText, 'ok');
   assert.equal(loaded.bandName, '');
-  assert.equal(loaded.paletteIdx, 0);
+  assert.equal(loaded.bandPalette, -1);
 });
 
 test('タイトル：出演バンドが複数なら「次の出演」、終演後は「次は ○○」。開演時刻があればカウントダウンが優先。切替で開演前に戻る', () => {
@@ -89,6 +91,11 @@ test('タイトル：出演バンドが複数なら「次の出演」、終演�
   s.setlistText = 'a | 1';
   const c = new VJ.ShowController(s);
   assert.equal(c.titleSub(), '', '1 組だけなら何も出さない');
+  // セットリストの無いバンドは、演奏中も「次の出演」を出さない
+  const s2 = fresh();
+  s2.setlistText = '';
+  VJ.bands.add(s2, 'X');
+  assert.equal(new VJ.ShowController(s2).titleSub(), '');
   VJ.bands.add(s, 'Next Band');
   c.applySettings(s);
   assert.equal(c.titleSub(), '次の出演');
@@ -125,6 +132,53 @@ test('セットリストの表：書き出して読み直すと同じ（曲名�
     ['MC', ['title'], null, true],
     ['3.14 Pi / x', ['petals'], 6, false],
   ]);
+});
+
+test('セットリストの表：書き直しても、コメント・@band / @end・読めない行・編集していない曲の行はそのまま残る', () => {
+  const text = '@band B\n# head\n1. A | 1 | neon\n# --- MC ---\n2. B | 2,nope\nbadline | | | weird\n3. C | 3\n@end Fin\n# tail';
+  const p = VJ.setlist.parse(text);
+  const songs = p.songs.map((x) => ({ title: x.title, scenes: x.scenes, palette: x.palette, notitle: x.notitle, line: x.line, dirty: false }));
+  const [a, , w, c] = songs;
+  a.title = 'A2';
+  a.dirty = true;
+  // C を先頭へ・A を編集・B を消す・新しい曲を足す
+  const out = VJ.setlist.rewrite(text, [c, a, w, { title: 'New', scenes: ['petals'], palette: null, notitle: false, line: null, dirty: true }]);
+  assert.equal(out, '@band B\n# head\n1. C | 3\n# --- MC ---\n2. A2 | 1 | neon\nbadline | | | weird\n4. New | s8\n@end Fin\n# tail');
+  // 読めない行のエラーは残る（表で消えない）
+  assert.ok(VJ.setlist.parse(out).errors.some((e) => /weird/.test(e.msg)));
+  // 編集していない B の行は「nope」ごと残る
+  assert.match(VJ.setlist.rewrite(text, songs), /2\. B \| 2,nope/);
+  assert.equal(VJ.setlist.rewrite('@band Z\n@end E', [{ title: 'X', scenes: [], palette: null, notitle: false, line: null, dirty: true }]), '@band Z\n1. X\n@end E');
+});
+
+test('保存：出演バンドの一覧は別に保存し、変わったときだけ書く。読み込むと戻る', () => {
+  const store = new Map();
+  const ls = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => { store.set(k, String(v)); writes.push(k); }, removeItem: (k) => store.delete(k) };
+  const writes = [];
+  const prev = globalThis.localStorage;
+  globalThis.localStorage = ls;
+  try {
+    const s = VJ.storage.reset();
+    s.bandName = 'A';
+    s.setlistText = '';
+    VJ.bands.add(s, 'B');
+    assert.ok(VJ.storage.save(s));
+    assert.ok(!JSON.parse(store.get(VJ.storage.KEY)).bands, '本体の設定には入れない');
+    const n1 = writes.filter((k) => k.endsWith('/bands')).length;
+    s.sensitivity = 2;
+    VJ.storage.save(s);
+    assert.equal(writes.filter((k) => k.endsWith('/bands')).length, n1, '一覧が変わっていなければ書かない');
+    VJ.bands.select(s, 1);
+    VJ.storage.save(s);
+    assert.equal(writes.filter((k) => k.endsWith('/bands')).length, n1 + 1);
+    const back = VJ.storage.load();
+    assert.equal(back.bandIdx, 1);
+    assert.deepEqual(VJ.bands.list(back).map((b) => b.name), ['A', 'B']);
+    VJ.storage.reset();
+    assert.equal(store.size, 0);
+  } finally {
+    globalThis.localStorage = prev;
+  }
 });
 
 test('シーンの見本画像：表示するすべてのシーンにあり（無ければ node tools/thumbs.mjs で作り直す）、キーの順に並ぶ', () => {

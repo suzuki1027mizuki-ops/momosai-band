@@ -33,51 +33,63 @@ test('シーンを絵で選ぶ：押すと次のビートで切替・もう一�
   await page.close();
 });
 
-test('出演バンド：追加して切り替えると名前・曲が入れ替わり、タイトルに出る。演奏中の N は 2 回押しで切替。再読み込みしても残る', async () => {
+test('出演バンド：追加しても切り替わらず、その場で準備できる。本番中の切替は 2 回押し・その場の確認。再読み込みしても残る', async () => {
   const { page, errors } = await openApp(browser, DIST, 'test=1', { width: 1280, height: 900 });
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.waitForFunction(() => window.VJ && VJ.app && VJ.panel.app);
   await page.fill('#band', 'First Band');
   await page.fill('#setlist', 'One | 1\nTwo | 2');
+  // 「＋ バンドを追加」：切り替えずに、その場で名前・開演時刻・セットリスト
   await page.click('#band-add');
-  await page.fill('#band', 'Second Band');
-  await page.fill('#setlist', 'Alpha | 3');
-  await page.fill('#opt-countdown', '18:30');
-  await page.waitForTimeout(500);
+  assert.equal(await page.evaluate(() => VJ.app.settings.bandIdx), 0);
+  await page.fill('#band-list [data-bf="bandName"]', 'Second Band');
+  await page.fill('#band-list [data-bf="countdownTo"]', '18:30');
+  await page.fill('#band-list [data-bf="setlistText"]', 'Alpha | 3');
+  await page.click('#band-list [data-act="edit-close"]');
+  await page.waitForTimeout(400);
   assert.deepEqual(await page.evaluate(() => VJ.bands.list(VJ.app.settings).map((b) => [b.name, b.songs, b.start, b.current])),
-    [['First Band', 2, '', false], ['Second Band', 1, '18:30', true]]);
-  // 一覧で 1 組目へ
-  await page.click('#band-list .band-row[data-i="0"] .bn');
+    [['First Band', 2, '', true], ['Second Band', 1, '18:30', false]]);
   assert.equal(await page.inputValue('#band'), 'First Band');
-  assert.equal(await page.inputValue('#opt-countdown'), '');
+  // 本番前：行を押すとすぐ切り替わる
+  await page.click('#band-list .band-row[data-i="1"] .bn');
+  assert.equal(await page.inputValue('#band'), 'Second Band');
+  assert.equal(await page.inputValue('#opt-countdown'), '18:30');
+  await page.click('#band-list .band-row[data-i="0"] .bn');
   assert.equal(await page.evaluate(() => VJ.app.show.setlist.songs.length), 2);
-  // 演奏中（1 曲目）に N：1 回目は確認だけ、2 回目で切替
+  // 本番中（1 曲目）の N：1 回目は確認だけ。向きが変わったら数え直し。同じ向きで 2 回目に切替
   await page.evaluate(() => { VJ.panel.toggle(false); document.activeElement && document.activeElement.blur(); });
   await page.keyboard.press('ArrowRight');
   await page.keyboard.press('KeyN');
-  assert.equal(await page.evaluate(() => VJ.app.settings.bandIdx), 0);
   assert.match(await page.textContent('#toast'), /もう一度/);
+  await page.keyboard.press('Shift+KeyN');
+  assert.equal(await page.evaluate(() => VJ.app.settings.bandIdx), 0, 'N のあとの Shift+N では切り替えない');
+  await page.keyboard.press('KeyN');
   await page.keyboard.press('KeyN');
   await page.waitForFunction(() => VJ.app.settings.bandIdx === 1);
   assert.equal(await page.evaluate(() => VJ.app.show.bandName()), 'Second Band');
   assert.deepEqual(await page.evaluate(() => [VJ.app.show.state.songIdx, VJ.app.show.state.sceneId]), [-1, 'title']);
-  // 開演前でない（曲が進んでいない）ときは 1 回で戻れる
+  // 本番前（曲が始まっていない・音なし）なら 1 回で戻れる
   await page.keyboard.press('Shift+KeyN');
   await page.waitForFunction(() => VJ.app.settings.bandIdx === 0);
-  // 演奏中に「＋ バンドを追加」：切り替えずに、その場で次のバンドの準備ができる
+  // 本番中に一覧の行を押すと、その場で確かめる（確認ダイアログは出さない）
   await page.keyboard.press('ArrowRight');
   await page.evaluate(() => VJ.panel.toggle(true));
+  await page.click('#band-list .band-row[data-i="1"] .bn');
+  await page.waitForSelector('#band-list .band-confirm');
+  assert.equal(await page.evaluate(() => VJ.app.settings.bandIdx), 0);
+  await page.click('#band-list [data-cf="no"]');
+  assert.equal(await page.evaluate(() => [VJ.app.settings.bandIdx, VJ.app.show.state.songIdx].join()), '0,0');
+  await page.click('#band-list .band-row[data-i="1"] .bn');
+  await page.click('#band-list [data-cf="yes"]');
+  await page.waitForFunction(() => VJ.app.settings.bandIdx === 1);
+  // 本番中に追加：切り替えない。✎ で開き直すと入力した内容が入っている
+  await page.keyboard.press('ArrowRight');
   await page.click('#band-add');
-  assert.equal(await page.evaluate(() => [VJ.app.settings.bandIdx, VJ.app.show.state.songIdx].join()), '0,0', '出演中のバンドと曲はそのまま');
   await page.fill('#band-list [data-bf="bandName"]', 'Third Band');
-  await page.fill('#band-list [data-bf="countdownTo"]', '19:15');
   await page.fill('#band-list [data-bf="setlistText"]', 'X | 1\nY | 2\nZ | 3');
   await page.click('#band-list [data-act="edit-close"]');
-  assert.deepEqual(await page.evaluate(() => VJ.bands.list(VJ.app.settings).map((b) => [b.name, b.songs, b.start])),
-    [['First Band', 2, ''], ['Second Band', 1, '18:30'], ['Third Band', 3, '19:15']]);
-  assert.equal(await page.inputValue('#band'), 'First Band');
-  // ✎ で開き直すと入力した内容が入っている
+  assert.equal(await page.evaluate(() => VJ.app.settings.bandIdx), 1);
   await page.click('#band-list .band-row[data-i="2"] [data-act="edit"]');
   assert.equal(await page.inputValue('#band-list [data-bf="bandName"]'), 'Third Band');
   await page.click('#band-list [data-act="edit-close"]');
@@ -85,8 +97,8 @@ test('出演バンド：追加して切り替えると名前・曲が入れ替�
   await page.waitForTimeout(600);
   await page.reload();
   await page.waitForFunction(() => window.VJ && VJ.app && VJ.panel.app);
-  assert.deepEqual(await page.evaluate(() => VJ.bands.list(VJ.app.settings).map((b) => b.name)), ['First Band', 'Second Band', 'Third Band']);
-  assert.equal(await page.inputValue('#band'), 'First Band');
+  assert.deepEqual(await page.evaluate(() => VJ.bands.list(VJ.app.settings).map((b) => [b.name, b.songs])), [['First Band', 2], ['Second Band', 1], ['Third Band', 3]]);
+  assert.equal(await page.inputValue('#band'), 'Second Band');
   assert.deepEqual(errors, []);
   await page.close();
 });
@@ -105,12 +117,21 @@ test('セットリストの表：曲の追加・曲名・シーン（見本画�
   await page.click('#setlist-preview button[data-act="up"][data-i="2"]');
   await page.uncheck('#setlist-preview input[data-f="showtitle"][data-i="0"]');
   await page.waitForTimeout(500);
-  assert.equal(await page.inputValue('#setlist'), '1. Intro | 1 |  | notitle\n2. Encore | s3,s8 | sakura\n3. Outro | 2');
+  // 編集した曲の行だけ書き直す（編集していない「Outro」の行は書いたまま）
+  assert.equal(await page.inputValue('#setlist'), '1. Intro | 1 |  | notitle\n2. Encore | s3,s8 | sakura\nOutro | 2');
   assert.deepEqual(await page.evaluate(() => VJ.app.show.setlist.songs.map((s) => [s.title, s.scenes, s.palette, s.notitle])),
     [['Intro', ['ripple'], null, true], ['Encore', ['fireworks', 'petals'], 6, false], ['Outro', ['tunnel'], null, false]]);
   // 文字の欄を書き換えると表も変わる
   await page.fill('#setlist', 'Only | 4');
   await page.waitForFunction(() => document.querySelectorAll('#setlist-preview .sl-song').length === 1);
+  // 表で曲名を入力中に、スマホなどからバンドが切り替わっても、古い表で別のバンドのセットリストを書き換えない
+  await page.evaluate(() => { const s = VJ.app.settings; VJ.bands.add(s, 'Other'); s.bands[1].setlistText = 'P | 1\nQ | 2\nR | 3'; VJ.bandsUI.render(); });
+  await page.click('#setlist-preview input[data-f="title"][data-i="0"]');
+  await page.evaluate(() => VJ.bandsUI.switchTo(1));
+  await page.keyboard.type('XYZ');
+  await page.waitForTimeout(400);
+  assert.equal(await page.evaluate(() => VJ.app.settings.setlistText), 'P | 1\nQ | 2\nR | 3');
+  assert.equal(await page.evaluate(() => VJ.app.settings.bands[0].setlistText), 'Only | 4');
   assert.deepEqual(errors, []);
   await page.close();
 });
@@ -164,8 +185,14 @@ test('2 画面：操作ウィンドウに出力の映像が小さく出る。プ
   assert.equal(await ctrl.isVisible('#remote-preview'), false);
   await ctrl.check('#remote-preview-on');
   await out.waitForFunction(() => VJ.link.wantPreview === true);
-  // 出力側の N（キー）は操作側の設定で切り替える
-  await ctrl.evaluate(() => { VJ.bands.add(VJ.app.settings, 'Out Band'); VJ.bandsUI.render(); });
+  // 本番前チェックは 2 画面でも動く（名前の無いバンドでも）
+  await ctrl.click('#btn-precheck');
+  await ctrl.waitForFunction(() => /出演/.test(document.getElementById('precheck').textContent));
+  // 出演中でないバンドをその場で編集すると、出力側にも届く（タイトルの「次は ○○」・スマホのため）
+  await ctrl.click('#band-add');
+  await ctrl.fill('#band-list [data-bf="bandName"]', 'Out Band');
+  await ctrl.click('#band-list [data-act="edit-close"]');
+  await out.waitForFunction(() => VJ.app.settings.bands.length === 2 && VJ.bands.nameOf(VJ.app.settings, 1) === 'Out Band', null, { timeout: 5000 });
   await out.evaluate(() => { VJ.bandsUI.step(1); });
   await ctrl.waitForFunction(() => VJ.app.settings.bandIdx === 1 && document.getElementById('band').value === 'Out Band');
   await out.waitForFunction(() => VJ.app.show.bandName() === 'Out Band');

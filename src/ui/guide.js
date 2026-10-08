@@ -122,7 +122,7 @@
       // 出演・曲
       const p = app.show.setlist || { songs: [], errors: [] };
       const bs = VJ.bandsUI ? VJ.bandsUI.state(s) : null;
-      const who = (bs && bs.name) || app.show.bandName() || '—';
+      const who = (bs && bs.name) || (app.show.bandName ? app.show.bandName() : '') || '—';
       if (p.songs.length) add('ok', t('出演：{0}（{1} 曲）', who, p.songs.length) + (bs && bs.n > 1 ? ' ' + t('— {0} 組中 {1} 組目', bs.n, bs.i + 1) : ''));
       else add('info', t('出演：{0}（曲が登録されていません。→ キーの曲送りは使えません）', who));
       if (p.errors.length) add('warn', t('セットリストに読めない行があります（{0} 件。③ を確認）', p.errors.length));

@@ -160,7 +160,7 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); }
     $('btn-auto').classList.toggle('on', !!st.auto);
     const bd = st.band;
     $('band-box').hidden = !(bd && bd.n > 1);
-    if (bd) $('band-now').innerHTML = esc(bd.name || '—') + '<small>' + (bd.i + 1) + ' / ' + bd.n + '</small>';
+    if (bd) $('band-now').innerHTML = esc(bd.name || '—') + '<small>' + ((Number(bd.i) | 0) + 1) + ' / ' + (Number(bd.n) | 0) + '</small>';
     $('btn-auto').textContent = L('オート ', 'Auto ') + (st.auto ? 'ON' : 'OFF');
     if (document.activeElement !== $('master') && typeof st.master === 'number') $('master').value = st.master;
     if (document.activeElement !== $('sens') && typeof st.sens === 'number') $('sens').value = st.sens;

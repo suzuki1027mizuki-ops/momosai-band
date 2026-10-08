@@ -8,8 +8,10 @@
 
   const ed = {
     app: null,
-    model: null, // { band, end, songs: [{ title, scenes, palette, notitle }] }
+    model: null, // { band, end, songs: [{ title, scenes, palette, notitle, line, dirty }] }
+    _src: null, // 表を作ったときのセットリストの文字と出演バンドの番号（別のバンドに書き込まないように）
     _picking: -1, // シーンを選んでいる曲の番号
+    _del: -1, // 「消す？」と確かめている曲の番号（確認ダイアログは 2 画面の映像まで止めるので使わない）
 
     install(app) {
       ed.app = app;
@@ -17,13 +19,16 @@
       el.addEventListener('click', (e) => {
         const b = e.target.closest('button[data-act]');
         if (!b) return;
+        if (ed.stale()) { ed.render(true); return; }
         const i = +b.dataset.i, act = b.dataset.act, songs = ed.model.songs;
         if (act === 'up' && i > 0) [songs[i - 1], songs[i]] = [songs[i], songs[i - 1]];
         else if (act === 'down' && i < songs.length - 1) [songs[i + 1], songs[i]] = [songs[i], songs[i + 1]];
-        else if (act === 'del') { if (!confirm(t('「{0}」を消しますか？', songs[i].title))) return; songs.splice(i, 1); }
-        else if (act === 'add') { songs.push({ title: t('新しい曲 {0}', songs.length + 1), scenes: [], palette: null, notitle: false }); ed._focusLast = true; }
+        else if (act === 'del') { ed._del = ed._del === i ? -1 : i; ed.render(true); return; }
+        else if (act === 'del-yes') { songs.splice(i, 1); ed._del = -1; if (ed._picking === i) ed._picking = -1; }
+        else if (act === 'del-no') { ed._del = -1; ed.render(true); return; }
+        else if (act === 'add') { songs.push({ title: t('新しい曲 {0}', songs.length + 1), scenes: [], palette: null, notitle: false, line: null, dirty: true }); ed._focusLast = true; }
         else if (act === 'pick') { ed._picking = ed._picking === i ? -1 : i; ed.render(true); return; }
-        else if (act === 'unpick') { const k = +b.dataset.k; songs[i].scenes.splice(k, 1); }
+        else if (act === 'unpick') { const k = +b.dataset.k; songs[i].scenes.splice(k, 1); songs[i].dirty = true; }
         else if (act === 'done') { ed._picking = -1; ed.render(true); return; }
         else return;
         ed.commit(true);
@@ -32,32 +37,52 @@
         // シーンの選択欄：押すと追加（同じシーンを続けては入れない）
         const sb = e.target.closest('.sl-picker button[data-scene]');
         if (!sb || ed._picking < 0) return;
+        if (ed.stale()) { ed.render(true); return; }
         const song = ed.model.songs[ed._picking];
-        if (song.scenes[song.scenes.length - 1] !== sb.dataset.scene) song.scenes.push(sb.dataset.scene);
+        if (song.scenes[song.scenes.length - 1] !== sb.dataset.scene) { song.scenes.push(sb.dataset.scene); song.dirty = true; }
         ed.commit(true);
       });
       el.addEventListener('input', (e) => {
         const inp = e.target.closest('input[data-f="title"]');
         if (!inp) return;
-        ed.model.songs[+inp.dataset.i].title = inp.value;
+        if (ed.stale()) { ed.render(true); return; }
+        const song = ed.model.songs[+inp.dataset.i];
+        song.title = inp.value;
+        song.dirty = true;
         ed.commit(false);
       });
       el.addEventListener('change', (e) => {
         const x = e.target;
-        if (x.matches('select[data-f="palette"]')) ed.model.songs[+x.dataset.i].palette = x.value === '' ? null : +x.value;
-        else if (x.matches('input[data-f="showtitle"]')) ed.model.songs[+x.dataset.i].notitle = !x.checked;
-        else return;
+        if (!x.matches('select[data-f="palette"], input[data-f="showtitle"]')) return;
+        if (ed.stale()) { ed.render(true); return; }
+        const song = ed.model.songs[+x.dataset.i];
+        if (x.matches('select')) song.palette = x.value === '' ? null : +x.value;
+        else song.notitle = !x.checked;
+        song.dirty = true;
         ed.commit(false);
       });
     },
 
-    /** 表の内容 → 文字の欄・設定。rerender で表も描き直す（並べ替えなど） */
+    /** 表を作ったあとで、セットリストの文字か出演バンドが変わった（スマホ・OSC・出力ウィンドウからの切替など） */
+    stale() {
+      const s = ed.app.settings;
+      return !ed._src || ed._src.text !== s.setlistText || ed._src.band !== s.bandIdx;
+    },
+
+    /** 表の内容 → 文字の欄・設定。元の文字は行ごとに残し、曲の行だけを書き直す。rerender で表も描き直す */
     commit(rerender) {
       const s = ed.app.settings;
-      const text = VJ.setlist.serialize(ed.model, VJ.setlist.headComments(s.setlistText));
+      if (ed.stale()) { ed.render(true); return; }
+      const text = VJ.setlist.rewrite(s.setlistText, ed.model.songs);
       s.setlistText = text;
       $('setlist').value = text;
       if (rerender) ed.render(true);
+      else {
+        // 書き直した文字に合わせて元の行番号を付け直す（表は描き直さない：入力中の文字が消えないように）
+        const p = VJ.setlist.parse(text);
+        ed.model.songs.forEach((x, k) => { if (p.songs[k]) x.line = p.songs[k].line; });
+        ed._src = { text, band: s.bandIdx };
+      }
       VJ.panel.applyShow();
     },
 
@@ -65,10 +90,16 @@
     render(force) {
       const app = ed.app, el = $('setlist-preview');
       if (!app || !el) return;
-      if (!force && el.contains(document.activeElement) && document.activeElement !== document.body) return;
-      const p = VJ.setlist.parse(app.settings.setlistText);
-      ed.model = { band: p.band, end: p.end, songs: p.songs.map((x) => ({ title: x.title, scenes: x.scenes.slice(), palette: x.palette, notitle: x.notitle })) };
+      // 入力中は作り直さない。ただし別のバンドに切り替わったら作り直す（古い表で別のバンドを書き換えないように）
+      const s = app.settings;
+      const bandChanged = !!ed._src && ed._src.band !== s.bandIdx;
+      if (!force && !bandChanged && el.contains(document.activeElement) && document.activeElement !== document.body) return;
+      if (bandChanged) { ed._picking = -1; ed._del = -1; }
+      const p = VJ.setlist.parse(s.setlistText);
+      ed._src = { text: s.setlistText, band: s.bandIdx };
+      ed.model = { band: p.band, end: p.end, songs: p.songs.map((x) => ({ title: x.title, scenes: x.scenes.slice(), palette: x.palette, notitle: x.notitle, line: x.line, dirty: false })) };
       if (ed._picking >= ed.model.songs.length) ed._picking = -1;
+      if (ed._del >= ed.model.songs.length) ed._del = -1;
       const pals = `<option value="">${esc(t('パレット：そのまま'))}</option>` + VJ.palettes.map((q, i) => `<option value="${i}">${esc(t(q.name))}</option>`).join('');
       const chip = (id, i, k) => {
         const d = VJ.scenes.byId[id];
@@ -90,7 +121,8 @@
           + `<div class="sl-row2">${x.scenes.length ? x.scenes.map((id, k) => chip(id, i, k)).join('<span class="sl-arrow">→</span>') : `<span class="hint">${esc(t('シーン：オート'))}</span>`}`
           + `<button data-act="pick" data-i="${i}">${esc(ed._picking === i ? t('選び終える') : t('＋ シーン'))}</button></div>`
           + `<div class="sl-row3"><select data-f="palette" data-i="${i}">${pals}</select>`
-          + `<label><input type="checkbox" data-f="showtitle" data-i="${i}"${x.notitle ? '' : ' checked'}> ${esc(t('曲名を表示'))}</label></div>`;
+          + `<label><input type="checkbox" data-f="showtitle" data-i="${i}"${x.notitle ? '' : ' checked'}> ${esc(t('曲名を表示'))}</label></div>`
+          + (ed._del === i ? `<div class="row sl-confirm"><span>${esc(t('この曲を消しますか？'))}</span><button data-act="del-yes" data-i="${i}">${esc(t('消す'))}</button><button data-act="del-no" data-i="${i}">${esc(t('やめる'))}</button></div>` : '');
         if (ed._picking === i) {
           html += `<div class="sl-picker"><div class="hint">${esc(t('押した順に使います（2 つ以上ならオートで順番に）'))}</div>`
             + `<div class="scene-grid">${VJ.scenePick.list().map((d) => VJ.scenePick.button(d)).join('')}</div>`

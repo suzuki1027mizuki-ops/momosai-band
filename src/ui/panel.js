@@ -117,7 +117,7 @@
         const el = $(id), v = $(id + '-v');
         el.value = out[key];
         v.textContent = fmt(+el.value);
-        el.addEventListener('input', () => { out[key] = +el.value; v.textContent = fmt(+el.value); panel.applyShow(true); });
+        el.addEventListener('input', () => { out[key] = +el.value; v.textContent = fmt(+el.value); if (!panel._bulk) panel.applyShow(true); });
       };
       bindOut('out-size', 'size', (x) => Math.round(x * 100) + '%');
       bindOut('out-x', 'x', (x) => (x > 0 ? '+' : '') + Math.round(x * 100) + '%');
@@ -153,7 +153,7 @@
         const el = $(id), v = $(id + '-v');
         el.value = s[key];
         v.textContent = fmt(+el.value);
-        el.addEventListener('input', () => { s[key] = +el.value; v.textContent = fmt(+el.value); panel.applyShow(true); });
+        el.addEventListener('input', () => { s[key] = +el.value; v.textContent = fmt(+el.value); if (!panel._bulk) panel.applyShow(true); });
       };
       bindRange('opt-sens', 'sensitivity', (x) => (x > 0 ? '+' : '') + x);
       bindRange('opt-react', 'react', (x) => Math.round(x * 100) + '%');
@@ -165,7 +165,8 @@
       const pal = $('opt-palette');
       pal.innerHTML = VJ.palettes.map((p, i) => `<option value="${i}">${i + 1}. ${esc(t(p.name))}</option>`).join('');
       pal.value = s.paletteIdx;
-      pal.addEventListener('change', () => { app.show.setPalette(+pal.value); s.paletteIdx = +pal.value; panel.renderCustom(); panel.applyShow(true); });
+      // パネルで選んだ色は、出演中のバンドの色として覚える（曲ごとの色・C キーでの変更とは別）
+      pal.addEventListener('change', () => { app.show.setPalette(+pal.value); s.paletteIdx = +pal.value; s.bandPalette = +pal.value; VJ.bands.touch(); panel.renderCustom(); panel.applyShow(true); });
       panel.renderCustom();
       panel.renderAutoScenes();
 
@@ -189,7 +190,7 @@
       $('btn-import').addEventListener('click', () => $('import-file').click());
       $('import-file').addEventListener('change', panel.importSettings);
       $('btn-reset').addEventListener('click', () => {
-        if (!confirm(t('設定（セットリスト含む）を初期状態に戻しますか？'))) return;
+        if (!confirm(t('設定（出演バンド・セットリスト・ロゴを含むすべて）を初期状態に戻しますか？'))) return;
         panel.replaceSettings(VJ.storage.reset());
       });
       $('btn-midi').addEventListener('click', () => panel.enableMidi());
@@ -645,6 +646,8 @@
     toggle(force) {
       panel.visible = force === undefined ? !panel.visible : !!force;
       $('panel').hidden = !panel.visible;
+      // 暗証番号入りの QR は、パネルを閉じたら隠す（開き直したときにスクリーンに映らないように）
+      if (!panel.visible && !$('net-qr').hidden) { $('net-qr').hidden = true; $('btn-qr').textContent = t('スマホ用の QR コードを表示'); }
       if (!panel.visible && document.activeElement && document.activeElement.blur) document.activeElement.blur();
     },
 
@@ -680,6 +683,14 @@
 
     /** 設定をまるごと入れ替えて画面に反映 */
     replaceSettings(ns) {
+      // 入力欄の更新で何度も反映しないように、最後に 1 回だけ（2 画面のときは出力側へ送る回数も減る）
+      panel._bulk = true;
+      try { panel._replace(ns); } finally { panel._bulk = false; }
+      panel.applyShow(true);
+      VJ.storage.save(panel.app.settings);
+    },
+
+    _replace(ns) {
       const s = panel.app.settings;
       for (const k of Object.keys(ns)) s[k] = ns[k];
       s.output = Object.assign({}, OUT_DEFAULT, s.output || {});
@@ -721,8 +732,6 @@
       panel.renderIo();
       panel.renderLogo();
       panel.syncOutputUi();
-      panel.applyShow(true);
-      VJ.storage.save(s);
     },
 
     /** キー操作などで変わった設定をパネルの表示に反映（出力ウィンドウからの通知など） */

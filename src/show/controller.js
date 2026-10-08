@@ -438,7 +438,8 @@
         const next = (s.bandIdx | 0) + 1 < n ? VJ.bands.nameOf(s, (s.bandIdx | 0) + 1) : '';
         return next ? t('次は {0}', next) : '';
       }
-      return this.state.songIdx < 0 ? t('次の出演') : '';
+      // 「次の出演」は 1 曲目の前だけ（セットリストの無いバンドは演奏中も曲が始まらないので出さない）
+      return this.state.songIdx < 0 && this.setlist.songs.length ? t('次の出演') : '';
     }
 
     /** 出演バンドを切り替えたとき：開演前（タイトル）に戻す */

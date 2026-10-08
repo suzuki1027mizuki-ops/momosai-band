@@ -165,6 +165,8 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .band-row button { padding: 0 6px; font-size: 11px; }
 .band-row button:disabled { opacity: 0.3; cursor: default; }
 .band-row.editing { border-color: var(--accent2); }
+.band-confirm, .sl-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 5px 8px; border: 1px solid var(--warn); border-radius: 6px; background: #2a1a00; color: #ffd99a; font-size: 13px; }
+.band-confirm span, .sl-confirm span { flex: 1; min-width: 12em; }
 .band-edit { border: 1px solid var(--accent2); border-top: 0; border-radius: 0 0 6px 6px; margin-top: -4px; padding: 6px; background: #160c1a; }
 #panel .band-edit textarea { min-height: 90px; }
 #panel input[type=time] { background: #11111c; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 6px; font: inherit; color-scheme: dark; }
@@ -460,7 +462,7 @@ body.remote-mode #stage { opacity: 0.25; }
   'use strict';
 
   VJ.version = '1.0.0';
-  VJ.buildTime = '2026-10-08 #db40bb0';
+  VJ.buildTime = '2026-10-08 #19c4018';
 
   const LN10_20 = Math.LN10 / 20;
 
@@ -603,6 +605,7 @@ body.remote-mode #stage { opacity: 0.25; }
     dmx: { enabled: false, out: 'artnet', host: '255.255.255.255', universe: 0, type: 'drgb', count: 4, start: 1, max: 1, pulse: 0.5, flash: true }, // 照明
     bands: [], // 出演バンド（bands.js）。いま出ているバンドの値は上の bandName・setlistText などにある
     bandIdx: 0, // いま出ているバンドの番号
+    bandPalette: -1, // いま出ているバンドの色（パネルで選んだもの。-1 = 決めていない）
     guide: true, // パネルの上に「はじめてのガイド」を出す
   };
 
@@ -1441,6 +1444,14 @@ body.remote-mode #stage { opacity: 0.25; }
     "追加しました（演奏中なので切り替えていません）": "Added (not switched, because a set is in progress)",
     "1 行 1 曲（曲名 | シーン | パレット）": "One song per line (title | scenes | palette)",
     "ロゴ・音楽のタイプ・色・テロップは、出演中にしてから下の欄で": "Set the logo, music type, colors and captions in the fields below once the band is on stage",
+    "追加しました。行を押すと出演中になります": "Added. Click its row to put it on stage",
+    "本番中です。もう一度押すと「{0}」に切り替えます": "The show is live. Press again to switch to \"{0}\"",
+    "操作ウィンドウが閉じられているため、バンドを切り替えられません": "Cannot switch bands because the control window is closed",
+    "出演中の「{0}」を消しますか？（隣のバンドに切り替わり、タイトルに戻ります）": "Remove \"{0}\", which is on stage? (Switches to the neighboring band and returns to the title)",
+    "「{0}」に切り替えますか？（いまの演奏はタイトルに戻ります）": "Switch to \"{0}\"? (The current show returns to the title)",
+    "切り替える": "Switch",
+    "この曲を消しますか？": "Delete this song?",
+    "設定（出演バンド・セットリスト・ロゴを含むすべて）を初期状態に戻しますか？": "Reset all settings (including bands, setlists and logos) to the defaults?",
   };
 })(globalThis.VJ = globalThis.VJ || {});
 </script>
@@ -1450,6 +1461,9 @@ body.remote-mode #stage { opacity: 0.25; }
   'use strict';
 
   const KEY = 'momosai-vj/v1';
+  // 出演バンドの一覧（ロゴを含むので大きい）は別に保存し、変わったときだけ書く（キー操作のたびに数 MB を書かないように）
+  const BANDS_KEY = KEY + '/bands';
+  let savedBands = { ref: null, ver: -1 };
 
   const clone = (v) => JSON.parse(JSON.stringify(v));
   const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -1497,7 +1511,12 @@ body.remote-mode #stage { opacity: 0.25; }
       try {
         const raw = globalThis.localStorage && localStorage.getItem(KEY);
         if (!raw) return merge(VJ.defaultSettings, null);
-        return merge(VJ.defaultSettings, JSON.parse(raw));
+        const obj = JSON.parse(raw);
+        if (obj && typeof obj === 'object' && !Array.isArray(obj.bands)) {
+          const b = localStorage.getItem(BANDS_KEY);
+          if (b) { try { obj.bands = JSON.parse(b); } catch (e) { /* 壊れていたら一覧は無しで */ } }
+        }
+        return merge(VJ.defaultSettings, obj);
       } catch (e) {
         return merge(VJ.defaultSettings, null);
       }
@@ -1508,14 +1527,24 @@ body.remote-mode #stage { opacity: 0.25; }
     },
     save(settings) {
       try {
-        if (globalThis.localStorage) localStorage.setItem(KEY, JSON.stringify(settings));
+        if (!globalThis.localStorage) return true;
+        const rest = Object.assign({}, settings);
+        delete rest.bands;
+        localStorage.setItem(KEY, JSON.stringify(rest));
+        const ver = VJ.bands ? VJ.bands.version : 0;
+        if (settings.bands !== savedBands.ref || ver !== savedBands.ver) {
+          localStorage.setItem(BANDS_KEY, JSON.stringify(settings.bands || []));
+          savedBands = { ref: settings.bands, ver };
+        }
         return true;
       } catch (e) {
+        savedBands = { ref: null, ver: -1 };
         return false;
       }
     },
     reset() {
-      try { if (globalThis.localStorage) localStorage.removeItem(KEY); } catch (e) { /* noop */ }
+      try { if (globalThis.localStorage) { localStorage.removeItem(KEY); localStorage.removeItem(BANDS_KEY); } } catch (e) { /* noop */ }
+      savedBands = { ref: null, ver: -1 };
       return merge(VJ.defaultSettings, null);
     },
     /** JSON 文字列から読み込み（不正なキーは無視） */
@@ -7144,22 +7173,56 @@ void main() {
     const lines = [];
     if (p.band) lines.push('@band ' + p.band);
     for (const c of comments || []) lines.push(c);
-    p.songs.forEach((s, i) => {
-      // 区切りの「|」と改行は曲名に入れられない。行頭に番号を付ける（数字で始まる曲名が番号と間違われないように）
-      const title = String(s.title || '').replace(/[|｜￨│]/g, '/').replace(/[\r\n]+/g, ' ').trim() || '?';
-      const sc = (s.scenes || []).map((id) => (VJ.scenes.byId[id] ? VJ.scenes.byId[id].key : id)).join(',');
-      const pal = s.palette !== null && s.palette !== undefined && VJ.palettes[s.palette] ? VJ.palettes[s.palette].id : '';
-      const parts = [`${i + 1}. ${title}`];
-      if (sc || pal || s.notitle) parts.push(sc);
-      if (pal || s.notitle) parts.push(pal);
-      if (s.notitle) parts.push('notitle');
-      lines.push(parts.join(' | '));
-    });
+    p.songs.forEach((x, i) => lines.push(songLine(x, i)));
     if (p.end) lines.push('@end ' + p.end);
     return lines.join('\n');
   }
 
-  VJ.setlist = { parse, normalize, serialize, headComments };
+  /** 1 曲を 1 行に（k は 0 から始まる順番） */
+  function songLine(s, k) {
+    // 区切りの「|」と改行は曲名に入れられない。行頭に番号を付ける（数字で始まる曲名が番号と間違われないように）
+    const title = String(s.title || '').replace(/[|｜￨│]/g, '/').replace(/[\r\n]+/g, ' ').trim() || '?';
+    const sc = (s.scenes || []).map((id) => (VJ.scenes.byId[id] ? VJ.scenes.byId[id].key : id)).join(',');
+    const pal = s.palette !== null && s.palette !== undefined && VJ.palettes[s.palette] ? VJ.palettes[s.palette].id : '';
+    const parts = [`${k + 1}. ${title}`];
+    if (sc || pal || s.notitle) parts.push(sc);
+    if (pal || s.notitle) parts.push(pal);
+    if (s.notitle) parts.push('notitle');
+    return parts.join(' | ');
+  }
+
+  /**
+   * 表で編集した曲の並び → 文字。元の文字を行ごとに残し、曲の行だけを入れ替える
+   * （コメント・@band / @end・読めなかった行・空行はそのまま。曲の途中のコメントも残る）。
+   * songs: [{ title, scenes, palette, notitle, line（元の行番号。新しい曲は null）, dirty（編集した） }]
+   * 編集していない曲は元の行をそのまま使う（読めなかったシーン名なども消さない。行頭の番号だけ付け直す）。
+   */
+  function rewrite(text, songs) {
+    const lines = String(text || '').split(/\r?\n/);
+    const slots = parse(text).songs.map((x) => x.line - 1);
+    const fmt = (x, k) => {
+      if (x.dirty || !x.line || !lines[x.line - 1]) return songLine(x, k);
+      const raw = lines[x.line - 1];
+      return /^\s*[0-9０-９]{1,3}\s*[.)．:：]/.test(raw) ? raw.replace(/^(\s*)[0-9０-９]{1,3}(\s*[.)．:：])/, `$1${k + 1}$2`) : raw;
+    };
+    const out = lines.slice();
+    const n = Math.min(slots.length, songs.length);
+    for (let k = 0; k < n; k++) out[slots[k]] = fmt(songs[k], k);
+    // 減った曲の行を消す（後ろから。前の行の位置がずれないように）
+    for (let k = slots.length - 1; k >= songs.length; k--) out.splice(slots[k], 1);
+    if (songs.length > slots.length) {
+      // 増えた曲は最後の曲の次に。曲が無ければ @end の前か末尾に
+      let at = slots.length ? slots[slots.length - 1] + 1 : out.findIndex((l) => /^@end\b/i.test(normalize(l).trim()));
+      if (at < 0) {
+        at = out.length;
+        while (at > 0 && !out[at - 1].trim()) at--;
+      }
+      out.splice(at, 0, ...songs.slice(slots.length).map((x, j) => fmt(x, slots.length + j)));
+    }
+    return out.join('\n');
+  }
+
+  VJ.setlist = { parse, normalize, serialize, headComments, rewrite, songLine };
 })(globalThis.VJ = globalThis.VJ || {});
 </script>
 <script>/* src/show/bands.js */
@@ -7170,9 +7233,11 @@ void main() {
 (function (VJ) {
   'use strict';
 
-  const KEYS = ['bandName', 'setlistText', 'logo', 'logoMode', 'profile', 'paletteIdx', 'countdownTo', 'messages'];
+  // bandPalette：そのバンドの色（パネルで選んだもの。曲ごとの色・C キーで変わる paletteIdx とは別）
+  const KEYS = ['bandName', 'setlistText', 'logo', 'logoMode', 'profile', 'bandPalette', 'countdownTo', 'messages'];
   const MAX = 40;
-  const clone = (v) => JSON.parse(JSON.stringify(v));
+  const clone = (v) => (v && typeof v === 'object' ? JSON.parse(JSON.stringify(v)) : v);
+  const checked = new WeakSet(); // 形を確かめた bands 配列（毎回作り直さない：保存の要・不要を参照で見分けるため）
 
   /** 1 バンド分の値の形を確かめる（壊れた設定ファイル・古い版でも動くように） */
   function cleanBand(b) {
@@ -7185,8 +7250,8 @@ void main() {
         if (Array.isArray(v)) out.messages = [0, 1, 2].map((i) => (typeof v[i] === 'string' ? v[i] : ''));
       } else if (k === 'logo') {
         if (typeof v === 'string' && (v === '' || /^data:image\//.test(v))) out.logo = v;
-      } else if (k === 'paletteIdx') {
-        if (typeof v === 'number' && isFinite(v)) out.paletteIdx = Math.max(0, Math.round(v));
+      } else if (k === 'bandPalette') {
+        if (typeof v === 'number' && isFinite(v)) out.bandPalette = Math.max(-1, Math.round(v));
       } else if (typeof v === typeof D[k]) {
         out[k] = v;
       }
@@ -7198,15 +7263,27 @@ void main() {
     KEYS,
     MAX,
     cleanBand,
+    version: 0, // 一覧を変えるたびに増える（保存するかどうかの目印）
+    touch() { bands.version++; },
 
     /** bands / bandIdx を使える形にする（無ければ、いまの設定を 1 組目にする） */
     ensure(s) {
-      if (!Array.isArray(s.bands)) s.bands = [];
-      s.bands = s.bands.slice(0, MAX).map(cleanBand);
+      if (!Array.isArray(s.bands) || !checked.has(s.bands)) {
+        s.bands = (Array.isArray(s.bands) ? s.bands : []).slice(0, MAX).map(cleanBand);
+        checked.add(s.bands);
+      }
       if (!s.bands.length) s.bands.push({});
       s.bandIdx = Math.max(0, Math.min(s.bands.length - 1, Math.round(+s.bandIdx || 0)));
-      s.bands[s.bandIdx] = {};
+      if (Object.keys(s.bands[s.bandIdx]).length) s.bands[s.bandIdx] = {};
       return s;
+    },
+
+    /** i 番目のバンドの値を読むだけ（複製しない。ロゴなど大きい値を毎回写さないように） */
+    peek(s, i, k) {
+      if (i === s.bandIdx) return s[k];
+      const b = s.bands[i];
+      if (!b) return undefined;
+      return b[k] === undefined ? (k === 'setlistText' || k === 'bandName' ? '' : VJ.defaultSettings[k]) : b[k];
     },
 
     /** いまの設定から、バンドの値だけを取り出す */
@@ -7229,19 +7306,18 @@ void main() {
 
     /** 表示用の名前（セットリストの @band が優先） */
     nameOf(s, i) {
-      const b = bands.get(s, i);
-      if (!b) return '';
-      const p = VJ.setlist.parse(b.setlistText);
-      return p.band || b.bandName || '';
+      bands.ensure(s);
+      if (!s.bands[i]) return '';
+      const p = VJ.setlist.parse(bands.peek(s, i, 'setlistText'));
+      return p.band || bands.peek(s, i, 'bandName') || '';
     },
 
     /** 一覧（パネル・スマホ用） */
     list(s) {
       bands.ensure(s);
       return s.bands.map((_, i) => {
-        const b = bands.get(s, i);
-        const p = VJ.setlist.parse(b.setlistText);
-        return { i, name: p.band || b.bandName || '', start: b.countdownTo || '', songs: p.songs.length, current: i === s.bandIdx, logo: !!b.logo };
+        const p = VJ.setlist.parse(bands.peek(s, i, 'setlistText'));
+        return { i, name: p.band || bands.peek(s, i, 'bandName') || '', start: bands.peek(s, i, 'countdownTo') || '', songs: p.songs.length, current: i === s.bandIdx, logo: !!bands.peek(s, i, 'logo') };
       });
     },
 
@@ -7255,9 +7331,11 @@ void main() {
       const D = VJ.defaultSettings;
       for (const k of KEYS) s[k] = clone(b[k] === undefined ? (k === 'setlistText' || k === 'bandName' ? '' : D[k]) : b[k]);
       if (!Array.isArray(s.messages) || s.messages.length !== 3) s.messages = ['', '', ''];
-      if (!(s.paletteIdx < VJ.palettes.length)) s.paletteIdx = 0;
+      // そのバンドの色（選んであれば）
+      if (s.bandPalette >= 0 && s.bandPalette < VJ.palettes.length) s.paletteIdx = s.bandPalette;
       s.bands[i] = {};
       s.bandIdx = i;
+      bands.touch();
       return true;
     },
 
@@ -7268,8 +7346,9 @@ void main() {
       const cur = bands.snapshot(s);
       s.bands.push({
         bandName: String(name || ''), setlistText: '', logo: '', logoMode: cur.logoMode, profile: cur.profile,
-        paletteIdx: cur.paletteIdx, countdownTo: '', messages: ['', '', ''],
+        bandPalette: cur.bandPalette, countdownTo: '', messages: ['', '', ''],
       });
+      bands.touch();
       return s.bands.length - 1;
     },
 
@@ -7280,6 +7359,7 @@ void main() {
       if (i === s.bandIdx) bands.select(s, i > 0 ? i - 1 : 1);
       s.bands.splice(i, 1);
       if (s.bandIdx > i) s.bandIdx--;
+      bands.touch();
       return true;
     },
 
@@ -7293,6 +7373,7 @@ void main() {
       s.bands[j] = a;
       if (s.bandIdx === i) s.bandIdx = j;
       else if (s.bandIdx === j) s.bandIdx = i;
+      bands.touch();
       return true;
     },
   };
@@ -7890,7 +7971,8 @@ void main() {
         const next = (s.bandIdx | 0) + 1 < n ? VJ.bands.nameOf(s, (s.bandIdx | 0) + 1) : '';
         return next ? t('次は {0}', next) : '';
       }
-      return this.state.songIdx < 0 ? t('次の出演') : '';
+      // 「次の出演」は 1 曲目の前だけ（セットリストの無いバンドは演奏中も曲が始まらないので出さない）
+      return this.state.songIdx < 0 && this.setlist.songs.length ? t('次の出演') : '';
     }
 
     /** 出演バンドを切り替えたとき：開演前（タイトル）に戻す */
@@ -8481,6 +8563,8 @@ void main() {
       return !this.state.endState && i >= 0 && this.setlist.songs[i] ? this.setlist.songs[i] : null;
     }
     react() { return VJ.util.clamp((+this.settings.react || 1) * (this.profile.show.react || 1), 0.2, 1.6); }
+    bandName() { return (this.setlist && this.setlist.band) || this.settings.bandName || ''; }
+    endText() { return (this.setlist && this.setlist.end) || this.settings.endText || 'Thank you!'; }
     session() { return { songIdx: this.state.songIdx, endState: this.state.endState, sceneId: this.state.sceneId, paletteIdx: this.state.paletteIdx, t: Date.now() }; }
   }
 
@@ -8521,7 +8605,7 @@ void main() {
     lastStatus: null,
     _poll: null,
     wantPreview: false, // 出力側：操作側がプレビューを見ているか
-    PREVIEW_MS: 250, // プレビューの間隔（1 秒に 4 回）
+    PREVIEW_MS: 333, // プレビューの間隔（1 秒に 3 回。描画の読み出しは GPU の負担になるので控えめに）
 
     send(msg) {
       if (!link.peer || link.peer.closed) return false;
@@ -8640,8 +8724,9 @@ void main() {
     _onControlMessage(d) {
       const app = link.app;
       if (d.t === 'hello') {
-        // 出力ウィンドウが開いた／再読み込みされた：設定・曲の位置・音声入力を渡す
+        // 出力ウィンドウが開いた／再読み込みされた：設定（出演バンドの一覧も）・曲の位置・音声入力を渡す
         link.send({ t: 'settings', settings: app.settings });
+        link._bandsSent = { ref: app.settings.bands, ver: VJ.bands.version };
         link._previewOn();
         const first = link.local.fresh;
         link.local.fresh = false;
@@ -9378,7 +9463,9 @@ p { margin: 4px 0 0; color: #444; }
 </script>
 <script>/* src/ui/bandsui.js */
 /* 出演バンドの一覧（パネル ③）と切替。キー N / Shift+N・スマホ・OSC からも呼ばれる。
- * 2 画面のときは操作ウィンドウが設定を持っているので、出力ウィンドウで受けた切替（スマホ・OSC・キー）は操作側へ回す。 */
+ * 2 画面のときは操作ウィンドウが設定を持っているので、出力ウィンドウで受けた切替（スマホ・OSC・キー）は操作側へ回す。
+ * 本番中（演奏中・音が来ている・ショー開始後）の切替は、キーは 2 回押し、パネルはその場の確認ボタンで（誤操作で
+ * タイトルに戻らないように）。確認ダイアログ（confirm）は使わない：2 画面のとき出力の映像まで止まるため。 */
 (function (VJ) {
   'use strict';
   const $ = (id) => document.getElementById(id);
@@ -9388,13 +9475,25 @@ p { margin: 4px 0 0; color: #444; }
 
   const ui = {
     app: null,
-    _armed: -1e9, // 演奏中に N を 1 回押した時刻（秒。もう一度で切替）
+    _armed: { t: -1e9, d: 0 }, // 本番中に N を 1 回押した時刻（秒）と向き（もう一度で切替）
     _editing: -1, // その場で編集している（出演中でない）バンドの番号
+    _confirm: null, // その場の確認 { act: 'switch' | 'del', i }
 
     install(app) {
       ui.app = app;
       $('band-list').addEventListener('click', (e) => {
         if (e.target.closest('[data-act="edit-close"]')) { ui._editing = -1; ui.render(); return; }
+        const cf = e.target.closest('[data-cf]');
+        if (cf) {
+          const c = ui._confirm;
+          ui._confirm = null;
+          if (cf.dataset.cf === 'yes' && c) {
+            if (c.act === 'switch') ui.switchTo(c.i);
+            else if (c.act === 'del') ui.remove(c.i);
+          }
+          ui.render();
+          return;
+        }
         const row = e.target.closest('[data-i]');
         if (!row) return;
         const i = +row.dataset.i, s = app.settings;
@@ -9402,14 +9501,11 @@ p { margin: 4px 0 0; color: #444; }
         if (act === 'up' || act === 'down') {
           VJ.bands.move(s, i, act === 'up' ? -1 : 1);
           ui._editing = -1;
-          ui.render();
-          VJ.panel.save();
+          ui._confirm = null;
+          ui.changed();
         } else if (act === 'del') {
-          if (!confirm(t('「{0}」を一覧から消しますか？（セットリスト・ロゴも消えます）', VJ.bands.nameOf(s, i) || t('（名前なし）')))) return;
-          const wasCur = i === s.bandIdx;
-          VJ.bands.remove(s, i);
-          ui._editing = -1;
-          if (wasCur) ui._applied(); else { ui.render(); VJ.panel.save(); }
+          ui._confirm = { act: 'del', i };
+          ui.render();
         } else if (act === 'edit') {
           // 出演中のバンドは下の欄で編集。ほかのバンドはその場で（切り替えずに）名前・開演時刻・セットリストを
           if (i === s.bandIdx) { $('band').focus(); $('band').scrollIntoView({ block: 'center' }); return; }
@@ -9417,26 +9513,20 @@ p { margin: 4px 0 0; color: #444; }
           ui.render();
           const f = $('band-list').querySelector('[data-bf="bandName"]');
           if (f) f.focus();
-        } else if (i !== s.bandIdx) {
-          if (ui.midSet() && !confirm(t('演奏中です。「{0}」に切り替えますか？', VJ.bands.nameOf(s, i) || t('（名前なし）')))) return;
-          ui.switchTo(i);
+        } else if (!act && i !== s.bandIdx) {
+          // 行を押す：本番中はその場で確かめてから
+          if (ui.live()) { ui._confirm = { act: 'switch', i }; ui.render(); } else ui.switchTo(i);
         }
       });
       $('band-add').addEventListener('click', () => {
         const i = VJ.bands.add(app.settings, '');
         if (i < 0) { app.ui.toast(t('これ以上追加できません'), 'warn'); return; }
-        if (ui.midSet()) {
-          // 演奏中は切り替えない（次のバンドの準備をその場で）
-          ui._editing = i;
-          ui.render();
-          VJ.panel.save();
-          const f = $('band-list').querySelector('[data-bf="bandName"]');
-          if (f) f.focus();
-          app.ui.toast(t('追加しました（演奏中なので切り替えていません）'));
-          return;
-        }
-        ui.switchTo(i);
-        $('band').focus();
+        // 追加しても切り替えない（本番中にタイトルへ戻らないように）。その場で名前・開演時刻・セットリストを
+        ui._editing = i;
+        ui.changed();
+        const f = $('band-list').querySelector('[data-bf="bandName"]');
+        if (f) f.focus();
+        app.ui.toast(t('追加しました。行を押すと出演中になります'));
       });
       // その場の編集：入力した値をそのバンドに入れる（出演中のバンドは上の階層にあるので対象外）
       const onEdit = (e, done) => {
@@ -9445,15 +9535,14 @@ p { margin: 4px 0 0; color: #444; }
         const s = app.settings, i = ui._editing;
         if (!(i >= 0 && i < s.bands.length) || i === s.bandIdx) return;
         s.bands[i][el.dataset.bf] = el.value;
-        VJ.panel.save();
+        VJ.bands.touch();
+        // 2 画面なら出力側へも（タイトルの「次は ○○」・スマホの表示）
+        VJ.panel.applyShow();
         if (done) ui._refreshRows();
       };
       $('band-list').addEventListener('input', (e) => onEdit(e, false));
       $('band-list').addEventListener('change', (e) => onEdit(e, true));
-      $('band-next').addEventListener('click', () => {
-        if (ui.midSet() && !confirm(t('演奏中です。次のバンドに切り替えますか？'))) return;
-        ui.step(1, { force: true });
-      });
+      $('band-next').addEventListener('click', () => ui.step(1));
       ui.render();
     },
 
@@ -9463,36 +9552,66 @@ p { margin: 4px 0 0; color: #444; }
       return st.songIdx >= 0 && !st.endState;
     },
 
+    /** 本番中か：曲の途中・ショー開始後・音が来ている（セットリストの無いバンドの演奏中・1 曲目の前も含む） */
+    live() {
+      const app = ui.app;
+      const f = VJ.link.role === 'control' ? VJ.link._features : app.lastFeatures;
+      return ui.midSet() || !!VJ.guard.showing || !!(app.engine.running && f && f.active);
+    },
+
+    /** 一覧を変えたあと：2 画面なら出力側へも送り、保存する */
+    changed() {
+      ui.render();
+      VJ.panel.applyShow();
+    },
+
+    /** i 番目を消す（出演中なら隣に切り替わる） */
+    remove(i) {
+      const s = ui.app.settings;
+      const wasCur = i === s.bandIdx;
+      if (!VJ.bands.remove(s, i)) return false;
+      ui._editing = -1;
+      if (wasCur) ui._applied(); else ui.changed();
+      return true;
+    },
+
     /** d（+1 / -1）だけ隣のバンドへ。演奏中にキーで押したときは 2 回目で切り替える（誤操作の防止） */
     step(d, opts) {
       opts = opts || {};
       const app = ui.app, s = app.settings;
-      if (VJ.link.role === 'output') { VJ.link.send({ t: 'band', d, force: !!opts.force }); return true; }
+      if (VJ.link.role === 'output') return ui._toControl({ t: 'band', d, force: !!opts.force });
       VJ.bands.ensure(s);
       const i = s.bandIdx + d;
       if (i < 0 || i >= s.bands.length) {
-        app.ui.toast(s.bands.length < 2 ? t('出演バンドが 1 つだけです（設定 M の ③ で追加）') : d > 0 ? t('最後のバンドです') : t('最初のバンドです'), 'warn');
+        app.ui.toast(s.bands.length < 2 ? t('出演バンドが 1 つだけです（設定 M の ③ で追加）') : d > 0 ? t('最後のバンドです') : t('最初のバンドです'));
         return false;
       }
-      if (!opts.force && ui.midSet()) {
+      if (!opts.force && ui.live()) {
         const now = performance.now() / 1000;
-        if (now - ui._armed > CONFIRM_SEC) {
-          ui._armed = now;
-          app.ui.toast(t('演奏中です。もう一度押すと「{0}」に切り替えます', VJ.bands.nameOf(s, i) || t('（名前なし）')), 'warn');
+        if (now - ui._armed.t > CONFIRM_SEC || ui._armed.d !== d) {
+          ui._armed = { t: now, d };
+          app.ui.toast(t('本番中です。もう一度押すと「{0}」に切り替えます', VJ.bands.nameOf(s, i) || t('（名前なし）')), 'warn');
           return false;
         }
       }
-      ui._armed = -1e9;
+      ui._armed = { t: -1e9, d: 0 };
       return ui.switchTo(i);
     },
 
     /** i 番目のバンドにする（スマホ・OSC からは番号で） */
     switchTo(i) {
       const app = ui.app, s = app.settings;
-      if (VJ.link.role === 'output') { VJ.link.send({ t: 'band', i }); return true; }
+      if (VJ.link.role === 'output') return ui._toControl({ t: 'band', i });
       if (!VJ.bands.select(s, i)) return false;
       ui._applied();
       return true;
+    },
+
+    /** 出力ウィンドウ：設定を持っている操作ウィンドウへ頼む（閉じられていたら知らせる） */
+    _toControl(msg) {
+      if (VJ.link.send(msg)) return true;
+      ui.app.ui.toast(t('操作ウィンドウが閉じられているため、バンドを切り替えられません'), 'warn');
+      return false;
     },
 
     /** 設定のバンドの値が入れ替わったあと：入力欄・映像（2 画面なら出力側も）を合わせ、開演前に戻す */
@@ -9507,11 +9626,21 @@ p { margin: 4px 0 0; color: #444; }
       const app = ui.app;
       if (!app || !$('band-list')) return;
       const s = app.settings;
+      VJ.bands.ensure(s);
+      // 編集していたバンドが出演中になった（スマホなどから）・無くなった：その場の編集欄を閉じる
+      const closeEdit = ui._editing === s.bandIdx || ui._editing >= s.bands.length;
+      if (closeEdit) ui._editing = -1;
       // 入力中は作り直さない（文字が消えないように）。一覧の行だけ更新する
-      if ($('band-list').contains(document.activeElement) && document.activeElement.matches('[data-bf]')) { ui._refreshRows(); return; }
+      if (!closeEdit && $('band-list').contains(document.activeElement) && document.activeElement.matches('[data-bf]')) { ui._refreshRows(); return; }
       const list = VJ.bands.list(s);
       const n = list.length;
-      if (ui._editing === s.bandIdx || ui._editing >= n) ui._editing = -1;
+      const c = ui._confirm && ui._confirm.i < n && !(ui._confirm.act === 'switch' && ui._confirm.i === s.bandIdx) ? ui._confirm : null;
+      ui._confirm = c;
+      const name = (i) => VJ.bands.nameOf(s, i) || t('（名前なし）');
+      const confirmHtml = (b) => (!c || c.i !== b.i ? '' : `<div class="band-confirm"><span data-i18n-skip>${esc(c.act === 'del'
+        ? (b.current ? t('出演中の「{0}」を消しますか？（隣のバンドに切り替わり、タイトルに戻ります）', name(b.i)) : t('「{0}」を一覧から消しますか？（セットリスト・ロゴも消えます）', name(b.i)))
+        : t('「{0}」に切り替えますか？（いまの演奏はタイトルに戻ります）', name(b.i)))}</span>`
+        + `<button data-cf="yes">${esc(c.act === 'del' ? t('消す') : t('切り替える'))}</button><button data-cf="no">${esc(t('やめる'))}</button></div>`);
       // 名前・時刻・セットリストは入力された文字なので訳さない
       $('band-list').innerHTML = list.map((b) => `<div class="band-row${b.current ? ' on' : ''}${ui._editing === b.i ? ' editing' : ''}" data-i="${b.i}">`
         + `<span class="bi">${b.i + 1}</span><span class="bt" data-i18n-skip>${esc(b.start || '')}</span>`
@@ -9521,7 +9650,7 @@ p { margin: 4px 0 0; color: #444; }
         + `<button data-act="up" title="${esc(t('上へ'))}"${b.i === 0 ? ' disabled' : ''}>▲</button>`
         + `<button data-act="down" title="${esc(t('下へ'))}"${b.i === n - 1 ? ' disabled' : ''}>▼</button>`
         + `<button data-act="del" title="${esc(t('消す'))}"${n < 2 ? ' disabled' : ''}>✕</button></div>`
-        + (ui._editing === b.i ? ui._editHtml(b.i) : '')).join('');
+        + confirmHtml(b) + (ui._editing === b.i ? ui._editHtml(b.i) : '')).join('');
       $('band-next').disabled = n < 2;
     },
 
@@ -9796,7 +9925,7 @@ p { margin: 4px 0 0; color: #444; }
       // 出演・曲
       const p = app.show.setlist || { songs: [], errors: [] };
       const bs = VJ.bandsUI ? VJ.bandsUI.state(s) : null;
-      const who = (bs && bs.name) || app.show.bandName() || '—';
+      const who = (bs && bs.name) || (app.show.bandName ? app.show.bandName() : '') || '—';
       if (p.songs.length) add('ok', t('出演：{0}（{1} 曲）', who, p.songs.length) + (bs && bs.n > 1 ? ' ' + t('— {0} 組中 {1} 組目', bs.n, bs.i + 1) : ''));
       else add('info', t('出演：{0}（曲が登録されていません。→ キーの曲送りは使えません）', who));
       if (p.errors.length) add('warn', t('セットリストに読めない行があります（{0} 件。③ を確認）', p.errors.length));
@@ -9844,8 +9973,10 @@ p { margin: 4px 0 0; color: #444; }
 
   const ed = {
     app: null,
-    model: null, // { band, end, songs: [{ title, scenes, palette, notitle }] }
+    model: null, // { band, end, songs: [{ title, scenes, palette, notitle, line, dirty }] }
+    _src: null, // 表を作ったときのセットリストの文字と出演バンドの番号（別のバンドに書き込まないように）
     _picking: -1, // シーンを選んでいる曲の番号
+    _del: -1, // 「消す？」と確かめている曲の番号（確認ダイアログは 2 画面の映像まで止めるので使わない）
 
     install(app) {
       ed.app = app;
@@ -9853,13 +9984,16 @@ p { margin: 4px 0 0; color: #444; }
       el.addEventListener('click', (e) => {
         const b = e.target.closest('button[data-act]');
         if (!b) return;
+        if (ed.stale()) { ed.render(true); return; }
         const i = +b.dataset.i, act = b.dataset.act, songs = ed.model.songs;
         if (act === 'up' && i > 0) [songs[i - 1], songs[i]] = [songs[i], songs[i - 1]];
         else if (act === 'down' && i < songs.length - 1) [songs[i + 1], songs[i]] = [songs[i], songs[i + 1]];
-        else if (act === 'del') { if (!confirm(t('「{0}」を消しますか？', songs[i].title))) return; songs.splice(i, 1); }
-        else if (act === 'add') { songs.push({ title: t('新しい曲 {0}', songs.length + 1), scenes: [], palette: null, notitle: false }); ed._focusLast = true; }
+        else if (act === 'del') { ed._del = ed._del === i ? -1 : i; ed.render(true); return; }
+        else if (act === 'del-yes') { songs.splice(i, 1); ed._del = -1; if (ed._picking === i) ed._picking = -1; }
+        else if (act === 'del-no') { ed._del = -1; ed.render(true); return; }
+        else if (act === 'add') { songs.push({ title: t('新しい曲 {0}', songs.length + 1), scenes: [], palette: null, notitle: false, line: null, dirty: true }); ed._focusLast = true; }
         else if (act === 'pick') { ed._picking = ed._picking === i ? -1 : i; ed.render(true); return; }
-        else if (act === 'unpick') { const k = +b.dataset.k; songs[i].scenes.splice(k, 1); }
+        else if (act === 'unpick') { const k = +b.dataset.k; songs[i].scenes.splice(k, 1); songs[i].dirty = true; }
         else if (act === 'done') { ed._picking = -1; ed.render(true); return; }
         else return;
         ed.commit(true);
@@ -9868,32 +10002,52 @@ p { margin: 4px 0 0; color: #444; }
         // シーンの選択欄：押すと追加（同じシーンを続けては入れない）
         const sb = e.target.closest('.sl-picker button[data-scene]');
         if (!sb || ed._picking < 0) return;
+        if (ed.stale()) { ed.render(true); return; }
         const song = ed.model.songs[ed._picking];
-        if (song.scenes[song.scenes.length - 1] !== sb.dataset.scene) song.scenes.push(sb.dataset.scene);
+        if (song.scenes[song.scenes.length - 1] !== sb.dataset.scene) { song.scenes.push(sb.dataset.scene); song.dirty = true; }
         ed.commit(true);
       });
       el.addEventListener('input', (e) => {
         const inp = e.target.closest('input[data-f="title"]');
         if (!inp) return;
-        ed.model.songs[+inp.dataset.i].title = inp.value;
+        if (ed.stale()) { ed.render(true); return; }
+        const song = ed.model.songs[+inp.dataset.i];
+        song.title = inp.value;
+        song.dirty = true;
         ed.commit(false);
       });
       el.addEventListener('change', (e) => {
         const x = e.target;
-        if (x.matches('select[data-f="palette"]')) ed.model.songs[+x.dataset.i].palette = x.value === '' ? null : +x.value;
-        else if (x.matches('input[data-f="showtitle"]')) ed.model.songs[+x.dataset.i].notitle = !x.checked;
-        else return;
+        if (!x.matches('select[data-f="palette"], input[data-f="showtitle"]')) return;
+        if (ed.stale()) { ed.render(true); return; }
+        const song = ed.model.songs[+x.dataset.i];
+        if (x.matches('select')) song.palette = x.value === '' ? null : +x.value;
+        else song.notitle = !x.checked;
+        song.dirty = true;
         ed.commit(false);
       });
     },
 
-    /** 表の内容 → 文字の欄・設定。rerender で表も描き直す（並べ替えなど） */
+    /** 表を作ったあとで、セットリストの文字か出演バンドが変わった（スマホ・OSC・出力ウィンドウからの切替など） */
+    stale() {
+      const s = ed.app.settings;
+      return !ed._src || ed._src.text !== s.setlistText || ed._src.band !== s.bandIdx;
+    },
+
+    /** 表の内容 → 文字の欄・設定。元の文字は行ごとに残し、曲の行だけを書き直す。rerender で表も描き直す */
     commit(rerender) {
       const s = ed.app.settings;
-      const text = VJ.setlist.serialize(ed.model, VJ.setlist.headComments(s.setlistText));
+      if (ed.stale()) { ed.render(true); return; }
+      const text = VJ.setlist.rewrite(s.setlistText, ed.model.songs);
       s.setlistText = text;
       $('setlist').value = text;
       if (rerender) ed.render(true);
+      else {
+        // 書き直した文字に合わせて元の行番号を付け直す（表は描き直さない：入力中の文字が消えないように）
+        const p = VJ.setlist.parse(text);
+        ed.model.songs.forEach((x, k) => { if (p.songs[k]) x.line = p.songs[k].line; });
+        ed._src = { text, band: s.bandIdx };
+      }
       VJ.panel.applyShow();
     },
 
@@ -9901,10 +10055,16 @@ p { margin: 4px 0 0; color: #444; }
     render(force) {
       const app = ed.app, el = $('setlist-preview');
       if (!app || !el) return;
-      if (!force && el.contains(document.activeElement) && document.activeElement !== document.body) return;
-      const p = VJ.setlist.parse(app.settings.setlistText);
-      ed.model = { band: p.band, end: p.end, songs: p.songs.map((x) => ({ title: x.title, scenes: x.scenes.slice(), palette: x.palette, notitle: x.notitle })) };
+      // 入力中は作り直さない。ただし別のバンドに切り替わったら作り直す（古い表で別のバンドを書き換えないように）
+      const s = app.settings;
+      const bandChanged = !!ed._src && ed._src.band !== s.bandIdx;
+      if (!force && !bandChanged && el.contains(document.activeElement) && document.activeElement !== document.body) return;
+      if (bandChanged) { ed._picking = -1; ed._del = -1; }
+      const p = VJ.setlist.parse(s.setlistText);
+      ed._src = { text: s.setlistText, band: s.bandIdx };
+      ed.model = { band: p.band, end: p.end, songs: p.songs.map((x) => ({ title: x.title, scenes: x.scenes.slice(), palette: x.palette, notitle: x.notitle, line: x.line, dirty: false })) };
       if (ed._picking >= ed.model.songs.length) ed._picking = -1;
+      if (ed._del >= ed.model.songs.length) ed._del = -1;
       const pals = `<option value="">${esc(t('パレット：そのまま'))}</option>` + VJ.palettes.map((q, i) => `<option value="${i}">${esc(t(q.name))}</option>`).join('');
       const chip = (id, i, k) => {
         const d = VJ.scenes.byId[id];
@@ -9926,7 +10086,8 @@ p { margin: 4px 0 0; color: #444; }
           + `<div class="sl-row2">${x.scenes.length ? x.scenes.map((id, k) => chip(id, i, k)).join('<span class="sl-arrow">→</span>') : `<span class="hint">${esc(t('シーン：オート'))}</span>`}`
           + `<button data-act="pick" data-i="${i}">${esc(ed._picking === i ? t('選び終える') : t('＋ シーン'))}</button></div>`
           + `<div class="sl-row3"><select data-f="palette" data-i="${i}">${pals}</select>`
-          + `<label><input type="checkbox" data-f="showtitle" data-i="${i}"${x.notitle ? '' : ' checked'}> ${esc(t('曲名を表示'))}</label></div>`;
+          + `<label><input type="checkbox" data-f="showtitle" data-i="${i}"${x.notitle ? '' : ' checked'}> ${esc(t('曲名を表示'))}</label></div>`
+          + (ed._del === i ? `<div class="row sl-confirm"><span>${esc(t('この曲を消しますか？'))}</span><button data-act="del-yes" data-i="${i}">${esc(t('消す'))}</button><button data-act="del-no" data-i="${i}">${esc(t('やめる'))}</button></div>` : '');
         if (ed._picking === i) {
           html += `<div class="sl-picker"><div class="hint">${esc(t('押した順に使います（2 つ以上ならオートで順番に）'))}</div>`
             + `<div class="scene-grid">${VJ.scenePick.list().map((d) => VJ.scenePick.button(d)).join('')}</div>`
@@ -10072,7 +10233,7 @@ p { margin: 4px 0 0; color: #444; }
         const el = $(id), v = $(id + '-v');
         el.value = out[key];
         v.textContent = fmt(+el.value);
-        el.addEventListener('input', () => { out[key] = +el.value; v.textContent = fmt(+el.value); panel.applyShow(true); });
+        el.addEventListener('input', () => { out[key] = +el.value; v.textContent = fmt(+el.value); if (!panel._bulk) panel.applyShow(true); });
       };
       bindOut('out-size', 'size', (x) => Math.round(x * 100) + '%');
       bindOut('out-x', 'x', (x) => (x > 0 ? '+' : '') + Math.round(x * 100) + '%');
@@ -10108,7 +10269,7 @@ p { margin: 4px 0 0; color: #444; }
         const el = $(id), v = $(id + '-v');
         el.value = s[key];
         v.textContent = fmt(+el.value);
-        el.addEventListener('input', () => { s[key] = +el.value; v.textContent = fmt(+el.value); panel.applyShow(true); });
+        el.addEventListener('input', () => { s[key] = +el.value; v.textContent = fmt(+el.value); if (!panel._bulk) panel.applyShow(true); });
       };
       bindRange('opt-sens', 'sensitivity', (x) => (x > 0 ? '+' : '') + x);
       bindRange('opt-react', 'react', (x) => Math.round(x * 100) + '%');
@@ -10120,7 +10281,8 @@ p { margin: 4px 0 0; color: #444; }
       const pal = $('opt-palette');
       pal.innerHTML = VJ.palettes.map((p, i) => `<option value="${i}">${i + 1}. ${esc(t(p.name))}</option>`).join('');
       pal.value = s.paletteIdx;
-      pal.addEventListener('change', () => { app.show.setPalette(+pal.value); s.paletteIdx = +pal.value; panel.renderCustom(); panel.applyShow(true); });
+      // パネルで選んだ色は、出演中のバンドの色として覚える（曲ごとの色・C キーでの変更とは別）
+      pal.addEventListener('change', () => { app.show.setPalette(+pal.value); s.paletteIdx = +pal.value; s.bandPalette = +pal.value; VJ.bands.touch(); panel.renderCustom(); panel.applyShow(true); });
       panel.renderCustom();
       panel.renderAutoScenes();
 
@@ -10144,7 +10306,7 @@ p { margin: 4px 0 0; color: #444; }
       $('btn-import').addEventListener('click', () => $('import-file').click());
       $('import-file').addEventListener('change', panel.importSettings);
       $('btn-reset').addEventListener('click', () => {
-        if (!confirm(t('設定（セットリスト含む）を初期状態に戻しますか？'))) return;
+        if (!confirm(t('設定（出演バンド・セットリスト・ロゴを含むすべて）を初期状態に戻しますか？'))) return;
         panel.replaceSettings(VJ.storage.reset());
       });
       $('btn-midi').addEventListener('click', () => panel.enableMidi());
@@ -10600,6 +10762,8 @@ p { margin: 4px 0 0; color: #444; }
     toggle(force) {
       panel.visible = force === undefined ? !panel.visible : !!force;
       $('panel').hidden = !panel.visible;
+      // 暗証番号入りの QR は、パネルを閉じたら隠す（開き直したときにスクリーンに映らないように）
+      if (!panel.visible && !$('net-qr').hidden) { $('net-qr').hidden = true; $('btn-qr').textContent = t('スマホ用の QR コードを表示'); }
       if (!panel.visible && document.activeElement && document.activeElement.blur) document.activeElement.blur();
     },
 
@@ -10635,6 +10799,14 @@ p { margin: 4px 0 0; color: #444; }
 
     /** 設定をまるごと入れ替えて画面に反映 */
     replaceSettings(ns) {
+      // 入力欄の更新で何度も反映しないように、最後に 1 回だけ（2 画面のときは出力側へ送る回数も減る）
+      panel._bulk = true;
+      try { panel._replace(ns); } finally { panel._bulk = false; }
+      panel.applyShow(true);
+      VJ.storage.save(panel.app.settings);
+    },
+
+    _replace(ns) {
       const s = panel.app.settings;
       for (const k of Object.keys(ns)) s[k] = ns[k];
       s.output = Object.assign({}, OUT_DEFAULT, s.output || {});
@@ -10676,8 +10848,6 @@ p { margin: 4px 0 0; color: #444; }
       panel.renderIo();
       panel.renderLogo();
       panel.syncOutputUi();
-      panel.applyShow(true);
-      VJ.storage.save(s);
     },
 
     /** キー操作などで変わった設定をパネルの表示に反映（出力ウィンドウからの通知など） */
@@ -10748,7 +10918,14 @@ p { margin: 4px 0 0; color: #444; }
     app.applySettings = () => {
       const s = app.settings;
       app.show.applySettings(s);
-      if (remote()) { link.send({ t: 'settings', settings: s }); return; }
+      if (remote()) {
+        // 出演バンドの一覧（ロゴを含むので大きい）は、変わったときだけ送る
+        const msg = Object.assign({}, s);
+        if (link._bandsSent && link._bandsSent.ref === s.bands && link._bandsSent.ver === VJ.bands.version) delete msg.bands;
+        else link._bandsSent = { ref: s.bands, ver: VJ.bands.version };
+        link.send({ t: 'settings', settings: msg });
+        return;
+      }
       app.renderer.setOutput(s.output);
       app.renderer.setLogo(s.logo);
       app.renderer.setMaxScale(s.maxScale);

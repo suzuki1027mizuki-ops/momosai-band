@@ -540,5 +540,13 @@
     "追加しました（演奏中なので切り替えていません）": "Added (not switched, because a set is in progress)",
     "1 行 1 曲（曲名 | シーン | パレット）": "One song per line (title | scenes | palette)",
     "ロゴ・音楽のタイプ・色・テロップは、出演中にしてから下の欄で": "Set the logo, music type, colors and captions in the fields below once the band is on stage",
+    "追加しました。行を押すと出演中になります": "Added. Click its row to put it on stage",
+    "本番中です。もう一度押すと「{0}」に切り替えます": "The show is live. Press again to switch to \"{0}\"",
+    "操作ウィンドウが閉じられているため、バンドを切り替えられません": "Cannot switch bands because the control window is closed",
+    "出演中の「{0}」を消しますか？（隣のバンドに切り替わり、タイトルに戻ります）": "Remove \"{0}\", which is on stage? (Switches to the neighboring band and returns to the title)",
+    "「{0}」に切り替えますか？（いまの演奏はタイトルに戻ります）": "Switch to \"{0}\"? (The current show returns to the title)",
+    "切り替える": "Switch",
+    "この曲を消しますか？": "Delete this song?",
+    "設定（出演バンド・セットリスト・ロゴを含むすべて）を初期状態に戻しますか？": "Reset all settings (including bands, setlists and logos) to the defaults?",
   };
 })(globalThis.VJ = globalThis.VJ || {});

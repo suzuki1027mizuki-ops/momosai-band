@@ -37,6 +37,8 @@
       return !this.state.endState && i >= 0 && this.setlist.songs[i] ? this.setlist.songs[i] : null;
     }
     react() { return VJ.util.clamp((+this.settings.react || 1) * (this.profile.show.react || 1), 0.2, 1.6); }
+    bandName() { return (this.setlist && this.setlist.band) || this.settings.bandName || ''; }
+    endText() { return (this.setlist && this.setlist.end) || this.settings.endText || 'Thank you!'; }
     session() { return { songIdx: this.state.songIdx, endState: this.state.endState, sceneId: this.state.sceneId, paletteIdx: this.state.paletteIdx, t: Date.now() }; }
   }
 
@@ -77,7 +79,7 @@
     lastStatus: null,
     _poll: null,
     wantPreview: false, // 出力側：操作側がプレビューを見ているか
-    PREVIEW_MS: 250, // プレビューの間隔（1 秒に 4 回）
+    PREVIEW_MS: 333, // プレビューの間隔（1 秒に 3 回。描画の読み出しは GPU の負担になるので控えめに）
 
     send(msg) {
       if (!link.peer || link.peer.closed) return false;
@@ -196,8 +198,9 @@
     _onControlMessage(d) {
       const app = link.app;
       if (d.t === 'hello') {
-        // 出力ウィンドウが開いた／再読み込みされた：設定・曲の位置・音声入力を渡す
+        // 出力ウィンドウが開いた／再読み込みされた：設定（出演バンドの一覧も）・曲の位置・音声入力を渡す
         link.send({ t: 'settings', settings: app.settings });
+        link._bandsSent = { ref: app.settings.bands, ver: VJ.bands.version };
         link._previewOn();
         const first = link.local.fresh;
         link.local.fresh = false;

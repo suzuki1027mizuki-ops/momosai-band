@@ -3,6 +3,9 @@
   'use strict';
 
   const KEY = 'momosai-vj/v1';
+  // 出演バンドの一覧（ロゴを含むので大きい）は別に保存し、変わったときだけ書く（キー操作のたびに数 MB を書かないように）
+  const BANDS_KEY = KEY + '/bands';
+  let savedBands = { ref: null, ver: -1 };
 
   const clone = (v) => JSON.parse(JSON.stringify(v));
   const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -50,7 +53,12 @@
       try {
         const raw = globalThis.localStorage && localStorage.getItem(KEY);
         if (!raw) return merge(VJ.defaultSettings, null);
-        return merge(VJ.defaultSettings, JSON.parse(raw));
+        const obj = JSON.parse(raw);
+        if (obj && typeof obj === 'object' && !Array.isArray(obj.bands)) {
+          const b = localStorage.getItem(BANDS_KEY);
+          if (b) { try { obj.bands = JSON.parse(b); } catch (e) { /* 壊れていたら一覧は無しで */ } }
+        }
+        return merge(VJ.defaultSettings, obj);
       } catch (e) {
         return merge(VJ.defaultSettings, null);
       }
@@ -61,14 +69,24 @@
     },
     save(settings) {
       try {
-        if (globalThis.localStorage) localStorage.setItem(KEY, JSON.stringify(settings));
+        if (!globalThis.localStorage) return true;
+        const rest = Object.assign({}, settings);
+        delete rest.bands;
+        localStorage.setItem(KEY, JSON.stringify(rest));
+        const ver = VJ.bands ? VJ.bands.version : 0;
+        if (settings.bands !== savedBands.ref || ver !== savedBands.ver) {
+          localStorage.setItem(BANDS_KEY, JSON.stringify(settings.bands || []));
+          savedBands = { ref: settings.bands, ver };
+        }
         return true;
       } catch (e) {
+        savedBands = { ref: null, ver: -1 };
         return false;
       }
     },
     reset() {
-      try { if (globalThis.localStorage) localStorage.removeItem(KEY); } catch (e) { /* noop */ }
+      try { if (globalThis.localStorage) { localStorage.removeItem(KEY); localStorage.removeItem(BANDS_KEY); } } catch (e) { /* noop */ }
+      savedBands = { ref: null, ver: -1 };
       return merge(VJ.defaultSettings, null);
     },
     /** JSON 文字列から読み込み（不正なキーは無視） */
