@@ -156,7 +156,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .qrbox { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; margin: 6px 0; }
 .qrbox figure { margin: 0; text-align: center; font-size: 12px; color: var(--muted); }
 .qrbox img { width: 180px; height: 180px; image-rendering: pixelated; background: #fff; border-radius: 6px; display: block; }
-.band-row { text-align: left; display: grid; grid-template-columns: 1.6em 3.4em 1fr auto auto auto auto; align-items: center; gap: 4px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: #11111c; cursor: pointer; font-size: 13px; }
+.band-row { text-align: left; display: grid; grid-template-columns: 1.6em 3.4em 1fr auto auto auto auto auto; align-items: center; gap: 4px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: #11111c; cursor: pointer; font-size: 13px; }
 .band-row.on { border-color: var(--accent); background: #0d2430; }
 .band-row .bi { color: var(--muted); font-family: var(--mono); }
 .band-row .bt { font-family: var(--mono); color: var(--muted); }
@@ -164,6 +164,9 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .band-row .bs { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .band-row button { padding: 0 6px; font-size: 11px; }
 .band-row button:disabled { opacity: 0.3; cursor: default; }
+.band-row.editing { border-color: var(--accent2); }
+.band-edit { border: 1px solid var(--accent2); border-top: 0; border-radius: 0 0 6px 6px; margin-top: -4px; padding: 6px; background: #160c1a; }
+#panel .band-edit textarea { min-height: 90px; }
 #panel input[type=time] { background: #11111c; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 6px; font: inherit; color-scheme: dark; }
 .sp-row { display: grid; grid-template-columns: 7em 1fr 3.5em; align-items: center; gap: 6px; margin: 4px 0; }
 body.remote-mode #stage { opacity: 0.25; }
@@ -457,7 +460,7 @@ body.remote-mode #stage { opacity: 0.25; }
   'use strict';
 
   VJ.version = '1.0.0';
-  VJ.buildTime = '2026-10-08 #bb83a9a';
+  VJ.buildTime = '2026-10-08 #db40bb0';
 
   const LN10_20 = Math.LN10 / 20;
 
@@ -1433,6 +1436,11 @@ body.remote-mode #stage { opacity: 0.25; }
     "→ キーで次の曲（曲名とシーン・色が変わる）": "→ for the next song (shows the title and changes scenes & colors)",
     "文字でまとめて入力・貼り付けもできます（上の表と同じ内容）：": "You can also type or paste it as text (same content as the table above):",
     "プレビュー（出力の映像を小さく表示）": "Preview (small view of the output)",
+    "下の欄で編集": "Edit in the fields below",
+    "切り替えずに編集": "Edit without switching",
+    "追加しました（演奏中なので切り替えていません）": "Added (not switched, because a set is in progress)",
+    "1 行 1 曲（曲名 | シーン | パレット）": "One song per line (title | scenes | palette)",
+    "ロゴ・音楽のタイプ・色・テロップは、出演中にしてから下の欄で": "Set the logo, music type, colors and captions in the fields below once the band is on stage",
   };
 })(globalThis.VJ = globalThis.VJ || {});
 </script>
@@ -9381,23 +9389,34 @@ p { margin: 4px 0 0; color: #444; }
   const ui = {
     app: null,
     _armed: -1e9, // 演奏中に N を 1 回押した時刻（秒。もう一度で切替）
+    _editing: -1, // その場で編集している（出演中でない）バンドの番号
 
     install(app) {
       ui.app = app;
       $('band-list').addEventListener('click', (e) => {
+        if (e.target.closest('[data-act="edit-close"]')) { ui._editing = -1; ui.render(); return; }
         const row = e.target.closest('[data-i]');
         if (!row) return;
         const i = +row.dataset.i, s = app.settings;
         const act = e.target.closest('button') && e.target.closest('button').dataset.act;
         if (act === 'up' || act === 'down') {
           VJ.bands.move(s, i, act === 'up' ? -1 : 1);
+          ui._editing = -1;
           ui.render();
           VJ.panel.save();
         } else if (act === 'del') {
           if (!confirm(t('「{0}」を一覧から消しますか？（セットリスト・ロゴも消えます）', VJ.bands.nameOf(s, i) || t('（名前なし）')))) return;
           const wasCur = i === s.bandIdx;
           VJ.bands.remove(s, i);
+          ui._editing = -1;
           if (wasCur) ui._applied(); else { ui.render(); VJ.panel.save(); }
+        } else if (act === 'edit') {
+          // 出演中のバンドは下の欄で編集。ほかのバンドはその場で（切り替えずに）名前・開演時刻・セットリストを
+          if (i === s.bandIdx) { $('band').focus(); $('band').scrollIntoView({ block: 'center' }); return; }
+          ui._editing = ui._editing === i ? -1 : i;
+          ui.render();
+          const f = $('band-list').querySelector('[data-bf="bandName"]');
+          if (f) f.focus();
         } else if (i !== s.bandIdx) {
           if (ui.midSet() && !confirm(t('演奏中です。「{0}」に切り替えますか？', VJ.bands.nameOf(s, i) || t('（名前なし）')))) return;
           ui.switchTo(i);
@@ -9406,10 +9425,31 @@ p { margin: 4px 0 0; color: #444; }
       $('band-add').addEventListener('click', () => {
         const i = VJ.bands.add(app.settings, '');
         if (i < 0) { app.ui.toast(t('これ以上追加できません'), 'warn'); return; }
+        if (ui.midSet()) {
+          // 演奏中は切り替えない（次のバンドの準備をその場で）
+          ui._editing = i;
+          ui.render();
+          VJ.panel.save();
+          const f = $('band-list').querySelector('[data-bf="bandName"]');
+          if (f) f.focus();
+          app.ui.toast(t('追加しました（演奏中なので切り替えていません）'));
+          return;
+        }
         ui.switchTo(i);
-        const el = $('band');
-        el.focus();
+        $('band').focus();
       });
+      // その場の編集：入力した値をそのバンドに入れる（出演中のバンドは上の階層にあるので対象外）
+      const onEdit = (e, done) => {
+        const el = e.target.closest('[data-bf]');
+        if (!el) return;
+        const s = app.settings, i = ui._editing;
+        if (!(i >= 0 && i < s.bands.length) || i === s.bandIdx) return;
+        s.bands[i][el.dataset.bf] = el.value;
+        VJ.panel.save();
+        if (done) ui._refreshRows();
+      };
+      $('band-list').addEventListener('input', (e) => onEdit(e, false));
+      $('band-list').addEventListener('change', (e) => onEdit(e, true));
       $('band-next').addEventListener('click', () => {
         if (ui.midSet() && !confirm(t('演奏中です。次のバンドに切り替えますか？'))) return;
         ui.step(1, { force: true });
@@ -9466,17 +9506,46 @@ p { margin: 4px 0 0; color: #444; }
     render() {
       const app = ui.app;
       if (!app || !$('band-list')) return;
-      const list = VJ.bands.list(app.settings);
+      const s = app.settings;
+      // 入力中は作り直さない（文字が消えないように）。一覧の行だけ更新する
+      if ($('band-list').contains(document.activeElement) && document.activeElement.matches('[data-bf]')) { ui._refreshRows(); return; }
+      const list = VJ.bands.list(s);
       const n = list.length;
-      // 名前・時刻は入力された文字なので訳さない
-      $('band-list').innerHTML = list.map((b) => `<div class="band-row${b.current ? ' on' : ''}" data-i="${b.i}">`
+      if (ui._editing === s.bandIdx || ui._editing >= n) ui._editing = -1;
+      // 名前・時刻・セットリストは入力された文字なので訳さない
+      $('band-list').innerHTML = list.map((b) => `<div class="band-row${b.current ? ' on' : ''}${ui._editing === b.i ? ' editing' : ''}" data-i="${b.i}">`
         + `<span class="bi">${b.i + 1}</span><span class="bt" data-i18n-skip>${esc(b.start || '')}</span>`
         + `<span class="bn" data-i18n-skip>${esc(b.name || t('（名前なし）'))}</span>`
         + `<span class="bs">${esc(t('{0} 曲', b.songs))}${b.current ? ' · ' + esc(t('出演中')) : ''}</span>`
+        + `<button data-act="edit" title="${esc(b.current ? t('下の欄で編集') : t('切り替えずに編集'))}">✎</button>`
         + `<button data-act="up" title="${esc(t('上へ'))}"${b.i === 0 ? ' disabled' : ''}>▲</button>`
         + `<button data-act="down" title="${esc(t('下へ'))}"${b.i === n - 1 ? ' disabled' : ''}>▼</button>`
-        + `<button data-act="del" title="${esc(t('消す'))}"${n < 2 ? ' disabled' : ''}>✕</button></div>`).join('');
+        + `<button data-act="del" title="${esc(t('消す'))}"${n < 2 ? ' disabled' : ''}>✕</button></div>`
+        + (ui._editing === b.i ? ui._editHtml(b.i) : '')).join('');
       $('band-next').disabled = n < 2;
+    },
+
+    /** 出演中でないバンドをその場で編集する欄（名前・開演時刻・セットリスト） */
+    _editHtml(i) {
+      const b = VJ.bands.get(ui.app.settings, i) || {};
+      return `<div class="band-edit" data-i18n-skip>`
+        + `<div class="row"><input type="text" data-bf="bandName" value="${esc(b.bandName || '')}" placeholder="${esc(t('バンド名'))}" style="flex: 1; width: auto">`
+        + `<span>${esc(t('開演'))}</span><input type="time" data-bf="countdownTo" value="${esc(b.countdownTo || '')}"></div>`
+        + `<textarea data-bf="setlistText" spellcheck="false" placeholder="${esc(t('1 行 1 曲（曲名 | シーン | パレット）'))}">${esc(b.setlistText || '')}</textarea>`
+        + `<div class="row"><span class="hint">${esc(t('ロゴ・音楽のタイプ・色・テロップは、出演中にしてから下の欄で'))}</span>`
+        + `<button data-act="edit-close">${esc(t('閉じる'))}</button></div></div>`;
+    },
+
+    /** 一覧の行の名前・時刻・曲数だけを更新（編集中の欄は残す） */
+    _refreshRows() {
+      const list = VJ.bands.list(ui.app.settings);
+      for (const b of list) {
+        const row = $('band-list').querySelector(`.band-row[data-i="${b.i}"]`);
+        if (!row) continue;
+        row.querySelector('.bt').textContent = b.start || '';
+        row.querySelector('.bn').textContent = b.name || t('（名前なし）');
+        row.querySelector('.bs').textContent = t('{0} 曲', b.songs) + (b.current ? ' · ' + t('出演中') : '');
+      }
     },
 
     /** スマホ・HUD 用の状態 */
