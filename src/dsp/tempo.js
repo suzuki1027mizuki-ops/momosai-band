@@ -1,19 +1,37 @@
 /* テンポ（BPM）と拍の位置の推定 + タップテンポ。
  *  - 立ち上がりの強さ（帯域ごとの dB 上昇量の重み付き和）を約 10ms ごとに 8 秒分ためる
- *  - 0.5 秒ごとに自己相関で周期を求める（60〜200BPM、120BPM 付近を優先、倍・半分の誤りを抑える）
+ *  - 0.5 秒ごとに自己相関で周期を求める（60〜200BPM、120BPM 付近をゆるく優先）
+ *  - 3:2 の取り違え（付点 4 分を拍と取る）を、1.5 倍の速さの拍の位置にも同じくらい立ち上がりがあるかで直す
+ *  - 倍・半分は「拍の中間（裏）にも拍と同じくらい強い立ち上がりがあれば速い方」で決める（いちばん遅い候補から順に）。
+ *    速いテンポほど厳しく、いまのテンポは続けやすく、ドラムの無い曲では速くしすぎない
  *  - 周期が分かったら、櫛形の和が最大になる位置を「拍」とする
  *  - 4 拍のうちキックが最も強い位置を小節の頭（ダウンビート）とみなす
  * タップテンポ（3 回以上）はしばらく自動推定より優先する。
  * 拍の予測で先回りして光らせることはしない（人間のドラムの揺れで外れが目立つため）。用途は
- * オートの切替タイミング・拍に合わせたゆるい動き・表示。 */
+ * オートの切替タイミング・拍に合わせたゆるい動き・表示。
+ * 合成した曲（8 ビート・4 つ打ち・2 ビート・ハーフ・シャッフル・ファンク・ヒップホップ・ドラムンベース・
+ * ドラムなし、残響・雑音あり）での評価は ISSUES.md（G8）。 */
 (function (VJ) {
   'use strict';
+
+  const DEFAULTS = {
+    hopsPerFrame: 4, seconds: 8, every: 0.5, manualSec: 120,
+    minBpm: 60, maxBpm: 200, // 自己相関で探す範囲
+    prefBpm: 120, prefOct: 1.2, // 120BPM 付近をゆるく優先（オクターブ単位の幅）
+    h2: 0.25, h3: 0.25, // 2 倍・3 倍の周期の相関を足す重み
+    r32: 0.9, // 3:2：1.5 倍の速さの拍の位置の強さが、いまの拍のこれ以上ならそちらを採る
+    outMin: 55, outMax: 210, outMaxDrumless: 165, // 倍・半分を選んだ結果の範囲
+    thLo: 0.4, thSlope: 0.4, thRef: 130, // 速い方に上げる条件（裏の強さ / 拍の強さ）。thRef を超える速さは log2 で厳しく
+    octBias: 0.3, // いまのテンポを続けやすくする幅
+    hold: 2, octHold: 4, // 大きく変わったときに切り替えるまでの回数（倍・半分は長め）
+    smooth: 0.3,
+  };
 
   class TempoTracker {
     constructor(sr, hop, opts) {
       this.sr = sr;
       this.hop = hop;
-      this.opts = Object.assign({ hopsPerFrame: 4, seconds: 8, minBpm: 60, maxBpm: 200, prefBpm: 120, prefOct: 0.9, every: 0.5, manualSec: 120 }, opts || {});
+      this.opts = Object.assign({}, DEFAULTS, opts || {});
       this.fpf = this.opts.hopsPerFrame;
       this.frameSamples = hop * this.fpf;
       this.frameSec = this.frameSamples / sr;
@@ -25,7 +43,9 @@
       this.hopIn = 0;
       this.frameCount = 0; // 追加した OSF フレーム数
       this.lin = new Float32Array(this.n);
+      this.pos = new Float32Array(this.n);
       this.lastEst = 0;
+      this.drumless = false;
       this.reset();
     }
 
@@ -42,6 +62,9 @@
       this.manual = null;
       this.taps = [];
     }
+
+    /** ドラムの無い曲か（ドラムの無い曲モード。速いテンポに上げすぎないように） */
+    setDrumless(v) { this.drumless = !!v; }
 
     /** 1 ホップごとに立ち上がりの強さを入れる */
     push(strength, sampleCount) {
@@ -80,12 +103,12 @@
       const n = this.filled;
       if (n < this.n * 0.5) return;
       // 時系列を古い順に並べ、平均を引く
-      const x = this.lin;
+      const x = this.lin, y = this.pos;
       let mean = 0;
       for (let i = 0; i < n; i++) { const v = this.ring[(this.idx - n + i + this.n) % this.n]; x[i] = v; mean += v; }
       mean /= n;
       let energy = 0;
-      for (let i = 0; i < n; i++) { x[i] -= mean; energy += x[i] * x[i]; }
+      for (let i = 0; i < n; i++) { x[i] -= mean; energy += x[i] * x[i]; y[i] = x[i] > 0 ? x[i] : 0; }
       if (energy < 1e-6) { this.conf *= 0.8; return; }
       const fs = this.frameSec, o = this.opts;
       const lmin = Math.floor(60 / o.maxBpm / fs), lmax = Math.ceil(60 / o.minBpm / fs);
@@ -99,8 +122,8 @@
       for (let L = lmin - 1; L <= lmax + 1; L++) r[L] = ac(L);
       let best = -1, bestS = -Infinity, sum = 0, sum2 = 0, cnt = 0;
       for (let L = lmin; L <= lmax; L++) {
-        // 倍の周期の相関も足して基本周期を優先、さらに 120BPM 付近を優先
-        const s = r[L] + 0.5 * ac(2 * L) + 0.25 * ac(3 * L);
+        // 倍・3 倍の周期の相関も足して基本周期を優先、さらに 120BPM 付近をゆるく優先
+        const s = r[L] + o.h2 * ac(2 * L) + o.h3 * ac(3 * L);
         const bpm = 60 / (L * fs);
         const w = Math.exp(-0.5 * Math.pow(Math.log2(bpm / o.prefBpm) / o.prefOct, 2));
         const sw = s * w;
@@ -112,26 +135,26 @@
       const a = r[best - 1], b = r[best], c = r[best + 1];
       const den = a - 2 * b + c;
       const d = Math.abs(den) > 1e-12 ? Math.max(-0.5, Math.min(0.5, (0.5 * (a - c)) / den)) : 0;
-      const L = best + d;
       const mu = sum / cnt, sd = Math.sqrt(Math.max(1e-12, sum2 / cnt - mu * mu));
       const conf = Math.max(0, Math.min(1, (r[best] - mu) / sd / 4));
-      let bpm = 60 / (L * fs);
-      // 倍・半分の取り違えを補正：90〜180BPM に入るように、相関が十分あれば倍・半分を採用
-      const half = Math.round(L / 2), dbl = Math.round(L * 2);
-      if (bpm < 90 && half >= lmin - 1 && r[half] >= 0.5 * r[best]) bpm *= 2;
-      else if (bpm >= 180 && ac(dbl) >= 0.5 * r[best]) bpm /= 2;
+      const from = Math.max(0, n - Math.round(o.seconds / fs));
+      const bpm = this._octave(y, n, this._triple(y, n, 60 / ((best + d) * fs), from), from);
 
-      // 推定の安定化：近ければなめらかに追従、大きく違えば 2 回続いたら切り替え
-      if (!this.bpm || Math.abs(bpm - this.bpm) / this.bpm < 0.04) {
-        this.bpm = this.bpm ? this.bpm * 0.7 + bpm * 0.3 : bpm;
+      // 推定の安定化：近ければなめらかに追従、大きく違えば数回続いたら切り替え（倍・半分は長めに）
+      const rel = (p, q) => Math.abs(p - q) / q;
+      const octave = Math.min(rel(bpm, this.bpm * 2), rel(bpm, this.bpm / 2)) < 0.05;
+      if (!this.bpm || rel(bpm, this.bpm) < 0.04) {
+        this.bpm = this.bpm ? this.bpm * (1 - o.smooth) + bpm * o.smooth : bpm;
         this.candCount = 0;
-      } else if (this.cand && Math.abs(bpm - this.cand) / this.cand < 0.04 && ++this.candCount >= 2) {
-        this.bpm = bpm;
-        this.candCount = 0;
-        this.posStrength.fill(0);
+      } else if (this.cand && rel(bpm, this.cand) < 0.04) {
+        if (++this.candCount >= (octave && this.conf > 0.3 ? o.octHold : o.hold)) {
+          this.bpm = bpm;
+          this.candCount = 0;
+          this.posStrength.fill(0);
+        }
       } else {
         this.cand = bpm;
-        if (!this.candCount) this.candCount = 1;
+        this.candCount = 1;
       }
       this.conf = this.conf * 0.6 + conf * 0.4;
       this.period = (60 / this.bpm) * this.sr;
@@ -165,6 +188,57 @@
       }
     }
 
+    /** 周期 P フレームの拍の位置（最良の位相）での立ち上がりの平均（out.a）と、withB なら拍の中間（裏）の平均（out.b）。
+     *  各位置は ±1 フレームの最大を取る（人の演奏の揺れ・フレームの区切りの分） */
+    _pulse(y, n, P, from, out, withB) {
+      const pk = (p) => { const i = Math.round(p); let m = 0; for (let j = i - 1; j <= i + 1; j++) if (j >= 0 && j < n && y[j] > m) m = y[j]; return m; };
+      let bestA = 0, bestB = 0;
+      const steps = Math.max(8, Math.round(P));
+      const end = from + 1 + (withB ? P / 2 : 0);
+      for (let k = 0; k < steps; k++) {
+        let A = 0, B = 0, c = 0;
+        for (let p = n - 3 - (k * P) / steps; p > end; p -= P) { A += pk(p); if (withB) B += pk(p - P / 2); c++; }
+        if (c && A / c > bestA) { bestA = A / c; bestB = B / c; }
+      }
+      out.a = bestA;
+      out.b = bestB;
+      return out;
+    }
+
+    /** 3:2 の取り違え：70〜140BPM に寄せたテンポの 1.5 倍の拍の位置にも、同じくらい強い立ち上がりがあればそちらを採る
+     *  （8 ビートで付点 4 分を拍と取る誤り。シャッフル・ハーフは 1.5 倍の位置が外れるので変わらない） */
+    _triple(y, n, bpm, from) {
+      const o = this.opts, fs = this.frameSec, q = this._pq || (this._pq = {});
+      let t = bpm;
+      while (t >= 140) t /= 2;
+      while (t < 70) t *= 2;
+      const a1 = this._pulse(y, n, 60 / t / fs, from, q).a;
+      const a2 = this._pulse(y, n, 60 / (1.5 * t) / fs, from, q).a;
+      return a1 > 0 && a2 >= o.r32 * a1 ? 1.5 * t : bpm;
+    }
+
+    /** 倍・半分の選び方：いちばん遅い候補から、拍の中間（裏）も拍と同じくらい強ければ速い方へ */
+    _octave(y, n, bpm, from) {
+      const o = this.opts, fs = this.frameSec, q = this._pq || (this._pq = {});
+      let t = bpm;
+      while (t / 2 >= o.outMin) t /= 2;
+      const cur = this.bpm, sure = this.conf > 0.3;
+      const top = this.drumless ? o.outMaxDrumless : o.outMax;
+      while (t * 2 <= top) {
+        this._pulse(y, n, 60 / t / fs, from, q, true);
+        const ba = q.a > 0 ? q.b / q.a : 0;
+        let th = o.thLo + o.thSlope * Math.max(0, Math.log2((t * 2) / o.thRef));
+        // いまのテンポを続けやすく（倍・半分の行き来を減らす）
+        if (cur && sure) {
+          if (Math.abs(cur - t * 2) / cur < 0.06) th -= o.octBias;
+          else if (Math.abs(cur - t) / cur < 0.06) th += o.octBias;
+        }
+        if (ba >= th || t < o.minBpm) t *= 2;
+        else break;
+      }
+      return t;
+    }
+
     /** タップテンポ（sample = 押した時点のサンプル位置） */
     tap(sample) {
       const t = this.taps;
@@ -181,6 +255,8 @@
       this.manual = { until: sample + this.opts.manualSec * this.sr };
       this.period = per;
       this.bpm = bpm;
+      this.cand = 0;
+      this.candCount = 0;
       this.beat0 = sample;
       this.indexBase = 0;
       this.conf = 1;

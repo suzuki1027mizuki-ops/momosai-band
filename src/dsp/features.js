@@ -303,7 +303,8 @@
         }
       }
 
-      // テンポ推定用の立ち上がりの強さ
+      // テンポ推定用の立ち上がりの強さ（ドラムの無い曲では速いテンポに上げすぎない）
+      this.tempo.drumless = this.melMode;
       if (active && !speechNow) {
         const w = cfg.tempoWeights;
         let osf = 0;

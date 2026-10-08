@@ -138,29 +138,47 @@
     }
   }
 
+  // 16 分音符 16 マスのリズム（k キック・s スネア・g ゴースト（弱いスネア）・h ハイハット）。
+  // swing8：裏の 8 分を遅らせる割合（1/3 で 3 連のシャッフル）、swing16：裏の 16 分を遅らせる割合
+  const EVEN8 = [0, 2, 4, 6, 8, 10, 12, 14], ALL16 = [...Array(16).keys()];
+  const PATTERNS = {
+    twobeat: { k: [0, 4, 8, 12], s: [2, 6, 10, 14], h: EVEN8 }, // 2 ビート（パンク・メロコア）
+    shuffle: { k: [0, 8], s: [4, 12], h: EVEN8, swing8: 1 / 3 }, // シャッフル（ハネる 8 分）
+    funk: { k: [0, 6, 10], s: [4, 12], g: [7, 9, 15], h: ALL16 }, // ファンク（16 分のシンコペーション）
+    hiphop: { k: [0, 7, 10], s: [4, 12], h: EVEN8, swing16: 0.25 }, // ブーンバップ
+    dnb: { k: [0, 10], s: [4, 12], h: EVEN8 }, // ドラムンベース（2 ステップ）
+    sparse: { k: [0], g: [8], h: [0, 4, 8, 12] }, // 静かなバラード（キック 1 つ・リム・4 分のハイハット）
+  };
+
   /**
    * セクションの列から曲を作る。
-   * section: { bars, drums: 'none'|'click'|'8beat'|'four'|'half'|'roll'|'hats', bass: bool, guitar: 'none'|'chord'|'chug',
-   *            gain, crash: bool, prog: [root names...] }
+   * section: { bars, drums: 'none'|'click'|'8beat'|'four'|'half'|'roll'|'hats'|PATTERNS のキー, bass: bool,
+   *            guitar: 'none'|'chord'|'chug', gain, crash: bool, prog: [root names...] }
+   * opts.drift：曲の終わりまでに拍の長さを何割変えるか（-0.04 = 終わりで 4% 速い。テンポが揺れるバンドのテスト用）
    */
   function song(opts) {
     const sr = opts.sampleRate || 48000;
     const bpm = opts.bpm || 128;
-    const beat = 60 / bpm, bar = beat * 4, e8 = beat / 2, s16 = beat / 4;
+    const drift = opts.drift || 0;
+    const beat0 = 60 / bpm;
+    let beat = beat0, bar = beat * 4, e8 = beat / 2, s16 = beat / 4;
     const rnd = VJ.util.rng(opts.seed || 1);
     const human = opts.humanize === undefined ? 0.003 : opts.humanize;
     const sections = opts.sections;
     const lead = opts.lead || 0.25; // 先頭の無音
     const totalBars = sections.reduce((a, s) => a + s.bars, 0);
-    const m = new Mixer(sr, lead + totalBars * bar + (opts.tail || 1.5));
+    const m = new Mixer(sr, lead + totalBars * bar * (1 + Math.max(0, drift)) + (opts.tail || 1.5));
     const jit = () => (rnd() * 2 - 1) * human;
-    let t0 = lead;
+    let tb = lead, nBar = 0;
     let lastBassRoot = 0;
     for (const sec of sections) {
       const g = sec.gain === undefined ? 1 : sec.gain;
       const prog = sec.prog || ['E1', 'C2', 'G1', 'D2'];
-      for (let b = 0; b < sec.bars; b++) {
-        const tb = t0 + b * bar;
+      for (let b = 0; b < sec.bars; b++, nBar++) {
+        if (b > 0 || nBar > 0) tb += bar;
+        // テンポの揺れ：小節ごとに拍の長さを少しずつ変える
+        beat = beat0 * (1 + (drift * nBar) / Math.max(1, totalBars));
+        bar = beat * 4; e8 = beat / 2; s16 = beat / 4;
         const root = NOTE[prog[b % prog.length]] || 41.2;
         const v = () => g * (0.85 + rnd() * 0.15);
         if (sec.crash && b === 0) m.crash(tb, g, rnd);
@@ -197,8 +215,16 @@
             for (let k = 0; k < 4; k++) m.kick(tb + k * beat + jit(), v(), rnd);
             break;
           }
-          default:
+          default: {
+            const P = PATTERNS[sec.drums];
+            if (!P) break;
+            const at = (k) => tb + k * s16 + (k % 4 === 2 && P.swing8 ? P.swing8 * e8 : 0) + (k % 2 === 1 && P.swing16 ? P.swing16 * s16 : 0) + jit();
+            for (const k of P.k || []) m.kick(at(k), v(), rnd);
+            for (const k of P.s || []) m.snare(at(k), v(), rnd);
+            for (const k of P.g || []) m.snare(at(k), v() * 0.35, rnd);
+            for (const k of P.h || []) m.hat(at(k), v() * (k % 4 === 0 ? 1 : 0.65), rnd, false);
             break;
+          }
         }
         if (sec.bass) {
           for (let k = 0; k < 8; k++) m.bass(tb + k * e8, e8 + 0.006, root, g * 0.9, k > 0 || lastBassRoot === root);
@@ -222,7 +248,6 @@
         }
         if (sec.vocal) m.pad(tb, r4 * 2 * maj[b % 4], g, bar);
       }
-      t0 += sec.bars * bar;
     }
     if (opts.normalize !== false) m.normalize(opts.peak || 0.7);
     return { samples: m.buf, sampleRate: sr, onsets: m.onsets, bpm, duration: m.buf.length / sr };

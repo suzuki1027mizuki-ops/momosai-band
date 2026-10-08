@@ -62,6 +62,30 @@ test('テンポ推定：いろいろな曲で ±2BPM 以内', () => {
   }
 });
 
+test('テンポ推定：シャッフル・ファンク・ヒップホップ・2 ビート・まばらなドラムでも、倍・半分・3:2 に取り違えず ±3%', () => {
+  const S = (drums, bpm, seed, bars = 20) => song({ bpm, seed, humanize: 0.008, sections: [{ bars, drums, bass: true, guitar: 'chord', vocal: true }] });
+  const cases = [
+    [S('shuffle', 110, 11), 110],
+    [S('funk', 104, 12), 104],
+    [S('hiphop', 88, 13), 88],
+    [S('twobeat', 184, 14, 28), 184], // 裏にスネアの 2 ビート（3:2 の 123 に取りやすい）
+    [S('sparse', 68, 15, 14), 68],
+    [song({ bpm: 132, seed: 16, sections: [{ bars: 20, drums: '8beat', bass: true, guitar: 'chug' }] }), 132], // 刻みのギター（88 に取りやすい）
+  ];
+  for (const [s, bpm] of cases) {
+    const r = analyze(VJ, s.samples, SR, { keepFrames: true });
+    const late = r.frames.filter((f) => f.t > 12 && f.conf > 0.2);
+    const ok = late.filter((f) => Math.abs(f.bpm - bpm) / bpm < 0.03).length / Math.max(1, late.length);
+    assert.ok(ok >= 0.9, `${bpm}: ${(ok * 100).toFixed(0)}% ok, last ${r.frames[r.frames.length - 1].bpm.toFixed(1)}`);
+  }
+});
+
+test('テンポ推定：ドラムの無い曲で速いテンポ（倍）に上げすぎない', () => {
+  const r = analyze(VJ, ARP.samples, SR, { keepFrames: true });
+  const late = r.frames.filter((f) => f.t > 10);
+  assert.ok(late.every((f) => f.bpm < 165), 'max ' + Math.max(...late.map((f) => f.bpm)).toFixed(1));
+});
+
 test('拍の位置：拍フラグがキックの位置とそろう', () => {
   const s = song({ bpm: 120, seed: 1, humanize: 0, sections: [{ bars: 16, drums: 'click' }] });
   const r = analyze(VJ, s.samples, SR, { keepFrames: true });
