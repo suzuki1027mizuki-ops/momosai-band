@@ -175,6 +175,78 @@ test('はじめてのガイドと本番前チェック：手順が自動で進�
   await page.close();
 });
 
+test('パネルの折りたたみ：見出しを押すと開閉・再読み込みしても残る・すべて開く / 閉じる・ガイドから飛ぶと開く。Space はフラッシュのまま', async () => {
+  const { page, errors } = await openApp(browser, DIST, 'test=1', { width: 1280, height: 900 });
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.waitForFunction(() => window.VJ && VJ.app && VJ.panel.app);
+  const sec = (n) => `#panel .psec[data-sec="${n}"]`;
+  assert.equal(await page.locator('#panel .psec').count(), 7);
+  assert.ok(await page.isVisible('#setlist'));
+  await page.click(`${sec(3)} .psec-btn`);
+  assert.equal(await page.isVisible('#setlist'), false);
+  assert.equal(await page.getAttribute(`${sec(3)} .psec-btn`, 'aria-expanded'), 'false');
+  assert.ok(await page.isVisible(`${sec(3)} h2`), '見出しは見えたまま');
+  // マウスで押した見出しにはフォーカスが残らず、Space はフラッシュになる
+  await page.waitForTimeout(50);
+  await page.evaluate(() => { const orig = VJ.app.show.flash.bind(VJ.app.show); window.__fl = []; VJ.app.show.flash = (k, src) => { window.__fl.push(src); return orig(k, src); }; });
+  await page.keyboard.press('Space');
+  assert.deepEqual(await page.evaluate(() => window.__fl), ['key'], 'Space でフラッシュ');
+  assert.equal(await page.isVisible('#setlist'), false, 'Space で見出しが開かない');
+  await page.waitForTimeout(400); // 保存（0.3 秒後）
+  await page.reload();
+  await page.waitForFunction(() => window.VJ && VJ.app && VJ.panel.app);
+  assert.equal(await page.isVisible('#setlist'), false, '再読み込みしても閉じたまま');
+  assert.ok(await page.isVisible('#btn-start'));
+  await page.click('#psec-close-all');
+  for (const id of ['#btn-start', '#opt-profile', '#out-size', '#opt-flashlimit', '#btn-show', '#net-on']) assert.equal(await page.isVisible(id), false, id);
+  // ガイドの手順を押すと、その見出しが開く
+  await page.evaluate(() => { VJ.app.settings.guide = true; VJ.guide.render(); });
+  await page.click('#guide li[data-sec="6"]');
+  assert.ok(await page.isVisible('#btn-show'));
+  assert.equal(await page.isVisible('#btn-start'), false);
+  await page.click('#psec-open-all');
+  for (const id of ['#btn-start', '#setlist', '#opt-flashlimit', '#net-on']) assert.ok(await page.isVisible(id), id);
+  assert.deepEqual(await page.evaluate(() => VJ.app.settings.panelFold), {});
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test('フラッシュの上限：推奨を超えると警告（パネル・本番前チェック）。照明のチェイスも同じ上限。激しさは保存される', async () => {
+  const { page, errors } = await openApp(browser, DIST, 'test=1', { width: 1280, height: 900 });
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.waitForFunction(() => window.VJ && VJ.app && VJ.panel.app);
+  assert.equal(await page.inputValue('#opt-flashlimit'), '3');
+  assert.equal(await page.inputValue('#opt-intensity'), '2');
+  assert.equal(await page.isVisible('#flashlimit-warn'), false);
+  await page.selectOption('#opt-flashlimit', '6');
+  assert.ok(await page.isVisible('#flashlimit-warn'));
+  assert.equal(await page.evaluate(() => VJ.app.show.limiter.cfg.maxPerSec), 6);
+  assert.ok(Math.abs(await page.evaluate(() => VJ.app.show.limiter.gap()) - 1 / 6) < 1e-9, '照明のチェイスの間隔');
+  await page.click('#btn-precheck');
+  await page.waitForFunction(() => /1 秒に 6 回/.test(document.getElementById('precheck').textContent));
+  assert.match(await page.textContent('#precheck'), /推奨は 3 回まで/);
+  await page.selectOption('#opt-flashlimit', '0');
+  assert.equal(await page.evaluate(() => VJ.app.show.limiter.cfg.maxPerSec), Infinity, '制限なし');
+  await page.waitForFunction(() => /制限なし/.test(document.getElementById('precheck').textContent));
+  // フラッシュを一切使わないなら、上限は選べず警告も出ない
+  await page.check('#opt-noflash');
+  assert.ok(await page.isDisabled('#opt-flashlimit'));
+  assert.equal(await page.isVisible('#flashlimit-warn'), false);
+  await page.uncheck('#opt-noflash');
+  await page.selectOption('#opt-flashlimit', '3');
+  assert.equal(await page.isVisible('#flashlimit-warn'), false);
+  await page.selectOption('#opt-intensity', '3');
+  await page.waitForTimeout(400);
+  await page.reload();
+  await page.waitForFunction(() => window.VJ && VJ.app && VJ.panel.app);
+  assert.equal(await page.inputValue('#opt-intensity'), '3');
+  assert.equal(await page.evaluate(() => VJ.app.show.switchK()), 0.5);
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
 test('2 画面：操作ウィンドウに出力の映像が小さく出る。プレビューを切ると送らない', async () => {
   const { page: ctrl, errors } = await openApp(browser, DIST, 'test=1', { width: 1100, height: 800 });
   const [out] = await Promise.all([ctrl.context().waitForEvent('page'), ctrl.click('#btn-output')]);
@@ -222,7 +294,7 @@ test('英語：新しい部品（ガイド・出演バンド・セットリス�
   const left = await page.evaluate(() => {
     const JP = /[぀-ヿ㐀-鿿！-｠]/;
     const out = [];
-    for (const id of ['guide', 'band-list', 'setlist-preview', 'sc-box', 'precheck', 'scene-grid']) {
+    for (const id of ['guide', 'band-list', 'setlist-preview', 'sc-box', 'precheck', 'scene-grid', 'panel']) {
       const w = document.createTreeWalker(document.getElementById(id), NodeFilter.SHOW_TEXT);
       for (let n = w.nextNode(); n; n = w.nextNode()) if (JP.test(n.nodeValue) && !n.parentElement.closest('[data-i18n-skip]')) out.push(id + ': ' + n.nodeValue.trim());
     }

@@ -387,6 +387,12 @@
       q.set('u_black', fr.black || 0);
       q.set('u_master', fr.master === undefined ? 1 : fr.master);
       q.set('u_impact', fr.impact || 0);
+      q.set('u_punch', fr.punch || 0);
+      q.set('u_rgb', fr.rgb || 0);
+      const sh = this._shake || (this._shake = new Float32Array(2));
+      sh[0] = fr.shakeX || 0;
+      sh[1] = fr.shakeY || 0;
+      q.set('u_shake', sh);
       q.set('u_latSq', fr.latSq === undefined ? -1 : fr.latSq);
       q.set('u_vignette', fr.vignette === undefined ? 0.6 : fr.vignette);
       gl.drawArrays(gl.TRIANGLES, 0, 3);

@@ -1,4 +1,5 @@
 /* 仕上げパス：表示の調整（位置・サイズ・回転・反転）→ シーンの拡大（切替中は前のシーンと混ぜる）+ インパクト（色収差＋ズーム）
+ * + 激しさ（キックで寄る・スネアで揺れる・色ずれ）
  * + 曲名 + テロップ + ロゴの透かし + フラッシュ + 明るさ + 暗転 + 周辺減光 + ディザ + 遅延計測用の四角。
  * 「論理座標」はシーン・文字の座標（回転後の画面）、「物理座標」は実際のキャンバスの画素。 */
 (function (VJ) {
@@ -18,6 +19,8 @@ uniform float u_rot;         // 0..3（90° 単位、時計回り）
 uniform vec2 u_flip;         // 左右・上下反転（物理）
 uniform vec2 u_lres;         // 論理サイズ（回転後）
 uniform float u_time, u_flash, u_black, u_master, u_impact, u_textAlpha, u_text2Alpha, u_logoAlpha, u_latSq, u_vignette;
+uniform float u_punch, u_rgb; // 激しさ：キックで寄る（拡大率）・色ずれ
+uniform vec2 u_shake;         // 激しさ：スネアで揺れる（画面の高さに対する割合）
 uniform vec3 u_flashColor;
 uniform vec4 u_textRect, u_text2Rect, u_logoRect;
 
@@ -51,9 +54,12 @@ void main() {
     else if (u_rot > 2.5) uv = vec2(q.y, 1.0 - q.x);
 
     vec2 c = uv - 0.5;
-    // インパクト：明るさを変えずに色収差とズーム（フラッシュ制限の対象外で安全）
-    vec2 uz = 0.5 + c * (1.0 - 0.03 * u_impact);
-    float ca = 0.008 * u_impact;
+    // インパクト・激しさ：明るさを変えずに色収差・ズーム・揺れ（フラッシュ制限の対象外で安全）
+    // 揺らした分だけ余分に寄せて、画面の端の外（引き伸ばされた画素）が見えないようにする
+    vec2 sh = u_shake * vec2(u_lres.y / u_lres.x, 1.0);
+    float zoom = 0.03 * u_impact + u_punch + 2.0 * max(abs(sh.x), abs(sh.y));
+    vec2 uz = 0.5 + c * (1.0 - zoom) + sh;
+    float ca = 0.008 * u_impact + u_rgb;
     col.r = sceneAt(uz + c * ca).r;
     col.g = sceneAt(uz).g;
     col.b = sceneAt(uz - c * ca).b;

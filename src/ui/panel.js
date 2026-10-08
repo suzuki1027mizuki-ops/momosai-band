@@ -140,7 +140,15 @@
       };
       bindCheck('opt-auto', 'auto');
       bindCheck('opt-autoflash', 'autoFlash');
-      bindCheck('opt-noflash', 'noFlash');
+      bindCheck('opt-noflash', 'noFlash', () => panel.syncFlashLimit());
+      $('opt-flashlimit').addEventListener('change', () => {
+        s.flashLimit = +$('opt-flashlimit').value;
+        panel.syncFlashLimit();
+        if (VJ.safety.overSafe(s.flashLimit)) app.ui.toast(t('フラッシュの上限が推奨（1 秒に 3 回）を超えています'), 'warn');
+        panel.applyShow(true);
+      });
+      $('opt-intensity').addEventListener('change', () => { s.intensity = +$('opt-intensity').value; panel.applyShow(true); });
+      panel.syncFlashLimit();
       bindCheck('opt-speechtitle', 'speechTitle');
       $('opt-xfade').value = String(s.crossfade);
       if ($('opt-xfade').selectedIndex < 0) $('opt-xfade').value = '-1';
@@ -209,6 +217,7 @@
       VJ.scenePick.install(app);
       VJ.bandsUI.install(app);
       VJ.soundcheckUI.install(app);
+      VJ.sections.install(app);
       VJ.guide.install(app);
       VJ.setlistEd.install(app);
 
@@ -690,6 +699,17 @@
       VJ.storage.save(panel.app.settings);
     },
 
+    /** フラッシュの上限・激しさの表示（設定ファイルの値が選択肢に無ければ足す）と、推奨を超えたときの警告 */
+    syncFlashLimit() {
+      const s = panel.app.settings, sel = $('opt-flashlimit');
+      const v = String(s.flashLimit);
+      if (!Array.from(sel.options).some((o) => o.value === v)) sel.add(new Option(t('1 秒に {0} 回', v), v));
+      sel.value = v;
+      sel.disabled = !!s.noFlash;
+      $('flashlimit-warn').hidden = !!s.noFlash || !VJ.safety.overSafe(s.flashLimit);
+      $('opt-intensity').value = String(s.intensity);
+    },
+
     _replace(ns) {
       const s = panel.app.settings;
       for (const k of Object.keys(ns)) s[k] = ns[k];
@@ -704,6 +724,7 @@
         ['opt-latsq', 'latencySquare'], ['opt-autostart', 'autoStart'], ['opt-desync', 'desynchronized'], ['opt-speechtitle', 'speechTitle']]) $(id).checked = !!s[key];
       $('opt-xfade').value = String(s.crossfade);
       if ($('opt-xfade').selectedIndex < 0) $('opt-xfade').value = '-1';
+      panel.syncFlashLimit();
       $('demo-kind').value = ['band', 'sing', 'speech'].includes(s.demoKind) ? s.demoKind : 'band';
       $('opt-lang').value = ['auto', 'ja', 'en'].includes(s.lang) ? s.lang : 'auto';
       if (VJ.i18n.resolve(s.lang) !== VJ.i18n.lang) panel.setLang(s.lang);
@@ -721,6 +742,7 @@
       panel.renderCustom();
       panel.renderAutoScenes();
       panel.renderSceneParams(true);
+      VJ.sections.render();
       if ($('midi-map-box').open) panel.renderMidiMap();
       for (const [id, o, k] of [['net-on', 'net', 'enabled'], ['net-url', 'net', 'url'], ['osc-on', 'osc', 'enabled'], ['osc-host', 'osc', 'host'], ['osc-port', 'osc', 'port'], ['osc-rate', 'osc', 'rate'],
         ['dmx-on', 'dmx', 'enabled'], ['dmx-out', 'dmx', 'out'], ['dmx-host', 'dmx', 'host'], ['dmx-uni', 'dmx', 'universe'], ['dmx-type', 'dmx', 'type'], ['dmx-count', 'dmx', 'count'],

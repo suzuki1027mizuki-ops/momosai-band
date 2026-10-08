@@ -63,8 +63,10 @@
       // タイトル（開演前・MC・終演）は操作者が離れるまで維持する
       if (st.sceneId === 'title') return null;
       const prof = (show.profile && show.profile.show) || {};
-      const S = prof.switchSec || this.opts.switchSec;
-      const KF = prof.kickFallbackSec || this.opts.kickFallbackSec;
+      // 激しさの設定で間隔を短く・長く
+      const k = show.switchK ? show.switchK() : 1;
+      const S = (prof.switchSec || this.opts.switchSec) * k;
+      const KF = (prof.kickFallbackSec || this.opts.kickFallbackSec) * k;
       const since = now - this.lastSwitch;
       const fl = f.onsetFlags;
       // 1) キメ・ブレイク明け  2) 少し待っても無ければ小節の頭（テンポが取れているとき）  3) それも無ければキック

@@ -38,6 +38,15 @@ body.nocursor #panel, body.nocursor #panel * { cursor: auto !important; }
   background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
 #panel header .ver { color: var(--muted); font-size: 11px; flex: 1; }
 #panel h2 { font-size: 13px; color: var(--accent); margin: 18px 0 8px; letter-spacing: 0.05em; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+#panel h2 .psec-btn { all: unset; display: flex; align-items: center; gap: 6px; width: 100%; cursor: pointer; box-sizing: border-box; }
+#panel h2 .psec-btn::before { content: '▾'; display: inline-block; width: 1em; text-align: center; color: var(--muted); transition: transform 0.15s; }
+#panel h2 .psec-btn:hover { color: var(--text); }
+#panel h2 .psec-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+#panel .psec.closed h2 { margin-bottom: 0; }
+#panel .psec.closed h2 .psec-btn::before { transform: rotate(-90deg); }
+#panel .psec.closed > .psec-body { display: none; }
+#panel .psec-all { justify-content: flex-end; margin: 2px 0 -8px; }
+#panel .psec-all button { font-size: 11px; padding: 2px 8px; }
 #panel label { display: inline-flex; align-items: center; gap: 4px; margin-right: 10px; cursor: pointer; }
 #panel .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 4px; margin: 6px 0; }
 #panel .hint { color: var(--muted); font-size: 12px; margin: 4px 0; }
@@ -198,8 +207,11 @@ body.remote-mode #stage { opacity: 0.25; }
     <div class="warnbox resume"><span id="resume-text"></span> <button id="btn-resume">前回の続きから再開</button> <button id="btn-resume-no">いいえ</button></div>
   </div>
   <div id="guide" class="guide" hidden></div>
+  <div class="row psec-all"><button id="psec-open-all" title="①〜⑦ をすべて開く">すべて開く</button><button id="psec-close-all" title="①〜⑦ をすべて閉じる（見出しを押すと 1 つずつ開きます）">すべて閉じる</button></div>
 
-  <h2>① 音声入力</h2>
+  <section class="psec" data-sec="1">
+  <h2><button type="button" class="psec-btn" aria-expanded="true">① 音声入力</button></h2>
+  <div class="psec-body">
   <div class="row">
     <label><input type="radio" name="src" value="mic" checked> マイク / ライン</label>
     <label><input type="radio" name="src" value="display"> PC で再生中の音</label>
@@ -242,8 +254,10 @@ body.remote-mode #stage { opacity: 0.25; }
   <div class="row"><button id="btn-sc">サウンドチェック（自動調整）</button></div>
   <div class="hint">リハで約 20 秒：音の大きさ・音割れ・会場の雑音を調べて、音楽のタイプと「無音とみなす音量」をおすすめします。</div>
   <div id="sc-box" class="scbox" hidden></div>
-
-  <h2>② 音楽のタイプ・テンポ</h2>
+  </div></section>
+  <section class="psec" data-sec="2">
+  <h2><button type="button" class="psec-btn" aria-expanded="true">② 音楽のタイプ・テンポ</button></h2>
+  <div class="psec-body">
   <div class="row"><select id="opt-profile"></select></div>
   <div class="hint" id="profile-desc"></div>
   <div class="row">
@@ -251,8 +265,10 @@ body.remote-mode #stage { opacity: 0.25; }
     <button id="btn-tap" title="拍に合わせて 3 回以上（Enter キーでも）">タップ</button>
   </div>
   <div class="row"><span>声</span><b id="voice-view" class="bpm">—</b><span class="hint" id="speech-view"></span></div>
-
-  <h2>③ 出演バンド・セットリスト・文字</h2>
+  </div></section>
+  <section class="psec" data-sec="3">
+  <h2><button type="button" class="psec-btn" aria-expanded="true">③ 出演バンド・セットリスト・文字</button></h2>
+  <div class="psec-body">
   <div class="bandlist" id="band-list"></div>
   <div class="row"><button id="band-add">＋ バンドを追加</button><button id="band-next">次のバンドへ ▶（N）</button></div>
   <div class="hint">バンドごとに名前・セットリスト・ロゴ・音楽のタイプ・色・開演時刻・テロップを覚えます。下の欄は「出演中」のバンドの内容です。</div>
@@ -286,8 +302,10 @@ body.remote-mode #stage { opacity: 0.25; }
     <div class="row msg"><kbd>E</kbd><input type="text" id="msg-2" placeholder="例：アンコールありがとう！"><button data-msg="2">表示</button></div>
     <div class="hint">キー（Q / W / E）かボタンで表示、もう一度押すと消えます。</div>
   </details>
-
-  <h2>④ 表示（スクリーンに合わせる）</h2>
+  </div></section>
+  <section class="psec" data-sec="4">
+  <h2><button type="button" class="psec-btn" aria-expanded="true">④ 表示（スクリーンに合わせる）</button></h2>
+  <div class="psec-body">
   <div class="row">
     <span>回転</span>
     <select id="out-rotate"><option value="0">なし</option><option value="90">90°（縦置き）</option><option value="180">180°（逆さ吊り）</option><option value="270">270°</option></select>
@@ -306,15 +324,39 @@ body.remote-mode #stage { opacity: 0.25; }
     <button id="btn-output-stop" hidden>出力ウィンドウを閉じる</button>
   </div>
   <div class="hint" id="output-hint">プロジェクターを「拡張」でつないだときに使います。映像だけのウィンドウを開いてプロジェクター側で全画面にし、このウィンドウは操作・確認用になります（観客に操作画面が見えません）。</div>
-
-  <h2>⑤ オプション</h2>
+  </div></section>
+  <section class="psec" data-sec="5">
+  <h2><button type="button" class="psec-btn" aria-expanded="true">⑤ オプション</button></h2>
+  <div class="psec-body">
   <div class="row">
     <label><input type="checkbox" id="opt-auto"> オート（自動でシーン切替）</label>
     <label><input type="checkbox" id="opt-autoflash"> キメで自動フラッシュ</label>
   </div>
   <div class="row">
+    <span>激しさ</span>
+    <select id="opt-intensity">
+      <option value="0">控えめ</option>
+      <option value="1">ふつう</option>
+      <option value="2">激しい（おすすめ）</option>
+      <option value="3">最大</option>
+    </select>
+  </div>
+  <div class="hint">激しいほど、キックで画面が寄る・スネアで揺れる・拍ごとに軽く光る・オートの切替が速くなります（しっとり系・歌・司会のタイプでは弱め。フラッシュを一切使わないときは寄り・揺れもしません）。</div>
+  <div class="row">
     <label><input type="checkbox" id="opt-noflash"> フラッシュを一切使わない（光に配慮が必要な会場）</label>
   </div>
+  <div class="row">
+    <span>フラッシュの上限</span>
+    <select id="opt-flashlimit">
+      <option value="2">1 秒に 2 回（より安全）</option>
+      <option value="3">1 秒に 3 回（推奨）</option>
+      <option value="4">1 秒に 4 回</option>
+      <option value="6">1 秒に 6 回</option>
+      <option value="10">1 秒に 10 回</option>
+      <option value="0">制限なし</option>
+    </select>
+  </div>
+  <div class="warnbox" id="flashlimit-warn" hidden>⚠ 1 秒に 3 回を超える点滅は、光過敏性発作を起こすおそれがあるとされています（放送のガイドライン・WCAG）。会場に「強い光の点滅があります」と掲示し、観客の様子に気をつけてください。</div>
   <div class="row">
     <label><input type="checkbox" id="opt-speechtitle"> MC（話し声）のあいだはタイトルにする（オート ON のとき）</label>
   </div>
@@ -379,8 +421,10 @@ body.remote-mode #stage { opacity: 0.25; }
       <button id="btn-reset">初期設定に戻す</button>
     </div>
   </details>
-
-  <h2>⑥ 本番</h2>
+  </div></section>
+  <section class="psec" data-sec="6">
+  <h2><button type="button" class="psec-btn" aria-expanded="true">⑥ 本番</button></h2>
+  <div class="psec-body">
   <div class="row"><button id="btn-precheck">本番前チェック</button></div>
   <div id="precheck" class="scbox" hidden></div>
   <button class="big" id="btn-show">ショー開始（全画面）</button>
@@ -389,8 +433,10 @@ body.remote-mode #stage { opacity: 0.25; }
   <div class="scene-grid" id="scene-grid"></div>
   <div class="keys" id="keys-mini"></div>
   <div class="row"><button id="btn-cheatsheet">キー早見表を印刷</button></div>
-
-  <h2>⑦ 外部連携（スマホ・OSC・照明）</h2>
+  </div></section>
+  <section class="psec" data-sec="7">
+  <h2><button type="button" class="psec-btn" aria-expanded="true">⑦ 外部連携（スマホ・OSC・照明）</button></h2>
+  <div class="psec-body">
   <div class="hint" data-i18n-html>スマホからの操作・OSC・Art-Net には「ブリッジ」が要ります。単体アプリには入っています。ブラウザ版は <code>bridge</code> フォルダの起動ファイル（Node.js が必要）で起動します。</div>
   <div class="row"><label><input type="checkbox" id="net-on"> ブリッジにつなぐ</label><input type="text" id="net-url" spellcheck="false" style="flex: 1; width: auto"></div>
   <div class="status" id="net-status">つないでいません</div>
@@ -433,9 +479,10 @@ body.remote-mode #stage { opacity: 0.25; }
     <div class="row"><span>明るさの上限</span><input type="range" id="dmx-max" min="0" max="1" step="0.05"><span id="dmx-max-v"></span></div>
     <div class="row"><span>キックで光る強さ</span><input type="range" id="dmx-pulse" min="0" max="1" step="0.05"><span id="dmx-pulse-v"></span></div>
     <div class="row"><label><input type="checkbox" id="dmx-flash"> フラッシュで照明も白く光らせる</label></div>
-    <div class="hint">色は映像のパレットの 4 色を順に。キックで 1 台ずつ順に強く光ります（1 秒に 3 回まで）。暗転・明るさは映像と同じ。</div>
+    <div class="hint">色は映像のパレットの 4 色を順に。キックで 1 台ずつ順に強く光ります（⑤ のフラッシュの上限まで。既定は 1 秒に 3 回）。暗転・明るさは映像と同じ。</div>
     <div class="status" id="dmx-status"></div>
   </details>
+  </div></section>
 </div>
 
 <div id="remote" hidden>
@@ -515,6 +562,7 @@ body.remote-mode #stage { opacity: 0.25; }
 <script src="src/ui/scenepick.js"></script>
 <script src="src/ui/bandsui.js"></script>
 <script src="src/ui/soundcheck.js"></script>
+<script src="src/ui/sections.js"></script>
 <script src="src/ui/guide.js"></script>
 <script src="src/ui/setlisted.js"></script>
 <script src="src/ui/panel.js"></script>

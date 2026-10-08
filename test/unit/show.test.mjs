@@ -45,6 +45,32 @@ test('フラッシュ制限：1 秒に 3 回まで・200ms 間隔・赤は白に
   assert.deepEqual(VJ.safety.safeFlashColor([0.2, 0.9, 1]), [0.2, 0.9, 1]);
 });
 
+test('フラッシュの上限：設定で 2 / 4 / 6 / 10 回・制限なしにでき、拍ごとの軽いフラッシュは 1 回分を残す', () => {
+  const count = (lim, step, reserve) => { let ok = 0; for (let i = 0; i < 20; i++) if (lim.allow(i * step, reserve)) ok++; return ok; };
+  for (const [n, want] of [[2, 2], [3, 3], [4, 4], [6, 6], [10, 10]]) {
+    const lim = new VJ.safety.FlashLimiter();
+    lim.setLimit(n);
+    assert.equal(count(lim, 0.05), want, `limit ${n}`);
+  }
+  const free = new VJ.safety.FlashLimiter();
+  free.setLimit(0);
+  assert.equal(count(free, 0.05), 20, '制限なし');
+  assert.equal(free.gap(), 0);
+  const def = new VJ.safety.FlashLimiter();
+  assert.equal(def.cfg.maxPerSec, 3);
+  assert.equal(def.cfg.minGap, 0.2);
+  def.setLimit(3);
+  assert.equal(def.cfg.minGap, 0.2, '3 回のときは今までと同じ間隔');
+  assert.deepEqual([0, 0.25, 0.5].map((t) => def.allow(t, 1)), [true, true, false], '拍ごとのフラッシュは 3 回のうち 2 回まで');
+  assert.ok(def.allow(0.75), 'キメの分が残っている');
+  assert.ok(!VJ.safety.overSafe(3) && !VJ.safety.overSafe(2));
+  assert.ok(VJ.safety.overSafe(4) && VJ.safety.overSafe(0));
+  // 設定の値は 0〜30 の整数に
+  assert.equal(VJ.storage.fromJSON(JSON.stringify({ flashLimit: 6.4, intensity: 9 })).flashLimit, 6);
+  assert.equal(VJ.storage.fromJSON(JSON.stringify({ flashLimit: -2, intensity: -1 })).intensity, 0);
+  assert.equal(VJ.storage.fromJSON(JSON.stringify({ flashLimit: 'x' })).flashLimit, 3);
+});
+
 function fakeFeatures(over) {
   return Object.assign({ active: true, silenceSec: 0, onsetFlags: 0, kick: 0, snare: 0, hat: 0, accent: 0, level: 0.5, intensity: 0.5, kickN: 0, snareN: 0 }, over || {});
 }
@@ -108,6 +134,71 @@ test('コントローラ：ストロボもフラッシュ制限を超えない�
   assert.ok(c.state.black > 0.4 && c.state.black < 0.6);
   c.update(fakeFeatures(), 0.3, t + 0.55);
   assert.equal(c.state.black, 1);
+});
+
+test('コントローラ：フラッシュの上限の設定が効く（照明のチェイスも同じ間隔）・フラッシュ OFF なら上限に関係なく光らない', () => {
+  const run = (over) => {
+    const s = Object.assign({}, VJ.defaultSettings, { auto: false }, over);
+    const c = new VJ.ShowController(s);
+    let n = 0;
+    for (let i = 0; i < 60; i++) if (c.flash(0.8, 'key')) { n++; c.update(fakeFeatures(), 1 / 60, (i + 1) / 60); } else c.update(fakeFeatures(), 1 / 60, (i + 1) / 60);
+    return [n, c];
+  };
+  assert.equal(run({})[0], 3);
+  assert.equal(run({ flashLimit: 6 })[0], 6);
+  assert.ok(run({ flashLimit: 0 })[0] >= 30);
+  assert.equal(run({ flashLimit: 10, noFlash: true })[0], 0);
+  const [, c6] = run({ flashLimit: 6 });
+  assert.ok(Math.abs(c6.limiter.gap() - 1 / 6) < 1e-9);
+  c6.applySettings(Object.assign({}, c6.settings, { flashLimit: 3 }));
+  assert.ok(Math.abs(c6.limiter.gap() - 1 / 3) < 1e-9, '設定を戻すと 3 回に戻る');
+});
+
+test('激しさ：激しい・最大ではキックで寄る・スネアで揺れる・拍ごとに軽く光る・オートの切替が速い。ふつう以下と司会のタイプではしない', () => {
+  const run = (over, frames) => {
+    const s = Object.assign({}, VJ.defaultSettings, { auto: false, autoFlash: true }, over);
+    const c = new VJ.ShowController(s);
+    c._applyScene('ripple');
+    let t = 0, flashes = 0, punch = 0, shake = 0, rgb = 0;
+    for (let i = 0; i < (frames || 120); i++) {
+      t += 1 / 60;
+      // 120BPM：キック（0.5 秒ごと）とスネア（その間）
+      const k = i % 30 === 0, sn = i % 30 === 15;
+      const prev = c.state.flash;
+      c.update(fakeFeatures({ onsetFlags: (k ? 1 : 0) | (sn ? 2 : 0), kick: k ? 0.9 : 0, snare: sn ? 0.9 : 0 }), 1 / 60, t);
+      if (c.state.flash > prev + 0.1) flashes++;
+      const fr = c.frame(fakeFeatures(), 1 / 60, null);
+      punch = Math.max(punch, fr.punch); shake = Math.max(shake, Math.hypot(fr.shakeX, fr.shakeY)); rgb = Math.max(rgb, fr.rgb);
+    }
+    return { flashes, punch, shake, rgb, c };
+  };
+  const calm = run({ intensity: 1 });
+  assert.equal(calm.flashes, 0, 'ふつう：キメ以外では光らない（以前と同じ）');
+  assert.equal(calm.punch + calm.shake + calm.rgb, 0);
+  const hot = run({ intensity: 2 });
+  assert.ok(hot.flashes >= 3 && hot.flashes <= 4, '激しい：拍ごとに光る（2 秒で 1 秒あたり 2 回まで） ' + hot.flashes);
+  assert.ok(hot.punch > 0.02 && hot.shake > 0.005 && hot.rgb > 0.005, JSON.stringify(hot));
+  const max = run({ intensity: 3 });
+  assert.ok(max.punch > hot.punch && max.shake > hot.shake);
+  assert.ok(max.c.react() > hot.c.react() && hot.c.react() > calm.c.react());
+  assert.ok(max.c.switchK() < hot.c.switchK() && hot.c.switchK() < calm.c.switchK());
+  // 自動フラッシュ OFF・司会のタイプでは拍のフラッシュも寄り・揺れもしない
+  assert.equal(run({ intensity: 3, autoFlash: false }).flashes, 0);
+  const mc = run({ intensity: 3, profile: 'speech' });
+  assert.equal(mc.flashes + mc.punch + mc.shake, 0);
+  assert.ok(run({ intensity: 3, profile: 'calm' }).punch < hot.punch * 0.5, 'しっとり系では弱め');
+  const off = run({ intensity: 3, noFlash: true });
+  assert.equal(off.flashes + off.punch + off.shake + off.rgb, 0, 'フラッシュを一切使わない会場では寄り・揺れもしない');
+  // キメでも揺れる（スネアが来る前から向きがある）
+  const s2 = Object.assign({}, VJ.defaultSettings, { auto: false, autoFlash: true, intensity: 2 });
+  const c2 = new VJ.ShowController(s2);
+  c2.update(fakeFeatures({ onsetFlags: 8, accent: 1 }), 1 / 60, 1);
+  const fr2 = c2.frame(fakeFeatures(), 1 / 60, null);
+  assert.ok(Math.hypot(fr2.shakeX, fr2.shakeY) > 0.005 && fr2.punch > 0.03);
+  c2.toggleTestPattern();
+  c2.update(fakeFeatures({ onsetFlags: 8, accent: 1 }), 1 / 60, 2);
+  const fr3 = c2.frame(fakeFeatures(), 1 / 60, null);
+  assert.equal(fr3.punch + fr3.shakeX + fr3.shakeY + fr3.rgb, 0, 'テストパターンは動かさない');
 });
 
 test('オート：一定時間後のアクセントで切替・無音でタイトル・強打で復帰', () => {

@@ -40,10 +40,11 @@
       guide.render();
     },
 
-    /** パネルの n 番の見出しまでスクロールして、少し光らせる */
+    /** パネルの n 番の見出しまでスクロールして、少し光らせる（閉じていたら開く） */
     scrollTo(n) {
       const h = Array.from(document.querySelectorAll('#panel h2')).find((x) => x.textContent.trim().startsWith('①②③④⑤⑥⑦'[n - 1]));
       if (!h) return;
+      if (VJ.sections) VJ.sections.open(n);
       h.scrollIntoView({ behavior: 'smooth', block: 'start' });
       h.classList.remove('flash-h');
       void h.offsetWidth;
@@ -128,7 +129,10 @@
       if (p.errors.length) add('warn', t('セットリストに読めない行があります（{0} 件。③ を確認）', p.errors.length));
       // 光
       if (s.noFlash) add('info', t('フラッシュを一切使わない設定です'));
-      else add('ok', t('フラッシュは 1 秒に 3 回まで（光過敏対策）。会場に「光の点滅があります」と掲示してください'));
+      else if (VJ.safety.overSafe(s.flashLimit)) {
+        add('warn', (+s.flashLimit ? t('フラッシュの上限が 1 秒に {0} 回です', s.flashLimit) : t('フラッシュの上限が「制限なし」です'))
+          + t('（推奨は 3 回まで。光過敏性発作のおそれ）。会場に「強い光の点滅があります」と必ず掲示してください（⑤）'));
+      } else add('ok', t('フラッシュは 1 秒に {0} 回まで（光過敏対策）。会場に「光の点滅があります」と掲示してください', s.flashLimit));
       // スリープ
       if (VJ.compat.features().wakeLock) add('ok', t('「ショー開始」で画面のスリープを止めます'));
       else add('warn', t('この環境では画面のスリープを止められません。PC の設定でスリープ・画面オフを「なし」に'));

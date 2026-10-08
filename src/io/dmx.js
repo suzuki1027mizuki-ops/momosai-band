@@ -4,7 +4,7 @@
  *     rgb（R G B）/ drgb（調光 R G B）/ rgbw（R G B W）/ drgbw（調光 R G B W）/ dim（調光のみ）
  *   動き：音量で明るさ、キックで 1 台ずつ順に強く光る（チェイス）。色はパレットの 4 色を順に。
  *         フラッシュ（光過敏対策の制限を通ったもの）は白を足す。暗転・明るさは映像と同じ。
- * 光過敏対策：キックで強く光るのは 1 秒に 3 回まで。 */
+ * 光過敏対策：キックで強く光るのは映像のフラッシュと同じ上限まで（既定 1 秒に 3 回）。 */
 (function (VJ) {
   'use strict';
 
@@ -53,9 +53,10 @@
       out.fill(0);
       const st = show.state, pal = show.palFloat;
       const gain = c.max * (st.master === undefined ? 1 : st.master) * (1 - (st.black || 0));
-      // キックのチェイス（1 秒に 3 回まで）
+      // キックのチェイス（映像のフラッシュと同じ上限まで。既定 1 秒に 3 回）
       if (f.kickN !== dmx._lastKickN) {
-        if (dmx._lastKickN >= 0 && t - dmx._pulseAt >= PULSE_GAP) {
+        const gap = show.limiter && show.limiter.gap ? show.limiter.gap() : PULSE_GAP;
+        if (dmx._lastKickN >= 0 && t - dmx._pulseAt >= gap) {
           dmx._pulseAt = t;
           dmx._hot = (dmx._hot + 1) % c.count;
         }

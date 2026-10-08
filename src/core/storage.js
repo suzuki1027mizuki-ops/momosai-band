@@ -43,6 +43,11 @@
     for (const [k, v] of Object.entries(s.autoScenes || {})) if (typeof v === 'boolean') as[k] = v;
     s.autoScenes = as;
     if (!s.messages.every((m) => typeof m === 'string')) s.messages = s.messages.map((m) => (typeof m === 'string' ? m : ''));
+    const pf = {};
+    for (const [k, v] of Object.entries(s.panelFold || {})) if (/^[1-9]$/.test(k) && v === true) pf[k] = true;
+    s.panelFold = pf;
+    s.flashLimit = Math.max(0, Math.min(30, Math.round(s.flashLimit)));
+    s.intensity = Math.max(0, Math.min(3, Math.round(s.intensity)));
     if (VJ.bands) VJ.bands.ensure(s);
     return s;
   }

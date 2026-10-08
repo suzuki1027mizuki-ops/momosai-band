@@ -83,6 +83,25 @@ test('光過敏：全シーン × 自動フラッシュ ON・140BPM で、どの
   }
 });
 
+test('光過敏：激しさ「最大」（寄る・揺れる・拍ごとのフラッシュ）でも、フラッシュの上限が既定なら全シーンで 1 秒に 3 フラッシュ以下', async () => {
+  for (const id of SCENES) {
+    const r = await run({ song: BAND, seconds: 16, sceneId: id, settings: { auto: false, autoFlash: true, intensity: 3 }, grid: [4, 3] });
+    const rf = regionFlashes(r.luma, 60);
+    assert.ok(Math.max(...rf) <= 3, `${id}: ${rf.join(' ')}`);
+  }
+});
+
+test('激しさ：キックで画面が寄る（同じ音・同じ動きの大きさでも「ふつう」と「激しい」で絵が変わる）', async () => {
+  const song = { bpm: 120, seed: 1, humanize: 0, lead: 1.0, sections: [{ bars: 2, drums: 'click' }] };
+  // 動きの大きさ（react × 激しさの倍率）はそろえて、寄り・揺れ・色ずれだけを比べる
+  const a = await run({ song, seconds: 1.3, sceneId: 'horizon', settings: { auto: false, autoFlash: false, intensity: 1, react: 0.8 }, grid: [8, 6] });
+  const b = await run({ song, seconds: 1.3, sceneId: 'horizon', settings: { auto: false, autoFlash: false, intensity: 2, react: 0.64 }, grid: [8, 6] });
+  const diff = (k) => mean(a.luma[k].map((v, i) => Math.abs(v - b.luma[k][i])));
+  assert.ok(diff(55) < 1e-4, 'キックの前は同じ ' + diff(55));
+  const hit = Math.max(diff(60), diff(61), diff(62));
+  assert.ok(hit > 0.003, 'キックの直後は寄った分だけ違う ' + hit);
+});
+
 test('光過敏：オートモードでシーンが切り替わっても基準内', async () => {
   const r = await run({ samples: 'demo', seconds: 70, sceneId: 'ripple', settings: { auto: true, autoFlash: true, setlistText: '' }, grid: [4, 3] });
   const rf = regionFlashes(r.luma, 60);

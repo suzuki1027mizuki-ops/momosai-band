@@ -32,7 +32,8 @@ test('MC：オート＋「MC のあいだはタイトル」で、話し声にな
 test('クロスフェード：切替の途中は 2 つのシーンが混ざり、急な明るさの変化にならない', async () => {
   const actions = {};
   for (let i = 0; i < 6; i++) actions[60 + i * 50] = [['selectScene', ['aurora', 'tunnel', 'bokeh', 'circle', 'waves', 'glitch'][i], { immediate: true }]];
-  const r = await page.evaluate((a) => VJ.testing.runOffline({ samples: 'demo', seconds: 7, sceneId: 'ripple', settings: { auto: false, autoFlash: true, crossfade: 1 }, grid: [4, 3], actions: a, pngAt: [85] }), actions);
+  // 拍ごとの軽いフラッシュ（激しさ「激しい」以上）は意図した明るさの変化なので、ここでは「ふつう」でフェードだけを見る
+  const r = await page.evaluate((a) => VJ.testing.runOffline({ samples: 'demo', seconds: 7, sceneId: 'ripple', settings: { auto: false, autoFlash: true, crossfade: 1, intensity: 1 }, grid: [4, 3], actions: a, pngAt: [85] }), actions);
   saveDataUrl(r.pngs[85], 'e2e-crossfade.png');
   const rf = regionFlashes(r.luma, 60);
   assert.ok(Math.max(...rf) <= 3, rf.join(' '));

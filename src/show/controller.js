@@ -11,6 +11,17 @@
   const PENDING_MAX = 1.0;
   const TEXT_IN = 0.3, TEXT_HOLD = 4.0, TEXT_OUT = 1.0;
 
+  /** 激しさ（設定 intensity）ごとの演出の強さ
+   *  react：動きの大きさに掛ける / punch：キックで画面ごと寄る・スネアで揺れる・色ずれ（明るさは変えない）
+   *  beat：拍ごとの軽いフラッシュ（0 なし / 1 強いキック・スネア / 2 中くらいから）/ accent：キメのフラッシュの強さ
+   *  switchK：オートの切替間隔に掛ける */
+  const INTENSITY = [
+    { react: 0.8, punch: 0, beat: 0, accent: [0.35, 0.6], switchK: 1.3 }, // 控えめ
+    { react: 1.0, punch: 0, beat: 0, accent: [0.45, 0.7], switchK: 1.0 }, // ふつう（以前と同じ）
+    { react: 1.25, punch: 1.0, beat: 1, accent: [0.6, 0.85], switchK: 0.7 }, // 激しい（既定）
+    { react: 1.5, punch: 1.6, beat: 2, accent: [0.75, 0.95], switchK: 0.5 }, // 最大
+  ];
+
   class ShowController {
     constructor(settings) {
       this.settings = settings;
@@ -30,6 +41,7 @@
         auto: !!settings.auto, locked: false,
         songIdx: -1, endState: false,
         flash: 0, flashColor: [1, 1, 1], impact: 0, strobe: false,
+        punch: 0, shake: 0, shakeX: 0, shakeY: 0, rgb: 0, // 激しさ：キックで寄る・スネアで揺れる・色ずれ
         text: null, travel: 0, idle: 1, latSq: 0,
         msg: null, // テロップ { text, t0, off }
         beforeTest: null, // テストパターンの前のシーン
@@ -57,6 +69,7 @@
       // settings.paletteIdx は常に「いま使っているパレット」（曲ごとのパレットも反映される）
       this.state.paletteIdx = s.paletteIdx | 0;
       this.profile = VJ.profileById(s.profile);
+      this.limiter.setLimit(s.flashLimit === undefined ? VJ.flashConfig.maxPerSec : s.flashLimit);
       this._palette();
       if (this.onSensitivity) this.onSensitivity(this.state.sens);
     }
@@ -67,8 +80,18 @@
       const def = VJ.scenes.byId[id];
       return !!def && !def.hidden && id !== 'title' && this.sceneAvailable(id) && !(this.settings.autoScenes && this.settings.autoScenes[id] === false);
     }
-    /** 動きの大きさ（設定 × 音楽タイプの基準） */
-    react() { return VJ.util.clamp((+this.settings.react || 1) * (this.profile.show.react || 1), 0.2, 1.6); }
+    /** 激しさの設定（INTENSITY の 1 行） */
+    intensity() { return INTENSITY[clamp(Math.round(this.settings.intensity === undefined ? 2 : +this.settings.intensity), 0, 3)]; }
+    /** 動きの大きさ（設定 × 音楽タイプの基準 × 激しさ） */
+    react() { return VJ.util.clamp((+this.settings.react || 1) * (this.profile.show.react || 1) * this.intensity().react, 0.2, 2); }
+    /** キックで寄る・揺れるの強さ（激しさ × 音楽タイプ。しっとり系・司会では弱く／なし。フラッシュを一切使わない会場ではしない） */
+    punchAmount() {
+      if (this.settings.noFlash) return 0;
+      const p = this.profile.show.punch;
+      return this.intensity().punch * (p === undefined ? 1 : p);
+    }
+    /** オートの切替間隔に掛ける数（激しいほど短く） */
+    switchK() { return this.intensity().switchK; }
     get auto() { return this.state.auto; }
     bandName() { return (this.setlist && this.setlist.band) || this.settings.bandName || ''; }
     endText() { return (this.setlist && this.setlist.end) || this.settings.endText || 'Thank you!'; }
@@ -235,8 +258,9 @@
     /** フラッシュ（制限器を通る）。strength 0 は「枠だけ消費」（反転・残像リセット用） */
     flash(strength, src) {
       if (this.settings.noFlash) return false;
-      if ((src === 'auto' || src === 'kaleido-reset' || src === 'glitch-invert') && !this.autoFlashOn()) return false;
-      if (!this.limiter.allow(this.now)) return false;
+      if ((src === 'auto' || src === 'beat' || src === 'kaleido-reset' || src === 'glitch-invert') && !this.autoFlashOn()) return false;
+      // 拍ごとの軽いフラッシュは、上限のうち 1 回分をキメ・手動のために残す
+      if (!this.limiter.allow(this.now, src === 'beat' ? 1 : 0)) return false;
       if (strength > 0) this.state.flash = Math.max(this.state.flash, strength);
       return true;
     }
@@ -358,6 +382,9 @@
       s.flash *= Math.exp(-dt / VJ.flashConfig.decay);
       if (s.flash < 0.002) s.flash = 0;
       s.impact *= Math.exp(-dt / 0.15);
+      s.punch *= Math.exp(-dt / 0.11);
+      s.shake *= Math.exp(-dt / 0.09);
+      s.rgb *= Math.exp(-dt / 0.12);
       s.travel += (0.15 + 0.85 * f.level) * dt;
       const idleT = !f.active || f.silenceSec > 2.5 ? 1 : 0;
       s.idle += (idleT - s.idle) * Math.min(1, dt / 1.0);
@@ -376,10 +403,31 @@
       }
 
       // 自動フラッシュ・ストロボ・インパクト
-      if (fl & (8 | 16)) this.flash(fl & 16 ? 0.7 : 0.45, 'auto');
+      const I = this.intensity();
+      if (fl & (8 | 16)) this.flash(fl & 16 ? I.accent[1] : I.accent[0], 'auto');
+      else if (I.beat && !f.speech) {
+        // 拍ごとの軽いフラッシュ（激しい・最大）：強いキック・スネアで
+        const lo = I.beat >= 2 ? 0.55 : 0.75;
+        if ((fl & 2) && f.snare >= lo + 0.05) this.flash(I.beat >= 2 ? 0.35 : 0.26, 'beat');
+        else if ((fl & 1) && f.kick >= lo) this.flash(I.beat >= 2 ? 0.3 : 0.2, 'beat');
+      }
       if (s.strobe && (fl & 3)) this.flash(0.65, 'strobe');
       if (fl & 16) s.impact = 1;
       else if (fl & 8) s.impact = Math.max(s.impact, 0.6);
+      // キックで画面ごと寄る・スネアで揺れる・色ずれ（明るさは変えないのでフラッシュの制限の対象外）
+      const P = this.punchAmount();
+      if (P > 0 && !f.speech) {
+        if ((fl & 1) && f.kick >= 0.35) s.punch = Math.max(s.punch, Math.min(1, f.kick));
+        const hit = fl & (8 | 16) ? 1 : (fl & 2) && f.snare >= 0.35 ? Math.min(1, f.snare) : 0;
+        if (hit) {
+          s.shake = Math.max(s.shake, hit);
+          this._shakeA = ((this._shakeA || 0) + 2.39996) % (Math.PI * 2); // 毎回ちがう向き（黄金角ずつ回す。テストで再現できるように乱数は使わない）
+          s.shakeX = Math.cos(this._shakeA);
+          s.shakeY = Math.sin(this._shakeA);
+          s.rgb = Math.max(s.rgb, hit);
+        }
+        if (fl & (8 | 16)) s.punch = 1;
+      }
 
       // 暗転（0.5 秒でフェード）
       const bt = s.blackout ? 1 : 0;
@@ -461,15 +509,17 @@
     _scaled(f) {
       const k = this.react();
       if (Math.abs(k - 1) < 1e-3) return f;
-      const g = this._sf || (this._sf = { kickEv: new Float32Array(f.kickEv.length), snareEv: new Float32Array(f.snareEv.length), accentEv: new Float32Array(f.accentEv.length) });
+      const g = this._sf || (this._sf = {});
       for (const key in f) {
         const v = f[key];
         if (typeof v !== 'object') g[key] = v;
         else if (key !== 'kickEv' && key !== 'snareEv' && key !== 'accentEv') g[key] = v;
       }
-      for (const t of ['kick', 'snare', 'hat', 'accent']) g[t] = Math.min(1, f[t] * k);
+      for (const t of ['kick', 'snare', 'hat', 'accent']) g[t] = Math.min(1, (f[t] || 0) * k);
       for (const t of ['kickEv', 'snareEv', 'accentEv']) {
-        const a = f[t], b = g[t];
+        const a = f[t];
+        if (!a) continue;
+        const b = g[t] && g[t].length === a.length ? g[t] : (g[t] = new Float32Array(a.length));
         for (let i = 0; i < a.length; i += 2) { b[i] = a[i]; b[i + 1] = Math.min(1, a[i + 1] * k); }
       }
       g.level = Math.min(1, f.level * (0.6 + 0.4 * k));
@@ -494,6 +544,12 @@
       fr.black = s.black;
       fr.master = s.master;
       fr.impact = s.impact * Math.min(1, this.react());
+      // 激しさ：寄り（拡大率）・揺れ（画面の高さに対する割合）・色ずれ。テストパターン（位置合わせ）では動かさない
+      const P = s.sceneId === 'test' ? 0 : this.punchAmount();
+      fr.punch = 0.06 * P * s.punch;
+      fr.shakeX = 0.012 * P * s.shake * s.shakeX;
+      fr.shakeY = 0.012 * P * s.shake * s.shakeY;
+      fr.rgb = 0.018 * P * Math.max(s.rgb, s.punch * 0.4);
       const ta = this.textAlpha();
       if (ta > 0 && getText) {
         const t = fr._text || (fr._text = { tex: null, alpha: 0 });

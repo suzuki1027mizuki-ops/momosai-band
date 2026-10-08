@@ -1,6 +1,7 @@
 /* 音楽のタイプ（プロファイル）。解析パラメータ（dsp）と演出（show）の既定値を切り替える。
  *   dsp  : VJ.dspConfig への上書き（配列は添字ごと・オブジェクトは再帰的に）
  *   show : switchSec（オートの切替間隔）/ kickFallbackSec / autoFlash（自動のフラッシュを使うか）
+ *          / punch（激しさの「キックで寄る・揺れる」の強さ。既定 1）
  *          / react（動きの大きさの基準）/ crossfade（シーン切替のフェード秒。0 = カット）
  *          / noTempo（テンポに合わせた切替をしない）/ tiers（盛り上がり 3 段階で使うシーン） */
 (function (VJ) {
@@ -38,7 +39,7 @@
       desc: 'ドラムが無くても音の立ち上がりに反応。自動のフラッシュは使いません。',
       descEn: 'Reacts to note onsets even without drums. No automatic flashes.',
       dsp: { melodicMode: 'on', env: { level: 0.2, low: 0.25, mid: 0.18, high: 0.1 }, peak: { kick: 0.25, snare: 0.2 } },
-      show: { switchSec: 36, kickFallbackSec: 50, autoFlash: false, react: 0.85, crossfade: 0.8, tiers: { low: ['aurora', 'stars', 'scope'], mid: ['ripple', 'scope', 'horizon', 'stars'], high: ['kaleido', 'ripple', 'horizon'] } },
+      show: { switchSec: 36, kickFallbackSec: 50, autoFlash: false, react: 0.85, punch: 0.35, crossfade: 0.8, tiers: { low: ['aurora', 'stars', 'scope'], mid: ['ripple', 'scope', 'horizon', 'stars'], high: ['kaleido', 'ripple', 'horizon'] } },
     },
     {
       id: 'calm', name: 'しっとり（合唱・クラシック・バラード）', nameEn: 'Calm (choir, classical, ballads)',
@@ -49,7 +50,7 @@
         env: { level: 0.4, low: 0.45, mid: 0.35, high: 0.2 }, peak: { kick: 0.45, snare: 0.35, hat: 0.15, accent: 0.5 },
         accent: { loudDb: 4 },
       },
-      show: { switchSec: 45, kickFallbackSec: 60, autoFlash: false, react: 0.7, crossfade: 1.5, tiers: { low: ['aurora', 'stars'], mid: ['aurora', 'stars', 'scope'], high: ['horizon', 'scope', 'kaleido'] } },
+      show: { switchSec: 45, kickFallbackSec: 60, autoFlash: false, react: 0.7, punch: 0.15, crossfade: 1.5, tiers: { low: ['aurora', 'stars'], mid: ['aurora', 'stars', 'scope'], high: ['horizon', 'scope', 'kaleido'] } },
     },
     {
       id: 'voice', name: '歌（アカペラ・弾き語りの歌・カラオケ）', nameEn: 'Singing (a cappella, vocals, karaoke)',
@@ -59,7 +60,7 @@
         melodicMode: 'on', voice: { mode: 'sing' },
         env: { level: 0.2, low: 0.25, mid: 0.18, high: 0.1 }, peak: { kick: 0.25, snare: 0.2 },
       },
-      show: { switchSec: 30, kickFallbackSec: 45, autoFlash: false, react: 0.85, crossfade: 1.0, tiers: { low: ['orb', 'bokeh', 'aurora', 'melody'], mid: ['melody', 'orb', 'waves', 'smoke', 'petals'], high: ['melody', 'circle', 'fireworks', 'kaleido'] } },
+      show: { switchSec: 30, kickFallbackSec: 45, autoFlash: false, react: 0.85, punch: 0.35, crossfade: 1.0, tiers: { low: ['orb', 'bokeh', 'aurora', 'melody'], mid: ['melody', 'orb', 'waves', 'smoke', 'petals'], high: ['melody', 'circle', 'fireworks', 'kaleido'] } },
     },
     {
       id: 'speech', name: '司会・スピーチ・朗読', nameEn: 'MC, speeches, readings',
@@ -69,7 +70,7 @@
         melodicMode: 'on', voice: { mode: 'speech' }, melodic: { K: 1.8, minRise: 3, refractory: 0.15 },
         env: { level: 0.3, low: 0.35, mid: 0.25, high: 0.15 }, peak: { kick: 0.35, snare: 0.3, hat: 0.15, accent: 0.5 },
       },
-      show: { switchSec: 60, kickFallbackSec: 90, autoFlash: false, react: 0.6, noTempo: true, crossfade: 1.5, tiers: { low: ['orb', 'bokeh', 'aurora'], mid: ['orb', 'voiceprint', 'bokeh', 'waves'], high: ['orb', 'voiceprint', 'waves', 'stars'] } },
+      show: { switchSec: 60, kickFallbackSec: 90, autoFlash: false, react: 0.6, punch: 0, noTempo: true, crossfade: 1.5, tiers: { low: ['orb', 'bokeh', 'aurora'], mid: ['orb', 'voiceprint', 'bokeh', 'waves'], high: ['orb', 'voiceprint', 'waves', 'stars'] } },
     },
   ];
   VJ.profiles.DEFAULT_TIERS = DEFAULT_TIERS;

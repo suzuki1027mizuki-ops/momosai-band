@@ -38,6 +38,15 @@ body.nocursor #panel, body.nocursor #panel * { cursor: auto !important; }
   background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
 #panel header .ver { color: var(--muted); font-size: 11px; flex: 1; }
 #panel h2 { font-size: 13px; color: var(--accent); margin: 18px 0 8px; letter-spacing: 0.05em; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+#panel h2 .psec-btn { all: unset; display: flex; align-items: center; gap: 6px; width: 100%; cursor: pointer; box-sizing: border-box; }
+#panel h2 .psec-btn::before { content: '▾'; display: inline-block; width: 1em; text-align: center; color: var(--muted); transition: transform 0.15s; }
+#panel h2 .psec-btn:hover { color: var(--text); }
+#panel h2 .psec-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+#panel .psec.closed h2 { margin-bottom: 0; }
+#panel .psec.closed h2 .psec-btn::before { transform: rotate(-90deg); }
+#panel .psec.closed > .psec-body { display: none; }
+#panel .psec-all { justify-content: flex-end; margin: 2px 0 -8px; }
+#panel .psec-all button { font-size: 11px; padding: 2px 8px; }
 #panel label { display: inline-flex; align-items: center; gap: 4px; margin-right: 10px; cursor: pointer; }
 #panel .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 4px; margin: 6px 0; }
 #panel .hint { color: var(--muted); font-size: 12px; margin: 4px 0; }
@@ -198,8 +207,11 @@ body.remote-mode #stage { opacity: 0.25; }
     <div class="warnbox resume"><span id="resume-text"></span> <button id="btn-resume">前回の続きから再開</button> <button id="btn-resume-no">いいえ</button></div>
   </div>
   <div id="guide" class="guide" hidden></div>
+  <div class="row psec-all"><button id="psec-open-all" title="①〜⑦ をすべて開く">すべて開く</button><button id="psec-close-all" title="①〜⑦ をすべて閉じる（見出しを押すと 1 つずつ開きます）">すべて閉じる</button></div>
 
-  <h2>① 音声入力</h2>
+  <section class="psec" data-sec="1">
+  <h2><button type="button" class="psec-btn" aria-expanded="true">① 音声入力</button></h2>
+  <div class="psec-body">
   <div class="row">
     <label><input type="radio" name="src" value="mic" checked> マイク / ライン</label>
     <label><input type="radio" name="src" value="display"> PC で再生中の音</label>
@@ -242,8 +254,10 @@ body.remote-mode #stage { opacity: 0.25; }
   <div class="row"><button id="btn-sc">サウンドチェック（自動調整）</button></div>
   <div class="hint">リハで約 20 秒：音の大きさ・音割れ・会場の雑音を調べて、音楽のタイプと「無音とみなす音量」をおすすめします。</div>
   <div id="sc-box" class="scbox" hidden></div>
-
-  <h2>② 音楽のタイプ・テンポ</h2>
+  </div></section>
+  <section class="psec" data-sec="2">
+  <h2><button type="button" class="psec-btn" aria-expanded="true">② 音楽のタイプ・テンポ</button></h2>
+  <div class="psec-body">
   <div class="row"><select id="opt-profile"></select></div>
   <div class="hint" id="profile-desc"></div>
   <div class="row">
@@ -251,8 +265,10 @@ body.remote-mode #stage { opacity: 0.25; }
     <button id="btn-tap" title="拍に合わせて 3 回以上（Enter キーでも）">タップ</button>
   </div>
   <div class="row"><span>声</span><b id="voice-view" class="bpm">—</b><span class="hint" id="speech-view"></span></div>
-
-  <h2>③ 出演バンド・セットリスト・文字</h2>
+  </div></section>
+  <section class="psec" data-sec="3">
+  <h2><button type="button" class="psec-btn" aria-expanded="true">③ 出演バンド・セットリスト・文字</button></h2>
+  <div class="psec-body">
   <div class="bandlist" id="band-list"></div>
   <div class="row"><button id="band-add">＋ バンドを追加</button><button id="band-next">次のバンドへ ▶（N）</button></div>
   <div class="hint">バンドごとに名前・セットリスト・ロゴ・音楽のタイプ・色・開演時刻・テロップを覚えます。下の欄は「出演中」のバンドの内容です。</div>
@@ -286,8 +302,10 @@ body.remote-mode #stage { opacity: 0.25; }
     <div class="row msg"><kbd>E</kbd><input type="text" id="msg-2" placeholder="例：アンコールありがとう！"><button data-msg="2">表示</button></div>
     <div class="hint">キー（Q / W / E）かボタンで表示、もう一度押すと消えます。</div>
   </details>
-
-  <h2>④ 表示（スクリーンに合わせる）</h2>
+  </div></section>
+  <section class="psec" data-sec="4">
+  <h2><button type="button" class="psec-btn" aria-expanded="true">④ 表示（スクリーンに合わせる）</button></h2>
+  <div class="psec-body">
   <div class="row">
     <span>回転</span>
     <select id="out-rotate"><option value="0">なし</option><option value="90">90°（縦置き）</option><option value="180">180°（逆さ吊り）</option><option value="270">270°</option></select>
@@ -306,15 +324,39 @@ body.remote-mode #stage { opacity: 0.25; }
     <button id="btn-output-stop" hidden>出力ウィンドウを閉じる</button>
   </div>
   <div class="hint" id="output-hint">プロジェクターを「拡張」でつないだときに使います。映像だけのウィンドウを開いてプロジェクター側で全画面にし、このウィンドウは操作・確認用になります（観客に操作画面が見えません）。</div>
-
-  <h2>⑤ オプション</h2>
+  </div></section>
+  <section class="psec" data-sec="5">
+  <h2><button type="button" class="psec-btn" aria-expanded="true">⑤ オプション</button></h2>
+  <div class="psec-body">
   <div class="row">
     <label><input type="checkbox" id="opt-auto"> オート（自動でシーン切替）</label>
     <label><input type="checkbox" id="opt-autoflash"> キメで自動フラッシュ</label>
   </div>
   <div class="row">
+    <span>激しさ</span>
+    <select id="opt-intensity">
+      <option value="0">控えめ</option>
+      <option value="1">ふつう</option>
+      <option value="2">激しい（おすすめ）</option>
+      <option value="3">最大</option>
+    </select>
+  </div>
+  <div class="hint">激しいほど、キックで画面が寄る・スネアで揺れる・拍ごとに軽く光る・オートの切替が速くなります（しっとり系・歌・司会のタイプでは弱め。フラッシュを一切使わないときは寄り・揺れもしません）。</div>
+  <div class="row">
     <label><input type="checkbox" id="opt-noflash"> フラッシュを一切使わない（光に配慮が必要な会場）</label>
   </div>
+  <div class="row">
+    <span>フラッシュの上限</span>
+    <select id="opt-flashlimit">
+      <option value="2">1 秒に 2 回（より安全）</option>
+      <option value="3">1 秒に 3 回（推奨）</option>
+      <option value="4">1 秒に 4 回</option>
+      <option value="6">1 秒に 6 回</option>
+      <option value="10">1 秒に 10 回</option>
+      <option value="0">制限なし</option>
+    </select>
+  </div>
+  <div class="warnbox" id="flashlimit-warn" hidden>⚠ 1 秒に 3 回を超える点滅は、光過敏性発作を起こすおそれがあるとされています（放送のガイドライン・WCAG）。会場に「強い光の点滅があります」と掲示し、観客の様子に気をつけてください。</div>
   <div class="row">
     <label><input type="checkbox" id="opt-speechtitle"> MC（話し声）のあいだはタイトルにする（オート ON のとき）</label>
   </div>
@@ -379,8 +421,10 @@ body.remote-mode #stage { opacity: 0.25; }
       <button id="btn-reset">初期設定に戻す</button>
     </div>
   </details>
-
-  <h2>⑥ 本番</h2>
+  </div></section>
+  <section class="psec" data-sec="6">
+  <h2><button type="button" class="psec-btn" aria-expanded="true">⑥ 本番</button></h2>
+  <div class="psec-body">
   <div class="row"><button id="btn-precheck">本番前チェック</button></div>
   <div id="precheck" class="scbox" hidden></div>
   <button class="big" id="btn-show">ショー開始（全画面）</button>
@@ -389,8 +433,10 @@ body.remote-mode #stage { opacity: 0.25; }
   <div class="scene-grid" id="scene-grid"></div>
   <div class="keys" id="keys-mini"></div>
   <div class="row"><button id="btn-cheatsheet">キー早見表を印刷</button></div>
-
-  <h2>⑦ 外部連携（スマホ・OSC・照明）</h2>
+  </div></section>
+  <section class="psec" data-sec="7">
+  <h2><button type="button" class="psec-btn" aria-expanded="true">⑦ 外部連携（スマホ・OSC・照明）</button></h2>
+  <div class="psec-body">
   <div class="hint" data-i18n-html>スマホからの操作・OSC・Art-Net には「ブリッジ」が要ります。単体アプリには入っています。ブラウザ版は <code>bridge</code> フォルダの起動ファイル（Node.js が必要）で起動します。</div>
   <div class="row"><label><input type="checkbox" id="net-on"> ブリッジにつなぐ</label><input type="text" id="net-url" spellcheck="false" style="flex: 1; width: auto"></div>
   <div class="status" id="net-status">つないでいません</div>
@@ -433,9 +479,10 @@ body.remote-mode #stage { opacity: 0.25; }
     <div class="row"><span>明るさの上限</span><input type="range" id="dmx-max" min="0" max="1" step="0.05"><span id="dmx-max-v"></span></div>
     <div class="row"><span>キックで光る強さ</span><input type="range" id="dmx-pulse" min="0" max="1" step="0.05"><span id="dmx-pulse-v"></span></div>
     <div class="row"><label><input type="checkbox" id="dmx-flash"> フラッシュで照明も白く光らせる</label></div>
-    <div class="hint">色は映像のパレットの 4 色を順に。キックで 1 台ずつ順に強く光ります（1 秒に 3 回まで）。暗転・明るさは映像と同じ。</div>
+    <div class="hint">色は映像のパレットの 4 色を順に。キックで 1 台ずつ順に強く光ります（⑤ のフラッシュの上限まで。既定は 1 秒に 3 回）。暗転・明るさは映像と同じ。</div>
     <div class="status" id="dmx-status"></div>
   </details>
+  </div></section>
 </div>
 
 <div id="remote" hidden>
@@ -462,7 +509,7 @@ body.remote-mode #stage { opacity: 0.25; }
   'use strict';
 
   VJ.version = '1.0.0';
-  VJ.buildTime = '2026-10-08 #19c4018';
+  VJ.buildTime = '2026-10-08 #ad63137';
 
   const LN10_20 = Math.LN10 / 20;
 
@@ -583,6 +630,8 @@ body.remote-mode #stage { opacity: 0.25; }
     profile: 'auto', // 音楽のタイプ（profiles.js）
     gateDb: -70, // これより小さい音は無音とみなす（dBFS）。ざわざわした会場では上げる
     noFlash: false, // フラッシュ類を一切使わない（光に配慮が必要な会場）
+    flashLimit: 3, // 1 秒あたりのフラッシュの上限（3 = 推奨：光過敏対策のガイドライン。0 = 制限なし）
+    intensity: 2, // 激しさ 0 控えめ / 1 ふつう（以前の動き）/ 2 激しい / 3 最大
     react: 1.0, // 動きの大きさ 0.3〜1.5
     autoScenes: {}, // オートで使うシーン（false のものは使わない）
     fpsCap: 0, // 0 = 制限なし / 30 = 30fps（非力な PC 向け）
@@ -607,6 +656,7 @@ body.remote-mode #stage { opacity: 0.25; }
     bandIdx: 0, // いま出ているバンドの番号
     bandPalette: -1, // いま出ているバンドの色（パネルで選んだもの。-1 = 決めていない）
     guide: true, // パネルの上に「はじめてのガイド」を出す
+    panelFold: {}, // パネルの閉じている見出し { '3': true, ... }（①〜⑦）
   };
 
   /** 英語で初めて開いたときのセットリストの見本 */
@@ -693,7 +743,7 @@ body.remote-mode #stage { opacity: 0.25; }
   };
 
   VJ.flashConfig = {
-    maxPerSec: 3, // 光過敏対策：1 秒に 3 回まで
+    maxPerSec: 3, // 光過敏対策：1 秒に 3 回まで（設定 flashLimit で変えられる。既定はこの値）
     minGap: 0.2, // 最短間隔（秒）
     decay: 0.09, // フラッシュの減衰（秒）
   };
@@ -1282,7 +1332,7 @@ body.remote-mode #stage { opacity: 0.25; }
     "明るさの上限": "Max brightness",
     "キックで光る強さ": "Kick pulse strength",
     "フラッシュで照明も白く光らせる": "Flash the lights white on flashes",
-    "色は映像のパレットの 4 色を順に。キックで 1 台ずつ順に強く光ります（1 秒に 3 回まで）。暗転・明るさは映像と同じ。": "Colors follow the 4 palette colors in order. Kicks light one fixture after another (at most 3 per second). Blackout and brightness follow the visuals.",
+    "色は映像のパレットの 4 色を順に。キックで 1 台ずつ順に強く光ります（⑤ のフラッシュの上限まで。既定は 1 秒に 3 回）。暗転・明るさは映像と同じ。": "Colors follow the 4 palette colors in order. Kicks light one fixture after another (up to the flash limit in ⑤; 3 per second by default). Blackout and brightness follow the visuals.",
     "出力ウィンドウで表示中": "Showing in the output window",
     "ダブルクリック（または F キー）で全画面 ／ 操作は元のウィンドウで": "Double-click (or press F) for fullscreen / control from the original window",
     "キー操作": "Keys",
@@ -1367,7 +1417,7 @@ body.remote-mode #stage { opacity: 0.25; }
     "出演：{0}（曲が登録されていません。→ キーの曲送りは使えません）": "On stage: {0} (no songs entered; → for the next song will not work)",
     "セットリストに読めない行があります（{0} 件。③ を確認）": "The setlist has lines that could not be read ({0}; check ③)",
     "フラッシュを一切使わない設定です": "Flashes are turned off completely",
-    "フラッシュは 1 秒に 3 回まで（光過敏対策）。会場に「光の点滅があります」と掲示してください": "Flashes are limited to 3 per second (photosensitivity). Post a \"flashing lights\" notice at the venue",
+    "フラッシュは 1 秒に {0} 回まで（光過敏対策）。会場に「光の点滅があります」と掲示してください": "Flashes are limited to {0} per second (photosensitivity). Post a \"flashing lights\" notice at the venue",
     "「ショー開始」で画面のスリープを止めます": "\"Start show\" keeps the screen awake",
     "この環境では画面のスリープを止められません。PC の設定でスリープ・画面オフを「なし」に": "This environment cannot keep the screen awake. Set sleep and screen off to \"never\" in the PC settings",
     "ブリッジに接続中（スマホ {0} 台）": "Connected to the bridge ({0} phones)",
@@ -1452,6 +1502,29 @@ body.remote-mode #stage { opacity: 0.25; }
     "切り替える": "Switch",
     "この曲を消しますか？": "Delete this song?",
     "設定（出演バンド・セットリスト・ロゴを含むすべて）を初期状態に戻しますか？": "Reset all settings (including bands, setlists and logos) to the defaults?",
+    "激しさ": "Intensity",
+    "控えめ": "Subtle",
+    "ふつう": "Normal",
+    "激しい（おすすめ）": "Intense (recommended)",
+    "最大": "Maximum",
+    "激しいほど、キックで画面が寄る・スネアで揺れる・拍ごとに軽く光る・オートの切替が速くなります（しっとり系・歌・司会のタイプでは弱め。フラッシュを一切使わないときは寄り・揺れもしません）。": "Higher settings zoom in on kicks, shake on snares, add light flashes on the beat and switch scenes faster in auto mode (weaker for the calm, singing and MC music types; no zoom or shake when flashes are turned off).",
+    "フラッシュの上限": "Flash limit",
+    "1 秒に 2 回（より安全）": "2 per second (safer)",
+    "1 秒に 3 回（推奨）": "3 per second (recommended)",
+    "1 秒に 4 回": "4 per second",
+    "1 秒に 6 回": "6 per second",
+    "1 秒に 10 回": "10 per second",
+    "1 秒に {0} 回": "{0} per second",
+    "制限なし": "No limit",
+    "すべて開く": "Expand all",
+    "すべて閉じる": "Collapse all",
+    "①〜⑦ をすべて開く": "Expand ①–⑦",
+    "①〜⑦ をすべて閉じる（見出しを押すと 1 つずつ開きます）": "Collapse ①–⑦ (click a heading to open it)",
+    "⚠ 1 秒に 3 回を超える点滅は、光過敏性発作を起こすおそれがあるとされています（放送のガイドライン・WCAG）。会場に「強い光の点滅があります」と掲示し、観客の様子に気をつけてください。": "⚠ Flashing more than 3 times per second is considered a risk for photosensitive seizures (broadcast guidelines, WCAG). Post a \"strong flashing lights\" notice at the venue and keep an eye on the audience.",
+    "フラッシュの上限が推奨（1 秒に 3 回）を超えています": "The flash limit is above the recommended 3 per second",
+    "フラッシュの上限が 1 秒に {0} 回です": "The flash limit is {0} per second",
+    "フラッシュの上限が「制限なし」です": "The flash limit is set to \"No limit\"",
+    "（推奨は 3 回まで。光過敏性発作のおそれ）。会場に「強い光の点滅があります」と必ず掲示してください（⑤）": " (3 or fewer is recommended; risk of photosensitive seizures). Be sure to post a \"strong flashing lights\" notice at the venue (⑤)",
   };
 })(globalThis.VJ = globalThis.VJ || {});
 </script>
@@ -1501,6 +1574,11 @@ body.remote-mode #stage { opacity: 0.25; }
     for (const [k, v] of Object.entries(s.autoScenes || {})) if (typeof v === 'boolean') as[k] = v;
     s.autoScenes = as;
     if (!s.messages.every((m) => typeof m === 'string')) s.messages = s.messages.map((m) => (typeof m === 'string' ? m : ''));
+    const pf = {};
+    for (const [k, v] of Object.entries(s.panelFold || {})) if (/^[1-9]$/.test(k) && v === true) pf[k] = true;
+    s.panelFold = pf;
+    s.flashLimit = Math.max(0, Math.min(30, Math.round(s.flashLimit)));
+    s.intensity = Math.max(0, Math.min(3, Math.round(s.intensity)));
     if (VJ.bands) VJ.bands.ensure(s);
     return s;
   }
@@ -1564,6 +1642,7 @@ body.remote-mode #stage { opacity: 0.25; }
 /* 音楽のタイプ（プロファイル）。解析パラメータ（dsp）と演出（show）の既定値を切り替える。
  *   dsp  : VJ.dspConfig への上書き（配列は添字ごと・オブジェクトは再帰的に）
  *   show : switchSec（オートの切替間隔）/ kickFallbackSec / autoFlash（自動のフラッシュを使うか）
+ *          / punch（激しさの「キックで寄る・揺れる」の強さ。既定 1）
  *          / react（動きの大きさの基準）/ crossfade（シーン切替のフェード秒。0 = カット）
  *          / noTempo（テンポに合わせた切替をしない）/ tiers（盛り上がり 3 段階で使うシーン） */
 (function (VJ) {
@@ -1601,7 +1680,7 @@ body.remote-mode #stage { opacity: 0.25; }
       desc: 'ドラムが無くても音の立ち上がりに反応。自動のフラッシュは使いません。',
       descEn: 'Reacts to note onsets even without drums. No automatic flashes.',
       dsp: { melodicMode: 'on', env: { level: 0.2, low: 0.25, mid: 0.18, high: 0.1 }, peak: { kick: 0.25, snare: 0.2 } },
-      show: { switchSec: 36, kickFallbackSec: 50, autoFlash: false, react: 0.85, crossfade: 0.8, tiers: { low: ['aurora', 'stars', 'scope'], mid: ['ripple', 'scope', 'horizon', 'stars'], high: ['kaleido', 'ripple', 'horizon'] } },
+      show: { switchSec: 36, kickFallbackSec: 50, autoFlash: false, react: 0.85, punch: 0.35, crossfade: 0.8, tiers: { low: ['aurora', 'stars', 'scope'], mid: ['ripple', 'scope', 'horizon', 'stars'], high: ['kaleido', 'ripple', 'horizon'] } },
     },
     {
       id: 'calm', name: 'しっとり（合唱・クラシック・バラード）', nameEn: 'Calm (choir, classical, ballads)',
@@ -1612,7 +1691,7 @@ body.remote-mode #stage { opacity: 0.25; }
         env: { level: 0.4, low: 0.45, mid: 0.35, high: 0.2 }, peak: { kick: 0.45, snare: 0.35, hat: 0.15, accent: 0.5 },
         accent: { loudDb: 4 },
       },
-      show: { switchSec: 45, kickFallbackSec: 60, autoFlash: false, react: 0.7, crossfade: 1.5, tiers: { low: ['aurora', 'stars'], mid: ['aurora', 'stars', 'scope'], high: ['horizon', 'scope', 'kaleido'] } },
+      show: { switchSec: 45, kickFallbackSec: 60, autoFlash: false, react: 0.7, punch: 0.15, crossfade: 1.5, tiers: { low: ['aurora', 'stars'], mid: ['aurora', 'stars', 'scope'], high: ['horizon', 'scope', 'kaleido'] } },
     },
     {
       id: 'voice', name: '歌（アカペラ・弾き語りの歌・カラオケ）', nameEn: 'Singing (a cappella, vocals, karaoke)',
@@ -1622,7 +1701,7 @@ body.remote-mode #stage { opacity: 0.25; }
         melodicMode: 'on', voice: { mode: 'sing' },
         env: { level: 0.2, low: 0.25, mid: 0.18, high: 0.1 }, peak: { kick: 0.25, snare: 0.2 },
       },
-      show: { switchSec: 30, kickFallbackSec: 45, autoFlash: false, react: 0.85, crossfade: 1.0, tiers: { low: ['orb', 'bokeh', 'aurora', 'melody'], mid: ['melody', 'orb', 'waves', 'smoke', 'petals'], high: ['melody', 'circle', 'fireworks', 'kaleido'] } },
+      show: { switchSec: 30, kickFallbackSec: 45, autoFlash: false, react: 0.85, punch: 0.35, crossfade: 1.0, tiers: { low: ['orb', 'bokeh', 'aurora', 'melody'], mid: ['melody', 'orb', 'waves', 'smoke', 'petals'], high: ['melody', 'circle', 'fireworks', 'kaleido'] } },
     },
     {
       id: 'speech', name: '司会・スピーチ・朗読', nameEn: 'MC, speeches, readings',
@@ -1632,7 +1711,7 @@ body.remote-mode #stage { opacity: 0.25; }
         melodicMode: 'on', voice: { mode: 'speech' }, melodic: { K: 1.8, minRise: 3, refractory: 0.15 },
         env: { level: 0.3, low: 0.35, mid: 0.25, high: 0.15 }, peak: { kick: 0.35, snare: 0.3, hat: 0.15, accent: 0.5 },
       },
-      show: { switchSec: 60, kickFallbackSec: 90, autoFlash: false, react: 0.6, noTempo: true, crossfade: 1.5, tiers: { low: ['orb', 'bokeh', 'aurora'], mid: ['orb', 'voiceprint', 'bokeh', 'waves'], high: ['orb', 'voiceprint', 'waves', 'stars'] } },
+      show: { switchSec: 60, kickFallbackSec: 90, autoFlash: false, react: 0.6, punch: 0, noTempo: true, crossfade: 1.5, tiers: { low: ['orb', 'bokeh', 'aurora'], mid: ['orb', 'voiceprint', 'bokeh', 'waves'], high: ['orb', 'voiceprint', 'waves', 'stars'] } },
     },
   ];
   VJ.profiles.DEFAULT_TIERS = DEFAULT_TIERS;
@@ -2096,20 +2175,38 @@ body.remote-mode #stage { opacity: 0.25; }
 <script>/* src/dsp/tempo.js */
 /* テンポ（BPM）と拍の位置の推定 + タップテンポ。
  *  - 立ち上がりの強さ（帯域ごとの dB 上昇量の重み付き和）を約 10ms ごとに 8 秒分ためる
- *  - 0.5 秒ごとに自己相関で周期を求める（60〜200BPM、120BPM 付近を優先、倍・半分の誤りを抑える）
+ *  - 0.5 秒ごとに自己相関で周期を求める（60〜200BPM、120BPM 付近をゆるく優先）
+ *  - 3:2 の取り違え（付点 4 分を拍と取る）を、1.5 倍の速さの拍の位置にも同じくらい立ち上がりがあるかで直す
+ *  - 倍・半分は「拍の中間（裏）にも拍と同じくらい強い立ち上がりがあれば速い方」で決める（いちばん遅い候補から順に）。
+ *    速いテンポほど厳しく、いまのテンポは続けやすく、ドラムの無い曲では速くしすぎない
  *  - 周期が分かったら、櫛形の和が最大になる位置を「拍」とする
  *  - 4 拍のうちキックが最も強い位置を小節の頭（ダウンビート）とみなす
  * タップテンポ（3 回以上）はしばらく自動推定より優先する。
  * 拍の予測で先回りして光らせることはしない（人間のドラムの揺れで外れが目立つため）。用途は
- * オートの切替タイミング・拍に合わせたゆるい動き・表示。 */
+ * オートの切替タイミング・拍に合わせたゆるい動き・表示。
+ * 合成した曲（8 ビート・4 つ打ち・2 ビート・ハーフ・シャッフル・ファンク・ヒップホップ・ドラムンベース・
+ * ドラムなし、残響・雑音あり）での評価は ISSUES.md（G8）。 */
 (function (VJ) {
   'use strict';
+
+  const DEFAULTS = {
+    hopsPerFrame: 4, seconds: 8, every: 0.5, manualSec: 120,
+    minBpm: 60, maxBpm: 200, // 自己相関で探す範囲
+    prefBpm: 120, prefOct: 1.2, // 120BPM 付近をゆるく優先（オクターブ単位の幅）
+    h2: 0.25, h3: 0.25, // 2 倍・3 倍の周期の相関を足す重み
+    r32: 0.9, // 3:2：1.5 倍の速さの拍の位置の強さが、いまの拍のこれ以上ならそちらを採る
+    outMin: 55, outMax: 210, outMaxDrumless: 165, // 倍・半分を選んだ結果の範囲
+    thLo: 0.4, thSlope: 0.4, thRef: 130, // 速い方に上げる条件（裏の強さ / 拍の強さ）。thRef を超える速さは log2 で厳しく
+    octBias: 0.3, // いまのテンポを続けやすくする幅
+    hold: 2, octHold: 4, // 大きく変わったときに切り替えるまでの回数（倍・半分は長め）
+    smooth: 0.3,
+  };
 
   class TempoTracker {
     constructor(sr, hop, opts) {
       this.sr = sr;
       this.hop = hop;
-      this.opts = Object.assign({ hopsPerFrame: 4, seconds: 8, minBpm: 60, maxBpm: 200, prefBpm: 120, prefOct: 0.9, every: 0.5, manualSec: 120 }, opts || {});
+      this.opts = Object.assign({}, DEFAULTS, opts || {});
       this.fpf = this.opts.hopsPerFrame;
       this.frameSamples = hop * this.fpf;
       this.frameSec = this.frameSamples / sr;
@@ -2121,7 +2218,9 @@ body.remote-mode #stage { opacity: 0.25; }
       this.hopIn = 0;
       this.frameCount = 0; // 追加した OSF フレーム数
       this.lin = new Float32Array(this.n);
+      this.pos = new Float32Array(this.n);
       this.lastEst = 0;
+      this.drumless = false;
       this.reset();
     }
 
@@ -2138,6 +2237,9 @@ body.remote-mode #stage { opacity: 0.25; }
       this.manual = null;
       this.taps = [];
     }
+
+    /** ドラムの無い曲か（ドラムの無い曲モード。速いテンポに上げすぎないように） */
+    setDrumless(v) { this.drumless = !!v; }
 
     /** 1 ホップごとに立ち上がりの強さを入れる */
     push(strength, sampleCount) {
@@ -2176,12 +2278,12 @@ body.remote-mode #stage { opacity: 0.25; }
       const n = this.filled;
       if (n < this.n * 0.5) return;
       // 時系列を古い順に並べ、平均を引く
-      const x = this.lin;
+      const x = this.lin, y = this.pos;
       let mean = 0;
       for (let i = 0; i < n; i++) { const v = this.ring[(this.idx - n + i + this.n) % this.n]; x[i] = v; mean += v; }
       mean /= n;
       let energy = 0;
-      for (let i = 0; i < n; i++) { x[i] -= mean; energy += x[i] * x[i]; }
+      for (let i = 0; i < n; i++) { x[i] -= mean; energy += x[i] * x[i]; y[i] = x[i] > 0 ? x[i] : 0; }
       if (energy < 1e-6) { this.conf *= 0.8; return; }
       const fs = this.frameSec, o = this.opts;
       const lmin = Math.floor(60 / o.maxBpm / fs), lmax = Math.ceil(60 / o.minBpm / fs);
@@ -2195,8 +2297,8 @@ body.remote-mode #stage { opacity: 0.25; }
       for (let L = lmin - 1; L <= lmax + 1; L++) r[L] = ac(L);
       let best = -1, bestS = -Infinity, sum = 0, sum2 = 0, cnt = 0;
       for (let L = lmin; L <= lmax; L++) {
-        // 倍の周期の相関も足して基本周期を優先、さらに 120BPM 付近を優先
-        const s = r[L] + 0.5 * ac(2 * L) + 0.25 * ac(3 * L);
+        // 倍・3 倍の周期の相関も足して基本周期を優先、さらに 120BPM 付近をゆるく優先
+        const s = r[L] + o.h2 * ac(2 * L) + o.h3 * ac(3 * L);
         const bpm = 60 / (L * fs);
         const w = Math.exp(-0.5 * Math.pow(Math.log2(bpm / o.prefBpm) / o.prefOct, 2));
         const sw = s * w;
@@ -2208,26 +2310,26 @@ body.remote-mode #stage { opacity: 0.25; }
       const a = r[best - 1], b = r[best], c = r[best + 1];
       const den = a - 2 * b + c;
       const d = Math.abs(den) > 1e-12 ? Math.max(-0.5, Math.min(0.5, (0.5 * (a - c)) / den)) : 0;
-      const L = best + d;
       const mu = sum / cnt, sd = Math.sqrt(Math.max(1e-12, sum2 / cnt - mu * mu));
       const conf = Math.max(0, Math.min(1, (r[best] - mu) / sd / 4));
-      let bpm = 60 / (L * fs);
-      // 倍・半分の取り違えを補正：90〜180BPM に入るように、相関が十分あれば倍・半分を採用
-      const half = Math.round(L / 2), dbl = Math.round(L * 2);
-      if (bpm < 90 && half >= lmin - 1 && r[half] >= 0.5 * r[best]) bpm *= 2;
-      else if (bpm >= 180 && ac(dbl) >= 0.5 * r[best]) bpm /= 2;
+      const from = Math.max(0, n - Math.round(o.seconds / fs));
+      const bpm = this._octave(y, n, this._triple(y, n, 60 / ((best + d) * fs), from), from);
 
-      // 推定の安定化：近ければなめらかに追従、大きく違えば 2 回続いたら切り替え
-      if (!this.bpm || Math.abs(bpm - this.bpm) / this.bpm < 0.04) {
-        this.bpm = this.bpm ? this.bpm * 0.7 + bpm * 0.3 : bpm;
+      // 推定の安定化：近ければなめらかに追従、大きく違えば数回続いたら切り替え（倍・半分は長めに）
+      const rel = (p, q) => Math.abs(p - q) / q;
+      const octave = Math.min(rel(bpm, this.bpm * 2), rel(bpm, this.bpm / 2)) < 0.05;
+      if (!this.bpm || rel(bpm, this.bpm) < 0.04) {
+        this.bpm = this.bpm ? this.bpm * (1 - o.smooth) + bpm * o.smooth : bpm;
         this.candCount = 0;
-      } else if (this.cand && Math.abs(bpm - this.cand) / this.cand < 0.04 && ++this.candCount >= 2) {
-        this.bpm = bpm;
-        this.candCount = 0;
-        this.posStrength.fill(0);
+      } else if (this.cand && rel(bpm, this.cand) < 0.04) {
+        if (++this.candCount >= (octave && this.conf > 0.3 ? o.octHold : o.hold)) {
+          this.bpm = bpm;
+          this.candCount = 0;
+          this.posStrength.fill(0);
+        }
       } else {
         this.cand = bpm;
-        if (!this.candCount) this.candCount = 1;
+        this.candCount = 1;
       }
       this.conf = this.conf * 0.6 + conf * 0.4;
       this.period = (60 / this.bpm) * this.sr;
@@ -2261,6 +2363,57 @@ body.remote-mode #stage { opacity: 0.25; }
       }
     }
 
+    /** 周期 P フレームの拍の位置（最良の位相）での立ち上がりの平均（out.a）と、withB なら拍の中間（裏）の平均（out.b）。
+     *  各位置は ±1 フレームの最大を取る（人の演奏の揺れ・フレームの区切りの分） */
+    _pulse(y, n, P, from, out, withB) {
+      const pk = (p) => { const i = Math.round(p); let m = 0; for (let j = i - 1; j <= i + 1; j++) if (j >= 0 && j < n && y[j] > m) m = y[j]; return m; };
+      let bestA = 0, bestB = 0;
+      const steps = Math.max(8, Math.round(P));
+      const end = from + 1 + (withB ? P / 2 : 0);
+      for (let k = 0; k < steps; k++) {
+        let A = 0, B = 0, c = 0;
+        for (let p = n - 3 - (k * P) / steps; p > end; p -= P) { A += pk(p); if (withB) B += pk(p - P / 2); c++; }
+        if (c && A / c > bestA) { bestA = A / c; bestB = B / c; }
+      }
+      out.a = bestA;
+      out.b = bestB;
+      return out;
+    }
+
+    /** 3:2 の取り違え：70〜140BPM に寄せたテンポの 1.5 倍の拍の位置にも、同じくらい強い立ち上がりがあればそちらを採る
+     *  （8 ビートで付点 4 分を拍と取る誤り。シャッフル・ハーフは 1.5 倍の位置が外れるので変わらない） */
+    _triple(y, n, bpm, from) {
+      const o = this.opts, fs = this.frameSec, q = this._pq || (this._pq = {});
+      let t = bpm;
+      while (t >= 140) t /= 2;
+      while (t < 70) t *= 2;
+      const a1 = this._pulse(y, n, 60 / t / fs, from, q).a;
+      const a2 = this._pulse(y, n, 60 / (1.5 * t) / fs, from, q).a;
+      return a1 > 0 && a2 >= o.r32 * a1 ? 1.5 * t : bpm;
+    }
+
+    /** 倍・半分の選び方：いちばん遅い候補から、拍の中間（裏）も拍と同じくらい強ければ速い方へ */
+    _octave(y, n, bpm, from) {
+      const o = this.opts, fs = this.frameSec, q = this._pq || (this._pq = {});
+      let t = bpm;
+      while (t / 2 >= o.outMin) t /= 2;
+      const cur = this.bpm, sure = this.conf > 0.3;
+      const top = this.drumless ? o.outMaxDrumless : o.outMax;
+      while (t * 2 <= top) {
+        this._pulse(y, n, 60 / t / fs, from, q, true);
+        const ba = q.a > 0 ? q.b / q.a : 0;
+        let th = o.thLo + o.thSlope * Math.max(0, Math.log2((t * 2) / o.thRef));
+        // いまのテンポを続けやすく（倍・半分の行き来を減らす）
+        if (cur && sure) {
+          if (Math.abs(cur - t * 2) / cur < 0.06) th -= o.octBias;
+          else if (Math.abs(cur - t) / cur < 0.06) th += o.octBias;
+        }
+        if (ba >= th || t < o.minBpm) t *= 2;
+        else break;
+      }
+      return t;
+    }
+
     /** タップテンポ（sample = 押した時点のサンプル位置） */
     tap(sample) {
       const t = this.taps;
@@ -2277,6 +2430,8 @@ body.remote-mode #stage { opacity: 0.25; }
       this.manual = { until: sample + this.opts.manualSec * this.sr };
       this.period = per;
       this.bpm = bpm;
+      this.cand = 0;
+      this.candCount = 0;
       this.beat0 = sample;
       this.indexBase = 0;
       this.conf = 1;
@@ -2950,7 +3105,8 @@ body.remote-mode #stage { opacity: 0.25; }
         }
       }
 
-      // テンポ推定用の立ち上がりの強さ
+      // テンポ推定用の立ち上がりの強さ（ドラムの無い曲では速いテンポに上げすぎない）
+      this.tempo.drumless = this.melMode;
       if (active && !speechNow) {
         const w = cfg.tempoWeights;
         let osf = 0;
@@ -3496,29 +3652,47 @@ body.remote-mode #stage { opacity: 0.25; }
     }
   }
 
+  // 16 分音符 16 マスのリズム（k キック・s スネア・g ゴースト（弱いスネア）・h ハイハット）。
+  // swing8：裏の 8 分を遅らせる割合（1/3 で 3 連のシャッフル）、swing16：裏の 16 分を遅らせる割合
+  const EVEN8 = [0, 2, 4, 6, 8, 10, 12, 14], ALL16 = [...Array(16).keys()];
+  const PATTERNS = {
+    twobeat: { k: [0, 4, 8, 12], s: [2, 6, 10, 14], h: EVEN8 }, // 2 ビート（パンク・メロコア）
+    shuffle: { k: [0, 8], s: [4, 12], h: EVEN8, swing8: 1 / 3 }, // シャッフル（ハネる 8 分）
+    funk: { k: [0, 6, 10], s: [4, 12], g: [7, 9, 15], h: ALL16 }, // ファンク（16 分のシンコペーション）
+    hiphop: { k: [0, 7, 10], s: [4, 12], h: EVEN8, swing16: 0.25 }, // ブーンバップ
+    dnb: { k: [0, 10], s: [4, 12], h: EVEN8 }, // ドラムンベース（2 ステップ）
+    sparse: { k: [0], g: [8], h: [0, 4, 8, 12] }, // 静かなバラード（キック 1 つ・リム・4 分のハイハット）
+  };
+
   /**
    * セクションの列から曲を作る。
-   * section: { bars, drums: 'none'|'click'|'8beat'|'four'|'half'|'roll'|'hats', bass: bool, guitar: 'none'|'chord'|'chug',
-   *            gain, crash: bool, prog: [root names...] }
+   * section: { bars, drums: 'none'|'click'|'8beat'|'four'|'half'|'roll'|'hats'|PATTERNS のキー, bass: bool,
+   *            guitar: 'none'|'chord'|'chug', gain, crash: bool, prog: [root names...] }
+   * opts.drift：曲の終わりまでに拍の長さを何割変えるか（-0.04 = 終わりで 4% 速い。テンポが揺れるバンドのテスト用）
    */
   function song(opts) {
     const sr = opts.sampleRate || 48000;
     const bpm = opts.bpm || 128;
-    const beat = 60 / bpm, bar = beat * 4, e8 = beat / 2, s16 = beat / 4;
+    const drift = opts.drift || 0;
+    const beat0 = 60 / bpm;
+    let beat = beat0, bar = beat * 4, e8 = beat / 2, s16 = beat / 4;
     const rnd = VJ.util.rng(opts.seed || 1);
     const human = opts.humanize === undefined ? 0.003 : opts.humanize;
     const sections = opts.sections;
     const lead = opts.lead || 0.25; // 先頭の無音
     const totalBars = sections.reduce((a, s) => a + s.bars, 0);
-    const m = new Mixer(sr, lead + totalBars * bar + (opts.tail || 1.5));
+    const m = new Mixer(sr, lead + totalBars * bar * (1 + Math.max(0, drift)) + (opts.tail || 1.5));
     const jit = () => (rnd() * 2 - 1) * human;
-    let t0 = lead;
+    let tb = lead, nBar = 0;
     let lastBassRoot = 0;
     for (const sec of sections) {
       const g = sec.gain === undefined ? 1 : sec.gain;
       const prog = sec.prog || ['E1', 'C2', 'G1', 'D2'];
-      for (let b = 0; b < sec.bars; b++) {
-        const tb = t0 + b * bar;
+      for (let b = 0; b < sec.bars; b++, nBar++) {
+        if (b > 0 || nBar > 0) tb += bar;
+        // テンポの揺れ：小節ごとに拍の長さを少しずつ変える
+        beat = beat0 * (1 + (drift * nBar) / Math.max(1, totalBars));
+        bar = beat * 4; e8 = beat / 2; s16 = beat / 4;
         const root = NOTE[prog[b % prog.length]] || 41.2;
         const v = () => g * (0.85 + rnd() * 0.15);
         if (sec.crash && b === 0) m.crash(tb, g, rnd);
@@ -3555,8 +3729,16 @@ body.remote-mode #stage { opacity: 0.25; }
             for (let k = 0; k < 4; k++) m.kick(tb + k * beat + jit(), v(), rnd);
             break;
           }
-          default:
+          default: {
+            const P = PATTERNS[sec.drums];
+            if (!P) break;
+            const at = (k) => tb + k * s16 + (k % 4 === 2 && P.swing8 ? P.swing8 * e8 : 0) + (k % 2 === 1 && P.swing16 ? P.swing16 * s16 : 0) + jit();
+            for (const k of P.k || []) m.kick(at(k), v(), rnd);
+            for (const k of P.s || []) m.snare(at(k), v(), rnd);
+            for (const k of P.g || []) m.snare(at(k), v() * 0.35, rnd);
+            for (const k of P.h || []) m.hat(at(k), v() * (k % 4 === 0 ? 1 : 0.65), rnd, false);
             break;
+          }
         }
         if (sec.bass) {
           for (let k = 0; k < 8; k++) m.bass(tb + k * e8, e8 + 0.006, root, g * 0.9, k > 0 || lastBassRoot === root);
@@ -3580,7 +3762,6 @@ body.remote-mode #stage { opacity: 0.25; }
         }
         if (sec.vocal) m.pad(tb, r4 * 2 * maj[b % 4], g, bar);
       }
-      t0 += sec.bars * bar;
     }
     if (opts.normalize !== false) m.normalize(opts.peak || 0.7);
     return { samples: m.buf, sampleRate: sr, onsets: m.onsets, bpm, duration: m.buf.length / sr };
@@ -4982,6 +5163,12 @@ void main() {
       q.set('u_black', fr.black || 0);
       q.set('u_master', fr.master === undefined ? 1 : fr.master);
       q.set('u_impact', fr.impact || 0);
+      q.set('u_punch', fr.punch || 0);
+      q.set('u_rgb', fr.rgb || 0);
+      const sh = this._shake || (this._shake = new Float32Array(2));
+      sh[0] = fr.shakeX || 0;
+      sh[1] = fr.shakeY || 0;
+      q.set('u_shake', sh);
       q.set('u_latSq', fr.latSq === undefined ? -1 : fr.latSq);
       q.set('u_vignette', fr.vignette === undefined ? 0.6 : fr.vignette);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -6978,6 +7165,7 @@ void main() {
 </script>
 <script>/* src/scenes/post.js */
 /* 仕上げパス：表示の調整（位置・サイズ・回転・反転）→ シーンの拡大（切替中は前のシーンと混ぜる）+ インパクト（色収差＋ズーム）
+ * + 激しさ（キックで寄る・スネアで揺れる・色ずれ）
  * + 曲名 + テロップ + ロゴの透かし + フラッシュ + 明るさ + 暗転 + 周辺減光 + ディザ + 遅延計測用の四角。
  * 「論理座標」はシーン・文字の座標（回転後の画面）、「物理座標」は実際のキャンバスの画素。 */
 (function (VJ) {
@@ -6997,6 +7185,8 @@ uniform float u_rot;         // 0..3（90° 単位、時計回り）
 uniform vec2 u_flip;         // 左右・上下反転（物理）
 uniform vec2 u_lres;         // 論理サイズ（回転後）
 uniform float u_time, u_flash, u_black, u_master, u_impact, u_textAlpha, u_text2Alpha, u_logoAlpha, u_latSq, u_vignette;
+uniform float u_punch, u_rgb; // 激しさ：キックで寄る（拡大率）・色ずれ
+uniform vec2 u_shake;         // 激しさ：スネアで揺れる（画面の高さに対する割合）
 uniform vec3 u_flashColor;
 uniform vec4 u_textRect, u_text2Rect, u_logoRect;
 
@@ -7030,9 +7220,12 @@ void main() {
     else if (u_rot > 2.5) uv = vec2(q.y, 1.0 - q.x);
 
     vec2 c = uv - 0.5;
-    // インパクト：明るさを変えずに色収差とズーム（フラッシュ制限の対象外で安全）
-    vec2 uz = 0.5 + c * (1.0 - 0.03 * u_impact);
-    float ca = 0.008 * u_impact;
+    // インパクト・激しさ：明るさを変えずに色収差・ズーム・揺れ（フラッシュ制限の対象外で安全）
+    // 揺らした分だけ余分に寄せて、画面の端の外（引き伸ばされた画素）が見えないようにする
+    vec2 sh = u_shake * vec2(u_lres.y / u_lres.x, 1.0);
+    float zoom = 0.03 * u_impact + u_punch + 2.0 * max(abs(sh.x), abs(sh.y));
+    vec2 uz = 0.5 + c * (1.0 - zoom) + sh;
+    float ca = 0.008 * u_impact + u_rgb;
     col.r = sceneAt(uz + c * ca).r;
     col.g = sceneAt(uz).g;
     col.b = sceneAt(uz - c * ca).b;
@@ -7384,9 +7577,20 @@ void main() {
 <script>/* src/show/safety.js */
 /* 光過敏対策。全画面の明るさが大きく変わる演出（フラッシュ・反転・残像リセット）は
  * すべてこの制限器を通す：1 秒に maxPerSec 回まで、最短 minGap 秒間隔。
- * 参考：NHK・民放連「アニメーション等の映像手法に関するガイドライン」/ WCAG 2.3.1（1 秒に 3 回まで）。 */
+ * 参考：NHK・民放連「アニメーション等の映像手法に関するガイドライン」/ WCAG 2.3.1（1 秒に 3 回まで）。
+ * 上限は設定（flashLimit）で変えられるが、既定と推奨は 3 回。超える設定にするとパネル・本番前チェックで警告する。 */
 (function (VJ) {
   'use strict';
+
+  const SAFE = 3; // ガイドラインの上限（1 秒あたり）
+
+  /** 1 秒あたりの上限 n（0 = 制限なし）から制限器の設定を作る。3 回までは最短間隔 0.2 秒（既定と同じ） */
+  function limitConfig(n) {
+    n = Math.round(+n);
+    if (!isFinite(n) || n < 0) n = SAFE;
+    if (n === 0) return { maxPerSec: Infinity, minGap: 0 };
+    return { maxPerSec: n, minGap: n <= SAFE ? VJ.flashConfig.minGap : 0.6 / n };
+  }
 
   class FlashLimiter {
     constructor(cfg) {
@@ -7394,13 +7598,18 @@ void main() {
       this.times = [];
       this.denied = 0;
     }
-    /** now（秒）に光らせてよいか。よければ記録して true */
-    allow(now) {
+    /** 1 秒あたりの上限を変える（0 = 制限なし） */
+    setLimit(n) { Object.assign(this.cfg, limitConfig(n)); }
+    /** 光と光の最短間隔（秒。照明のチェイスも同じ間隔にそろえる） */
+    gap() { return isFinite(this.cfg.maxPerSec) ? 1 / this.cfg.maxPerSec : 0; }
+    /** now（秒）に光らせてよいか。よければ記録して true。
+     *  reserve：上限のうちこの回数分は残しておく（拍ごとの軽いフラッシュがキメの分を使い切らないように） */
+    allow(now, reserve) {
       const t = this.times;
       // 同じフレーム（同じ時刻）の演出は 1 回の明滅として扱う（自動フラッシュ＋反転 など）
       if (t.length && t[t.length - 1] === now) return true;
       while (t.length && now - t[0] >= 1.0) t.shift();
-      if (t.length >= this.cfg.maxPerSec || (t.length && now - t[t.length - 1] < this.cfg.minGap)) {
+      if (t.length >= this.cfg.maxPerSec - (reserve || 0) || (t.length && now - t[t.length - 1] < this.cfg.minGap)) {
         this.denied++;
         return false;
       }
@@ -7417,7 +7626,10 @@ void main() {
     return rgb;
   }
 
-  VJ.safety = { FlashLimiter, safeFlashColor };
+  /** 設定の上限が推奨（1 秒に 3 回）を超えているか */
+  const overSafe = (n) => Math.round(+n) === 0 || Math.round(+n) > SAFE;
+
+  VJ.safety = { FlashLimiter, safeFlashColor, limitConfig, overSafe, SAFE };
 })(globalThis.VJ = globalThis.VJ || {});
 </script>
 <script>/* src/show/director.js */
@@ -7486,8 +7698,10 @@ void main() {
       // タイトル（開演前・MC・終演）は操作者が離れるまで維持する
       if (st.sceneId === 'title') return null;
       const prof = (show.profile && show.profile.show) || {};
-      const S = prof.switchSec || this.opts.switchSec;
-      const KF = prof.kickFallbackSec || this.opts.kickFallbackSec;
+      // 激しさの設定で間隔を短く・長く
+      const k = show.switchK ? show.switchK() : 1;
+      const S = (prof.switchSec || this.opts.switchSec) * k;
+      const KF = (prof.kickFallbackSec || this.opts.kickFallbackSec) * k;
       const since = now - this.lastSwitch;
       const fl = f.onsetFlags;
       // 1) キメ・ブレイク明け  2) 少し待っても無ければ小節の頭（テンポが取れているとき）  3) それも無ければキック
@@ -7544,6 +7758,17 @@ void main() {
   const PENDING_MAX = 1.0;
   const TEXT_IN = 0.3, TEXT_HOLD = 4.0, TEXT_OUT = 1.0;
 
+  /** 激しさ（設定 intensity）ごとの演出の強さ
+   *  react：動きの大きさに掛ける / punch：キックで画面ごと寄る・スネアで揺れる・色ずれ（明るさは変えない）
+   *  beat：拍ごとの軽いフラッシュ（0 なし / 1 強いキック・スネア / 2 中くらいから）/ accent：キメのフラッシュの強さ
+   *  switchK：オートの切替間隔に掛ける */
+  const INTENSITY = [
+    { react: 0.8, punch: 0, beat: 0, accent: [0.35, 0.6], switchK: 1.3 }, // 控えめ
+    { react: 1.0, punch: 0, beat: 0, accent: [0.45, 0.7], switchK: 1.0 }, // ふつう（以前と同じ）
+    { react: 1.25, punch: 1.0, beat: 1, accent: [0.6, 0.85], switchK: 0.7 }, // 激しい（既定）
+    { react: 1.5, punch: 1.6, beat: 2, accent: [0.75, 0.95], switchK: 0.5 }, // 最大
+  ];
+
   class ShowController {
     constructor(settings) {
       this.settings = settings;
@@ -7563,6 +7788,7 @@ void main() {
         auto: !!settings.auto, locked: false,
         songIdx: -1, endState: false,
         flash: 0, flashColor: [1, 1, 1], impact: 0, strobe: false,
+        punch: 0, shake: 0, shakeX: 0, shakeY: 0, rgb: 0, // 激しさ：キックで寄る・スネアで揺れる・色ずれ
         text: null, travel: 0, idle: 1, latSq: 0,
         msg: null, // テロップ { text, t0, off }
         beforeTest: null, // テストパターンの前のシーン
@@ -7590,6 +7816,7 @@ void main() {
       // settings.paletteIdx は常に「いま使っているパレット」（曲ごとのパレットも反映される）
       this.state.paletteIdx = s.paletteIdx | 0;
       this.profile = VJ.profileById(s.profile);
+      this.limiter.setLimit(s.flashLimit === undefined ? VJ.flashConfig.maxPerSec : s.flashLimit);
       this._palette();
       if (this.onSensitivity) this.onSensitivity(this.state.sens);
     }
@@ -7600,8 +7827,18 @@ void main() {
       const def = VJ.scenes.byId[id];
       return !!def && !def.hidden && id !== 'title' && this.sceneAvailable(id) && !(this.settings.autoScenes && this.settings.autoScenes[id] === false);
     }
-    /** 動きの大きさ（設定 × 音楽タイプの基準） */
-    react() { return VJ.util.clamp((+this.settings.react || 1) * (this.profile.show.react || 1), 0.2, 1.6); }
+    /** 激しさの設定（INTENSITY の 1 行） */
+    intensity() { return INTENSITY[clamp(Math.round(this.settings.intensity === undefined ? 2 : +this.settings.intensity), 0, 3)]; }
+    /** 動きの大きさ（設定 × 音楽タイプの基準 × 激しさ） */
+    react() { return VJ.util.clamp((+this.settings.react || 1) * (this.profile.show.react || 1) * this.intensity().react, 0.2, 2); }
+    /** キックで寄る・揺れるの強さ（激しさ × 音楽タイプ。しっとり系・司会では弱く／なし。フラッシュを一切使わない会場ではしない） */
+    punchAmount() {
+      if (this.settings.noFlash) return 0;
+      const p = this.profile.show.punch;
+      return this.intensity().punch * (p === undefined ? 1 : p);
+    }
+    /** オートの切替間隔に掛ける数（激しいほど短く） */
+    switchK() { return this.intensity().switchK; }
     get auto() { return this.state.auto; }
     bandName() { return (this.setlist && this.setlist.band) || this.settings.bandName || ''; }
     endText() { return (this.setlist && this.setlist.end) || this.settings.endText || 'Thank you!'; }
@@ -7768,8 +8005,9 @@ void main() {
     /** フラッシュ（制限器を通る）。strength 0 は「枠だけ消費」（反転・残像リセット用） */
     flash(strength, src) {
       if (this.settings.noFlash) return false;
-      if ((src === 'auto' || src === 'kaleido-reset' || src === 'glitch-invert') && !this.autoFlashOn()) return false;
-      if (!this.limiter.allow(this.now)) return false;
+      if ((src === 'auto' || src === 'beat' || src === 'kaleido-reset' || src === 'glitch-invert') && !this.autoFlashOn()) return false;
+      // 拍ごとの軽いフラッシュは、上限のうち 1 回分をキメ・手動のために残す
+      if (!this.limiter.allow(this.now, src === 'beat' ? 1 : 0)) return false;
       if (strength > 0) this.state.flash = Math.max(this.state.flash, strength);
       return true;
     }
@@ -7891,6 +8129,9 @@ void main() {
       s.flash *= Math.exp(-dt / VJ.flashConfig.decay);
       if (s.flash < 0.002) s.flash = 0;
       s.impact *= Math.exp(-dt / 0.15);
+      s.punch *= Math.exp(-dt / 0.11);
+      s.shake *= Math.exp(-dt / 0.09);
+      s.rgb *= Math.exp(-dt / 0.12);
       s.travel += (0.15 + 0.85 * f.level) * dt;
       const idleT = !f.active || f.silenceSec > 2.5 ? 1 : 0;
       s.idle += (idleT - s.idle) * Math.min(1, dt / 1.0);
@@ -7909,10 +8150,31 @@ void main() {
       }
 
       // 自動フラッシュ・ストロボ・インパクト
-      if (fl & (8 | 16)) this.flash(fl & 16 ? 0.7 : 0.45, 'auto');
+      const I = this.intensity();
+      if (fl & (8 | 16)) this.flash(fl & 16 ? I.accent[1] : I.accent[0], 'auto');
+      else if (I.beat && !f.speech) {
+        // 拍ごとの軽いフラッシュ（激しい・最大）：強いキック・スネアで
+        const lo = I.beat >= 2 ? 0.55 : 0.75;
+        if ((fl & 2) && f.snare >= lo + 0.05) this.flash(I.beat >= 2 ? 0.35 : 0.26, 'beat');
+        else if ((fl & 1) && f.kick >= lo) this.flash(I.beat >= 2 ? 0.3 : 0.2, 'beat');
+      }
       if (s.strobe && (fl & 3)) this.flash(0.65, 'strobe');
       if (fl & 16) s.impact = 1;
       else if (fl & 8) s.impact = Math.max(s.impact, 0.6);
+      // キックで画面ごと寄る・スネアで揺れる・色ずれ（明るさは変えないのでフラッシュの制限の対象外）
+      const P = this.punchAmount();
+      if (P > 0 && !f.speech) {
+        if ((fl & 1) && f.kick >= 0.35) s.punch = Math.max(s.punch, Math.min(1, f.kick));
+        const hit = fl & (8 | 16) ? 1 : (fl & 2) && f.snare >= 0.35 ? Math.min(1, f.snare) : 0;
+        if (hit) {
+          s.shake = Math.max(s.shake, hit);
+          this._shakeA = ((this._shakeA || 0) + 2.39996) % (Math.PI * 2); // 毎回ちがう向き（黄金角ずつ回す。テストで再現できるように乱数は使わない）
+          s.shakeX = Math.cos(this._shakeA);
+          s.shakeY = Math.sin(this._shakeA);
+          s.rgb = Math.max(s.rgb, hit);
+        }
+        if (fl & (8 | 16)) s.punch = 1;
+      }
 
       // 暗転（0.5 秒でフェード）
       const bt = s.blackout ? 1 : 0;
@@ -7994,15 +8256,17 @@ void main() {
     _scaled(f) {
       const k = this.react();
       if (Math.abs(k - 1) < 1e-3) return f;
-      const g = this._sf || (this._sf = { kickEv: new Float32Array(f.kickEv.length), snareEv: new Float32Array(f.snareEv.length), accentEv: new Float32Array(f.accentEv.length) });
+      const g = this._sf || (this._sf = {});
       for (const key in f) {
         const v = f[key];
         if (typeof v !== 'object') g[key] = v;
         else if (key !== 'kickEv' && key !== 'snareEv' && key !== 'accentEv') g[key] = v;
       }
-      for (const t of ['kick', 'snare', 'hat', 'accent']) g[t] = Math.min(1, f[t] * k);
+      for (const t of ['kick', 'snare', 'hat', 'accent']) g[t] = Math.min(1, (f[t] || 0) * k);
       for (const t of ['kickEv', 'snareEv', 'accentEv']) {
-        const a = f[t], b = g[t];
+        const a = f[t];
+        if (!a) continue;
+        const b = g[t] && g[t].length === a.length ? g[t] : (g[t] = new Float32Array(a.length));
         for (let i = 0; i < a.length; i += 2) { b[i] = a[i]; b[i + 1] = Math.min(1, a[i + 1] * k); }
       }
       g.level = Math.min(1, f.level * (0.6 + 0.4 * k));
@@ -8027,6 +8291,12 @@ void main() {
       fr.black = s.black;
       fr.master = s.master;
       fr.impact = s.impact * Math.min(1, this.react());
+      // 激しさ：寄り（拡大率）・揺れ（画面の高さに対する割合）・色ずれ。テストパターン（位置合わせ）では動かさない
+      const P = s.sceneId === 'test' ? 0 : this.punchAmount();
+      fr.punch = 0.06 * P * s.punch;
+      fr.shakeX = 0.012 * P * s.shake * s.shakeX;
+      fr.shakeY = 0.012 * P * s.shake * s.shakeY;
+      fr.rgb = 0.018 * P * Math.max(s.rgb, s.punch * 0.4);
       const ta = this.textAlpha();
       if (ta > 0 && getText) {
         const t = fr._text || (fr._text = { tex: null, alpha: 0 });
@@ -9113,7 +9383,7 @@ void main() {
  *     rgb（R G B）/ drgb（調光 R G B）/ rgbw（R G B W）/ drgbw（調光 R G B W）/ dim（調光のみ）
  *   動き：音量で明るさ、キックで 1 台ずつ順に強く光る（チェイス）。色はパレットの 4 色を順に。
  *         フラッシュ（光過敏対策の制限を通ったもの）は白を足す。暗転・明るさは映像と同じ。
- * 光過敏対策：キックで強く光るのは 1 秒に 3 回まで。 */
+ * 光過敏対策：キックで強く光るのは映像のフラッシュと同じ上限まで（既定 1 秒に 3 回）。 */
 (function (VJ) {
   'use strict';
 
@@ -9162,9 +9432,10 @@ void main() {
       out.fill(0);
       const st = show.state, pal = show.palFloat;
       const gain = c.max * (st.master === undefined ? 1 : st.master) * (1 - (st.black || 0));
-      // キックのチェイス（1 秒に 3 回まで）
+      // キックのチェイス（映像のフラッシュと同じ上限まで。既定 1 秒に 3 回）
       if (f.kickN !== dmx._lastKickN) {
-        if (dmx._lastKickN >= 0 && t - dmx._pulseAt >= PULSE_GAP) {
+        const gap = show.limiter && show.limiter.gap ? show.limiter.gap() : PULSE_GAP;
+        if (dmx._lastKickN >= 0 && t - dmx._pulseAt >= gap) {
           dmx._pulseAt = t;
           dmx._hot = (dmx._hot + 1) % c.count;
         }
@@ -9800,6 +10071,68 @@ p { margin: 4px 0 0; color: #444; }
   VJ.soundcheckUI = sc;
 })(globalThis.VJ = globalThis.VJ || {});
 </script>
+<script>/* src/ui/sections.js */
+/* パネルの ①〜⑦ を折りたためるように。見出しを押すと開閉し、閉じた見出しは設定（panelFold）に覚える。
+ * 「すべて開く / すべて閉じる」と、ガイド・本番前チェックから飛ぶときは自動で開く（open）。 */
+(function (VJ) {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+
+  const sections = {
+    app: null,
+
+    install(app) {
+      sections.app = app;
+      for (const sec of sections.list()) {
+        sec.querySelector('.psec-btn').addEventListener('click', () => sections.toggle(+sec.dataset.sec));
+      }
+      $('psec-open-all').addEventListener('click', () => sections.setAll(false));
+      $('psec-close-all').addEventListener('click', () => sections.setAll(true));
+      sections.render();
+    },
+
+    list() { return Array.from(document.querySelectorAll('#panel .psec')); },
+    fold() {
+      const s = sections.app.settings;
+      if (!s.panelFold || typeof s.panelFold !== 'object') s.panelFold = {};
+      return s.panelFold;
+    },
+    isOpen(n) { return !sections.fold()[n]; },
+
+    /** n 番（1〜7）を閉じる / 開く */
+    set(n, closed) {
+      const f = sections.fold();
+      if (!!f[n] === !!closed) return;
+      if (closed) f[n] = true;
+      else delete f[n];
+      sections.render();
+      VJ.panel.save();
+    },
+    toggle(n) { sections.set(n, sections.isOpen(n)); },
+    open(n) { sections.set(n, false); },
+    setAll(closed) {
+      const f = sections.fold();
+      for (const sec of sections.list()) {
+        if (closed) f[sec.dataset.sec] = true;
+        else delete f[sec.dataset.sec];
+      }
+      sections.render();
+      VJ.panel.save();
+    },
+
+    render() {
+      const f = sections.fold();
+      for (const sec of sections.list()) {
+        const closed = !!f[sec.dataset.sec];
+        sec.classList.toggle('closed', closed);
+        sec.querySelector('.psec-btn').setAttribute('aria-expanded', String(!closed));
+      }
+    },
+  };
+
+  VJ.sections = sections;
+})(globalThis.VJ = globalThis.VJ || {});
+</script>
 <script>/* src/ui/guide.js */
 /* はじめてのガイド（パネルの上に 5 つの手順。終わったものは自動で ✓）と、本番前チェック（⑥。緑/黄/赤の一覧）。 */
 (function (VJ) {
@@ -9843,10 +10176,11 @@ p { margin: 4px 0 0; color: #444; }
       guide.render();
     },
 
-    /** パネルの n 番の見出しまでスクロールして、少し光らせる */
+    /** パネルの n 番の見出しまでスクロールして、少し光らせる（閉じていたら開く） */
     scrollTo(n) {
       const h = Array.from(document.querySelectorAll('#panel h2')).find((x) => x.textContent.trim().startsWith('①②③④⑤⑥⑦'[n - 1]));
       if (!h) return;
+      if (VJ.sections) VJ.sections.open(n);
       h.scrollIntoView({ behavior: 'smooth', block: 'start' });
       h.classList.remove('flash-h');
       void h.offsetWidth;
@@ -9931,7 +10265,10 @@ p { margin: 4px 0 0; color: #444; }
       if (p.errors.length) add('warn', t('セットリストに読めない行があります（{0} 件。③ を確認）', p.errors.length));
       // 光
       if (s.noFlash) add('info', t('フラッシュを一切使わない設定です'));
-      else add('ok', t('フラッシュは 1 秒に 3 回まで（光過敏対策）。会場に「光の点滅があります」と掲示してください'));
+      else if (VJ.safety.overSafe(s.flashLimit)) {
+        add('warn', (+s.flashLimit ? t('フラッシュの上限が 1 秒に {0} 回です', s.flashLimit) : t('フラッシュの上限が「制限なし」です'))
+          + t('（推奨は 3 回まで。光過敏性発作のおそれ）。会場に「強い光の点滅があります」と必ず掲示してください（⑤）'));
+      } else add('ok', t('フラッシュは 1 秒に {0} 回まで（光過敏対策）。会場に「光の点滅があります」と掲示してください', s.flashLimit));
       // スリープ
       if (VJ.compat.features().wakeLock) add('ok', t('「ショー開始」で画面のスリープを止めます'));
       else add('warn', t('この環境では画面のスリープを止められません。PC の設定でスリープ・画面オフを「なし」に'));
@@ -10256,7 +10593,15 @@ p { margin: 4px 0 0; color: #444; }
       };
       bindCheck('opt-auto', 'auto');
       bindCheck('opt-autoflash', 'autoFlash');
-      bindCheck('opt-noflash', 'noFlash');
+      bindCheck('opt-noflash', 'noFlash', () => panel.syncFlashLimit());
+      $('opt-flashlimit').addEventListener('change', () => {
+        s.flashLimit = +$('opt-flashlimit').value;
+        panel.syncFlashLimit();
+        if (VJ.safety.overSafe(s.flashLimit)) app.ui.toast(t('フラッシュの上限が推奨（1 秒に 3 回）を超えています'), 'warn');
+        panel.applyShow(true);
+      });
+      $('opt-intensity').addEventListener('change', () => { s.intensity = +$('opt-intensity').value; panel.applyShow(true); });
+      panel.syncFlashLimit();
       bindCheck('opt-speechtitle', 'speechTitle');
       $('opt-xfade').value = String(s.crossfade);
       if ($('opt-xfade').selectedIndex < 0) $('opt-xfade').value = '-1';
@@ -10325,6 +10670,7 @@ p { margin: 4px 0 0; color: #444; }
       VJ.scenePick.install(app);
       VJ.bandsUI.install(app);
       VJ.soundcheckUI.install(app);
+      VJ.sections.install(app);
       VJ.guide.install(app);
       VJ.setlistEd.install(app);
 
@@ -10806,6 +11152,17 @@ p { margin: 4px 0 0; color: #444; }
       VJ.storage.save(panel.app.settings);
     },
 
+    /** フラッシュの上限・激しさの表示（設定ファイルの値が選択肢に無ければ足す）と、推奨を超えたときの警告 */
+    syncFlashLimit() {
+      const s = panel.app.settings, sel = $('opt-flashlimit');
+      const v = String(s.flashLimit);
+      if (!Array.from(sel.options).some((o) => o.value === v)) sel.add(new Option(t('1 秒に {0} 回', v), v));
+      sel.value = v;
+      sel.disabled = !!s.noFlash;
+      $('flashlimit-warn').hidden = !!s.noFlash || !VJ.safety.overSafe(s.flashLimit);
+      $('opt-intensity').value = String(s.intensity);
+    },
+
     _replace(ns) {
       const s = panel.app.settings;
       for (const k of Object.keys(ns)) s[k] = ns[k];
@@ -10820,6 +11177,7 @@ p { margin: 4px 0 0; color: #444; }
         ['opt-latsq', 'latencySquare'], ['opt-autostart', 'autoStart'], ['opt-desync', 'desynchronized'], ['opt-speechtitle', 'speechTitle']]) $(id).checked = !!s[key];
       $('opt-xfade').value = String(s.crossfade);
       if ($('opt-xfade').selectedIndex < 0) $('opt-xfade').value = '-1';
+      panel.syncFlashLimit();
       $('demo-kind').value = ['band', 'sing', 'speech'].includes(s.demoKind) ? s.demoKind : 'band';
       $('opt-lang').value = ['auto', 'ja', 'en'].includes(s.lang) ? s.lang : 'auto';
       if (VJ.i18n.resolve(s.lang) !== VJ.i18n.lang) panel.setLang(s.lang);
@@ -10837,6 +11195,7 @@ p { margin: 4px 0 0; color: #444; }
       panel.renderCustom();
       panel.renderAutoScenes();
       panel.renderSceneParams(true);
+      VJ.sections.render();
       if ($('midi-map-box').open) panel.renderMidiMap();
       for (const [id, o, k] of [['net-on', 'net', 'enabled'], ['net-url', 'net', 'url'], ['osc-on', 'osc', 'enabled'], ['osc-host', 'osc', 'host'], ['osc-port', 'osc', 'port'], ['osc-rate', 'osc', 'rate'],
         ['dmx-on', 'dmx', 'enabled'], ['dmx-out', 'dmx', 'out'], ['dmx-host', 'dmx', 'host'], ['dmx-uni', 'dmx', 'universe'], ['dmx-type', 'dmx', 'type'], ['dmx-count', 'dmx', 'count'],
