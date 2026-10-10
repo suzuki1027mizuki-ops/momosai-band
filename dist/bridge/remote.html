@@ -73,6 +73,11 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); }
 <h2 data-en="Scenes">シーン</h2>
 <div class="grid" id="scenes"></div>
 
+<div id="cue-box" hidden>
+<h2 data-en="Cues">キュー</h2>
+<div class="grid" id="cues"></div>
+</div>
+
 <h2 data-en="Captions & more">テロップ・そのほか</h2>
 <div class="grid four">
   <button data-cmd="msg" data-arg="0">Q</button>
@@ -172,6 +177,14 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); }
       $('scenes').innerHTML = list.map((s) => `<button data-scene="${esc(s.id)}">${img(s.id)}<span class="nm">${esc(s.name)}</span><span class="ky">${esc(s.key)}</span></button>`).join('');
     }
     $('scenes').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.scene === st.scene));
+    // キュー（シーン・色・メディアをまとめて切替）
+    const cues = Array.isArray(st.cues) ? st.cues.filter((c) => c && Number.isInteger(c.i) && c.i >= 1 && c.i <= 9) : [];
+    $('cue-box').hidden = !cues.length;
+    const csig = cues.map((c) => c.i + ':' + c.name).join('\n');
+    if ($('cues').dataset.sig !== csig) {
+      $('cues').dataset.sig = csig;
+      $('cues').innerHTML = cues.map((c) => `<button data-cue="${c.i}">${esc(c.name)}<small>${L('キュー ', 'Cue ')}${c.i}</small></button>`).join('');
+    }
   }
 
   document.addEventListener('click', (e) => {
@@ -183,6 +196,7 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); }
       return;
     }
     if (b.dataset.scene) send('scene', [b.dataset.scene]);
+    else if (b.dataset.cue) send('cue', [+b.dataset.cue]);
     else if (b.dataset.cmd === 'msg') send('msg', [+b.dataset.arg]);
     else if (b.dataset.cmd === 'palette') send('palette', []);
     else if (b.dataset.cmd === 'band-next' || b.dataset.cmd === 'band-prev') {

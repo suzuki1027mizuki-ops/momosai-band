@@ -23,7 +23,7 @@
     ['B', '暗転 ON/OFF'], ['C / Shift+C', 'パレット 次 / 前'], ['↑ / ↓', '感度'], ['Shift+↑ / ↓', '全体の明るさ'],
     ['A', 'オート ON/OFF'], ['Enter', 'タップテンポ（拍に合わせて 3 回以上）'], ['Q / W / E', 'テロップ 1〜3 を表示・消す'],
     ['N / Shift+N', '次のバンド / 前のバンド（演奏中は 2 回押す）'],
-    ['T', '曲名をもう一度表示'], ['O / Shift+O', 'メディアのオーバーレイ / シーンのオーバーレイ ON/OFF'], ['G', 'テストパターン（位置合わせ）'], ['F', '全画面にする'], ['D', '診断表示'],
+    ['T', '曲名をもう一度表示'], ['O / Shift+O', 'メディアのオーバーレイ / シーンのオーバーレイ ON/OFF'], ['Alt+1〜9', 'キュー（シーン・色・メディアをまとめて切替）'], ['G', 'テストパターン（位置合わせ）'], ['F', '全画面にする'], ['D', '診断表示'],
     ['H', 'このヘルプ'], ['M', '設定パネル'], ['L', 'ロック（長押しで解除）'], ['R（2 秒長押し）', 'ソフトリセット'],
     ['Esc', 'パネルを閉じる（全画面中は長押しで解除）'],
   ];
@@ -60,6 +60,15 @@
       if (e.repeat || e.isComposing) return;
       if (forForm(e)) return;
       if (e.code === 'Escape' && e.target && e.target.blur && e.target !== document.body) e.target.blur();
+      // Alt+1〜9：キュー（Ctrl・⌘ と一緒のとき＝AltGr などは使わない）
+      const cueKey = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
+      if (cueKey && e.altKey && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        if (app.show.state.locked) { app.ui.toast(VJ.t('ロック中（L 長押しで解除 / B は暗転）'), 'warn'); return; }
+        if (app.cue) app.cue(+cueKey[1] - 1);
+        if (app.onAction) app.onAction('cue');
+        return;
+      }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const show = app.show, ui = app.ui, code = e.code;
       const shift = e.shiftKey;

@@ -231,6 +231,8 @@
       VJ.sections.install(app);
       VJ.guide.install(app);
       VJ.setlistEd.install(app);
+      VJ.mediaLibUI.install(app);
+      VJ.cuesUI.install(app);
 
       // 前回の音声入力の種類を選んでおく
       const last = s.lastSource;
@@ -425,6 +427,7 @@
       panel.renderAutoScenes();
       panel.renderSceneParams(true);
       panel.syncOverlay();
+      if (VJ.cuesUI) VJ.cuesUI.render(true);
       if ($('midi-map-box').open) panel.renderMidiMap();
       panel.renderKeys();
       VJ.scenePick.render(app);
@@ -646,8 +649,9 @@
       $('btn-ov-clear').addEventListener('click', () => { s.overlay.image = ''; $('ov-file').value = ''; panel.syncOverlay(); apply(); });
       $('ov-vfile').addEventListener('change', (e) => { if (e.target.files[0]) panel.setOverlayVideoFile(e.target.files[0]); });
       $('btn-ov-vclear').addEventListener('click', () => {
+        const old = s.overlay.videoKey;
         s.overlay.videoKey = ''; s.overlay.videoName = ''; $('ov-vfile').value = '';
-        VJ.mediaStore.prune('');
+        panel.releaseMediaKey(old);
         panel.syncOverlay(); apply();
       });
       $('ov-vloop').addEventListener('change', () => { s.overlay.videoLoop = $('ov-vloop').checked; apply(); });
@@ -661,6 +665,19 @@
         const b = e.target.closest('button[data-mcmd]');
         if (b) panel.app.mediaCall('webCmd', b.dataset.mcmd).catch(() => {});
       });
+      // カメラ
+      $('ov-cam').addEventListener('change', () => {
+        const opt = $('ov-cam').selectedOptions[0];
+        s.overlay.cameraId = $('ov-cam').value;
+        s.overlay.cameraLabel = opt && opt.value ? opt.textContent.slice(0, 200) : '';
+        apply();
+      });
+      $('btn-ov-camrefresh').addEventListener('click', () => panel.refreshCameras());
+      $('btn-ov-camopen').addEventListener('click', () => panel.openCamera());
+      $('btn-ov-camstop').addEventListener('click', () => { panel.app.mediaCall('stopCamera').catch(() => {}); setTimeout(() => panel.renderMediaStatus(true), 300); });
+      $('ov-cammirror').addEventListener('change', () => { s.overlay.cameraMirror = $('ov-cammirror').checked; apply(); });
+      // 一覧から
+      $('ov-lib').addEventListener('change', () => { s.overlay.libId = $('ov-lib').value; s.overlay.mediaKind = 'lib'; s.overlayOn = true; panel.syncOverlay(); apply(); });
       for (const [id, key] of [['ov-fit', 'imageFit'], ['ov-imgblend', 'imageBlend'], ['ov-scene', 'scene'], ['ov-sceneblend', 'sceneBlend'], ['ov-corner', 'corner']]) {
         $(id).addEventListener('change', () => { s.overlay[key] = $(id).value; apply(); });
       }
@@ -682,13 +699,17 @@
         if (e.target.closest && e.target.closest('input[type=file]')) return;
         e.preventDefault();
         box.classList.toggle('drop', !!(e.target.closest && e.target.closest('#overlay-box')));
+        $('medialib-box').classList.toggle('drop', !!(e.target.closest && e.target.closest('#medialib-box')));
       });
-      document.addEventListener('dragleave', (e) => { if (!e.relatedTarget) box.classList.remove('drop'); });
+      document.addEventListener('dragleave', (e) => { if (!e.relatedTarget) { box.classList.remove('drop'); $('medialib-box').classList.remove('drop'); } });
       document.addEventListener('drop', (e) => {
         box.classList.remove('drop');
+        $('medialib-box').classList.remove('drop');
         if (!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return;
         if (e.target.closest && e.target.closest('input[type=file]')) return; // ファイルの欄はそのまま
         e.preventDefault();
+        // メディアの一覧の欄に落としたときは、まとめて一覧に入れる
+        if (e.target.closest && e.target.closest('#medialib-box')) { VJ.mediaLibUI.addFiles(Array.from(e.dataTransfer.files)); return; }
         const f = Array.from(e.dataTransfer.files).find((x) => /^(image|video)\//.test(x.type) || /\.(mp4|webm|mov|m4v)$/i.test(x.name));
         if (!f) { panel.app.ui.toast(t('画像か動画のファイルを落としてください（音声ファイルは ① の「音声ファイル」で）'), 'warn'); return; }
         if (/^image\//.test(f.type)) panel.setOverlayImageFile(f); else panel.setOverlayVideoFile(f);
@@ -709,10 +730,25 @@
       $('ovs-on').checked = !!s.ovSceneOn;
       $('ovt-on').checked = !!o.textOn;
       const kind = o.mediaKind || 'image';
+      const lib = VJ.mediaLib.list(s), libItem = kind === 'lib' ? VJ.mediaLib.byId(s, o.libId) : null;
+      $('ov-kind-lib').hidden = !lib.length && kind !== 'lib';
       document.querySelectorAll('input[name=ov-kind]').forEach((r) => { r.checked = r.value === kind; });
       document.querySelectorAll('#overlay-box .ov-pane').forEach((p) => { p.hidden = p.dataset.kind !== kind; });
-      $('ov-play').hidden = kind !== 'video' && kind !== 'web';
-      $('ov-vwarn').hidden = kind === 'image';
+      const shown = libItem ? libItem.kind : kind;
+      $('ov-play').hidden = shown !== 'video' && shown !== 'web';
+      $('ov-vwarn').hidden = shown === 'image' || shown === 'camera';
+      // 一覧から選ぶ欄
+      const ls = $('ov-lib');
+      ls.innerHTML = (libItem ? '' : `<option value="">${esc(kind === 'lib' && o.libId ? t('（消えたメディア）') : t('選んでください'))}</option>`)
+        + lib.map((x, i) => `<option value="${esc(x.id)}">m${i + 1} ${esc(x.name || panel.mediaKindName(x.kind))}</option>`).join('');
+      ls.value = libItem ? libItem.id : '';
+      // カメラ
+      $('ov-cammirror').checked = !!o.cameraMirror;
+      const cs = $('ov-cam');
+      if (o.cameraId && !Array.from(cs.options).some((x) => x.value === o.cameraId)) {
+        cs.add(new Option(o.cameraLabel || t('前に選んだカメラ'), o.cameraId));
+      }
+      if (cs.value !== o.cameraId) cs.value = o.cameraId || '';
       const sel = $('ov-scene');
       sel.innerHTML = `<option value="">${esc(t('重ねない'))}</option>` + VJ.scenes.list.filter((d) => !d.hidden && d.id !== 'title')
         .map((d) => `<option value="${d.id}">${esc(d.key.replace('s', 'Shift+'))} ${esc(VJ.sceneName(d))}</option>`).join('');
@@ -730,6 +766,7 @@
       const img = $('ov-preview');
       img.hidden = !o.image;
       if (o.image) img.src = o.image; else img.removeAttribute('src');
+      if (VJ.mediaLibUI) VJ.mediaLibUI.render();
       panel.renderMediaStatus(true);
     },
 
@@ -738,15 +775,29 @@
       const now = performance.now();
       if (!force && now - (panel._mstT || 0) < 250) return;
       panel._mstT = now;
-      const s = panel.app.settings, o = s.overlay, kind = o.mediaKind || 'image';
+      const s = panel.app.settings;
       const st = VJ.link.role === 'control' ? (VJ.link.lastStatus && VJ.link.lastStatus.media) || {} : VJ.media.state();
+      // 実際に出ているもの（曲の m:… ・一覧から選んだもの）の種類で書く
+      const kind = st.kind !== undefined ? st.kind : s.overlay.mediaKind || 'image';
       let txt = '';
       if (!s.overlayOn) txt = t('メディアは OFF（O キーで表示）');
       else if (kind === 'video') txt = ({ loading: t('読み込み中…'), playing: t('再生中'), paused: t('一時停止中'), ended: t('終わりました（⏮ で最初から）'), missing: t('動画が見つかりません。もう一度選んでください'), error: t('この動画は再生できません（MP4・WebM がおすすめ）'), empty: t('動画が選ばれていません') })[st.status] || '';
       else if (kind === 'capture') txt = st.capture ? t('取り込み中：{0}', st.label || '') : t('取り込んでいません（「取り込む画面・タブを選ぶ」）');
       else if (kind === 'web') txt = ({ loading: t('読み込み中…'), playing: t('表示中（動かないときは ▶）'), badurl: t('YouTube / ニコニコの URL ではありません'), empty: t('URL を入れて「表示」') })[st.status] || '';
+      else if (kind === 'camera') {
+        txt = st.camera ? t('カメラ：{0}', st.cameraLabel || t('使用中')) + (st.error ? ' — ' + st.error : '')
+          : ({ loading: t('カメラを開いています…（許可を聞かれたら「許可」）'), camerror: t('カメラを開けません：{0}', st.error || ''), lost: t('カメラが外れました。つなぎ直すと戻ります') })[st.status] || t('カメラは止まっています（「カメラを開く」）');
+      } else if (kind === 'image') txt = st.status === 'missing' ? t('画像が見つかりません。一覧に入れ直してください') : '';
+      else if (s.overlay.mediaKind === 'lib' || st.song) txt = st.song ? t('この曲はメディアを出しません（m:off）') : t('一覧から出すメディアを選んでください');
+      // 曲の指定（m:…）・一覧から出しているときは、その名前も
+      if (s.overlayOn && st.name) txt = (st.song ? t('曲の指定：{0}', st.name) : t('一覧：{0}', st.name)) + (txt ? ' — ' + txt : '');
       if ($('ov-status').textContent !== txt) $('ov-status').textContent = txt;
-      if (kind === 'capture') $('ov-play').hidden = true;
+      $('ov-play').hidden = !(kind === 'video' || kind === 'web');
+      if ($('ov-play').hidden && txt && s.overlayOn) {
+        // 再生ボタンが無いときも状態の文字は見せる（ボタンの行ごと隠れないように、文字だけの行にする）
+        $('ov-play').hidden = false;
+        for (const b of $('ov-play').querySelectorAll('button')) b.hidden = true;
+      } else for (const b of $('ov-play').querySelectorAll('button')) b.hidden = false;
       const cap = document.querySelector('#overlay-box .ov-pane[data-kind=capture] .hint');
       if (cap && kind === 'capture') cap.dataset.on = st.capture ? '1' : '';
     },
@@ -772,11 +823,12 @@
       const key = VJ.mediaStore.newKey();
       const saved = await VJ.mediaStore.put(key, f);
       VJ.link.send({ t: 'media', key, blob: f });
+      const old = s.overlay.videoKey;
       s.overlay.videoKey = key;
       s.overlay.videoName = String(f.name || t('動画')).slice(0, 200);
       s.overlay.mediaKind = 'video';
       s.overlayOn = true;
-      VJ.mediaStore.prune(key);
+      panel.releaseMediaKey(old);
       panel.syncOverlay();
       panel.applyShow(true);
       panel.app.ui.toast(saved ? t('メディアに動画を入れました（O で表示・非表示）') : t('動画を保存できませんでした。このウィンドウを閉じるまで使えます'), saved ? undefined : 'warn');
@@ -841,6 +893,54 @@
         panel.app.ui.toast(cancel ? t('画面の取り込みがキャンセルされました') : t('画面を取り込めませんでした：') + ((e && e.message) || e), 'warn');
       }
       panel.renderMediaStatus(true);
+    },
+
+    /** メディアの種類の名前 */
+    mediaKindName(kind) {
+      return ({ image: t('画像'), video: t('動画'), web: 'YouTube / ' + t('ニコニコ'), camera: t('カメラ'), capture: t('画面の取り込み') })[kind] || '';
+    },
+
+    /** カメラの一覧を作り直す（描画しているウィンドウで調べる：許可はそちらで出しているので名前が分かる） */
+    async refreshCameras() {
+      const cs = $('ov-cam'), o = panel.app.settings.overlay;
+      let list = [];
+      try { list = (await panel.app.mediaCall('listCameras')) || []; } catch (e) { /* noop */ }
+      cs.innerHTML = `<option value="">${esc(t('（既定のカメラ）'))}</option>`
+        + list.filter((d) => d.id).map((d, i) => `<option value="${esc(d.id)}">${esc(d.label || t('カメラ {0}', i + 1))}</option>`).join('');
+      if (o.cameraId && !list.some((d) => d.id === o.cameraId)) cs.add(new Option(t('{0}（見つかりません）', o.cameraLabel || t('前に選んだカメラ')), o.cameraId));
+      cs.value = o.cameraId || '';
+      if (list.length && !list.some((d) => d.label)) panel.app.ui.toast(t('カメラの名前は、一度「カメラを開く」で許可すると出ます'));
+      return list;
+    },
+
+    /** カメラを開いてメディアにする（2 画面のときは出力ウィンドウで開く。許可もそちらで聞かれる） */
+    async openCamera() {
+      const s = panel.app.settings;
+      s.overlay.mediaKind = 'camera';
+      s.overlayOn = true;
+      panel.syncOverlay();
+      panel.applyShow(true);
+      if (VJ.link.role === 'control') panel.app.ui.toast(t('カメラの使用の許可は、出力ウィンドウで聞かれます'));
+      panel.app.show.overrideSongMedia(); // 曲の m:… より、いま開いたカメラを出す（次の曲まで）
+      try {
+        const r = await panel.app.mediaCall('startCamera', s.overlay.cameraId || '');
+        if (r && r.fallback) panel.app.ui.toast(t('選んだカメラが見つからないので、ほかのカメラを使っています'), 'warn');
+        // 許可したあとはカメラの名前が分かるので、一覧を作り直す
+        const n = $('ov-cam').options.length;
+        const list = await panel.refreshCameras();
+        if (r && r.label && !s.overlay.cameraId && list.length > 1 && n <= 1) panel.app.ui.toast(t('カメラが {0} 台あります。使うカメラを選べます', list.length));
+      } catch (e) {
+        const denied = e && e.name === 'NotAllowedError';
+        panel.app.ui.toast(denied ? t('カメラの使用が許可されていません（アドレスバー左のアイコンから許可）') : t('カメラを開けません：{0}', (e && e.message) || e), 'warn');
+      }
+      panel.renderMediaStatus(true);
+    },
+
+    /** 使わなくなった中身（動画を入れ替えた・一覧から消した）を保存場所から消す。いまの動画・一覧のどれかが使っていれば残す */
+    releaseMediaKey(key) {
+      const s = panel.app.settings;
+      if (!key || s.overlay.videoKey === key || VJ.mediaLib.keys(s).includes(key)) return Promise.resolve();
+      return VJ.mediaStore.remove(key);
     },
 
     syncOutputUi() {
@@ -1004,6 +1104,7 @@
       panel.renderAutoScenes();
       panel.renderSceneParams(true);
       panel.syncOverlay();
+      if (VJ.cuesUI) VJ.cuesUI.render(true);
       VJ.sections.render();
       if ($('midi-map-box').open) panel.renderMidiMap();
       for (const [id, o, k] of [['net-on', 'net', 'enabled'], ['net-url', 'net', 'url'], ['osc-on', 'osc', 'enabled'], ['osc-host', 'osc', 'host'], ['osc-port', 'osc', 'port'], ['osc-rate', 'osc', 'rate'],
@@ -1031,7 +1132,7 @@
       // 取り込みを始めた・やめた（出力ウィンドウ・キーから）ときなど、メディアの種類が変わったら欄を合わせる
       const kind = s.overlay.mediaKind || 'image';
       const r = document.querySelector('input[name=ov-kind]:checked');
-      if (!r || r.value !== kind) panel.syncOverlay();
+      if (!r || r.value !== kind || (kind === 'lib' && $('ov-lib').value !== s.overlay.libId)) panel.syncOverlay();
     },
   };
 

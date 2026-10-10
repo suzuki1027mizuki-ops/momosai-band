@@ -283,7 +283,14 @@ test('英語：新しい部品（ガイド・出演バンド・セットリス�
   await page.waitForFunction(() => window.VJ && VJ.app && VJ.panel.app);
   await page.evaluate(() => { VJ.app.settings.guide = true; VJ.guide.render(); });
   await page.click('#band-add');
-  await page.fill('#setlist', 'Song A | 1,s3 | neon\nSong B');
+  // メディアの一覧・曲ごとのメディア・キューの欄も（名前は入力された文字なので訳さない）
+  await page.evaluate(() => {
+    VJ.app.settings.mediaLib = [{ id: 'Lc', name: 'Cam', kind: 'camera', cameraId: '', mirror: false }];
+    VJ.app.settings.cues = [{ name: 'Chorus', scene: 'tunnel', palette: 2, media: 'Lc', ovScene: 'off' }, { name: '', scene: '', palette: -1, media: 'gone', ovScene: '' }];
+    VJ.panel.replaceSettings(VJ.app.settings);
+    for (const id of ['overlay-box', 'medialib-box', 'cue-edit-box']) document.getElementById(id).open = true;
+  });
+  await page.fill('#setlist', 'Song A | 1,s3 | neon | m:Cam\nSong B | | | m:nope');
   await startDemo(page);
   await page.evaluate(() => { VJ.soundcheckUI.cfg = { quiet: 1, music: 3, musicMin: 1 }; });
   await page.click('#btn-sc');

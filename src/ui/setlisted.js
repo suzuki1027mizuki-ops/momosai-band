@@ -28,7 +28,7 @@
         else if (act === 'del') { ed._del = ed._del === i ? -1 : i; ed.render(true); return; }
         else if (act === 'del-yes') { songs.splice(i, 1); follow((x) => (x === i ? -1 : x > i ? x - 1 : x)); ed._del = -1; }
         else if (act === 'del-no') { ed._del = -1; ed.render(true); return; }
-        else if (act === 'add') { songs.push({ title: t('新しい曲 {0}', songs.length + 1), scenes: [], palette: null, notitle: false, line: null, dirty: true }); ed._focusLast = true; }
+        else if (act === 'add') { songs.push({ title: t('新しい曲 {0}', songs.length + 1), scenes: [], palette: null, notitle: false, media: '', line: null, dirty: true }); ed._focusLast = true; }
         else if (act === 'pick') { ed._picking = ed._picking === i ? -1 : i; ed.render(true); return; }
         else if (act === 'unpick') { const k = +b.dataset.k; songs[i].scenes.splice(k, 1); songs[i].dirty = true; }
         else if (act === 'done') { ed._picking = -1; ed.render(true); return; }
@@ -55,11 +55,15 @@
       });
       el.addEventListener('change', (e) => {
         const x = e.target;
-        if (!x.matches('select[data-f="palette"], input[data-f="showtitle"]')) return;
+        if (!x.matches('select[data-f="palette"], select[data-f="media"], input[data-f="showtitle"]')) return;
         if (ed.stale()) { ed.render(true); return; }
         const song = ed.model.songs[+x.dataset.i];
-        if (x.matches('select')) song.palette = x.value === '' ? null : +x.value;
-        else song.notitle = !x.checked;
+        if (x.matches('select[data-f="palette"]')) song.palette = x.value === '' ? null : +x.value;
+        else if (x.matches('select[data-f="media"]')) {
+          // 一覧の id → セットリストに書く指定（名前か番号）。「見つからない」のまま選び直さなかったときは元の指定を残す
+          if (x.value === '' || x.value === 'off') song.media = x.value;
+          else if (x.value !== '?') song.media = VJ.mediaLib.token(ed.app.settings, x.value);
+        } else song.notitle = !x.checked;
         song.dirty = true;
         ed.commit(false);
       });
@@ -99,10 +103,27 @@
       if (bandChanged) { ed._picking = -1; ed._del = -1; }
       const p = VJ.setlist.parse(s.setlistText);
       ed._src = { text: s.setlistText, band: s.bandIdx };
-      ed.model = { band: p.band, end: p.end, songs: p.songs.map((x) => ({ title: x.title, scenes: x.scenes.slice(), palette: x.palette, notitle: x.notitle, line: x.line, dirty: false })) };
+      ed.model = { band: p.band, end: p.end, songs: p.songs.map((x) => ({ title: x.title, scenes: x.scenes.slice(), palette: x.palette, notitle: x.notitle, media: x.media || '', line: x.line, dirty: false })) };
       if (ed._picking >= ed.model.songs.length) ed._picking = -1;
       if (ed._del >= ed.model.songs.length) ed._del = -1;
       const pals = `<option value="">${esc(t('パレット：そのまま'))}</option>` + VJ.palettes.map((q, i) => `<option value="${i}">${esc(t(q.name))}</option>`).join('');
+      // 曲ごとのメディア：一覧があるとき（か、もう指定があるとき）だけ出す
+      const lib = VJ.mediaLib.list(s);
+      const useMedia = lib.length > 0 || ed.model.songs.some((x) => x.media);
+      const mediaSel = (x, i) => {
+        const hit = x.media ? VJ.mediaLib.find(s, x.media) : null;
+        const lost = x.media && !hit;
+        return `<select data-f="media" data-i="${i}" title="${esc(t('この曲で出すメディア（⑤ のメディアの一覧から）'))}">`
+          + `<option value="">${esc(t('メディア：そのまま'))}</option><option value="off">${esc(t('メディア：出さない'))}</option>`
+          + lib.map((m, k) => `<option value="${esc(m.id)}">m${k + 1} ${esc(m.name || VJ.panel.mediaKindName(m.kind))}</option>`).join('')
+          + (lost ? `<option value="?">${esc(t('（見つからない：{0}）', x.media))}</option>` : '')
+          + '</select>';
+      };
+      const mediaVal = (x) => {
+        if (!x.media) return '';
+        const hit = VJ.mediaLib.find(s, x.media);
+        return !hit ? '?' : hit.off ? 'off' : hit.id;
+      };
       const chip = (id, i, k) => {
         const d = VJ.scenes.byId[id];
         if (!d) return '';
@@ -123,7 +144,9 @@
           + `<div class="sl-row2">${x.scenes.length ? x.scenes.map((id, k) => chip(id, i, k)).join('<span class="sl-arrow">→</span>') : `<span class="hint">${esc(t('シーン：オート'))}</span>`}`
           + `<button data-act="pick" data-i="${i}">${esc(ed._picking === i ? t('選び終える') : t('＋ シーン'))}</button></div>`
           + `<div class="sl-row3"><select data-f="palette" data-i="${i}">${pals}</select>`
+          + (useMedia ? mediaSel(x, i) : '')
           + `<label><input type="checkbox" data-f="showtitle" data-i="${i}"${x.notitle ? '' : ' checked'}> ${esc(t('曲名を表示'))}</label></div>`
+          + (x.media && !VJ.mediaLib.find(s, x.media) ? `<div class="err">${esc(t('メディア「{0}」が一覧にありません（⑤ のメディアの一覧）', x.media))}</div>` : '')
           + (ed._del === i ? `<div class="row sl-confirm"><span>${esc(t('この曲を消しますか？'))}</span><button data-act="del-yes" data-i="${i}">${esc(t('消す'))}</button><button data-act="del-no" data-i="${i}">${esc(t('やめる'))}</button></div>` : '');
         if (ed._picking === i) {
           html += `<div class="sl-picker"><div class="hint">${esc(t('押した順に使います（2 つ以上ならオートで順番に）'))}</div>`
@@ -138,6 +161,7 @@
       for (const e of p.errors) html += `<div class="err">${esc(t('{0} 行目：{1}', e.line, e.msg))}</div>`;
       el.innerHTML = html;
       el.querySelectorAll('select[data-f="palette"]').forEach((sel) => { const x = ed.model.songs[+sel.dataset.i]; sel.value = x.palette === null ? '' : String(x.palette); });
+      el.querySelectorAll('select[data-f="media"]').forEach((sel) => { sel.value = mediaVal(ed.model.songs[+sel.dataset.i]); });
       if (ed._focusLast) {
         ed._focusLast = false;
         const inputs = el.querySelectorAll('input[data-f="title"]');

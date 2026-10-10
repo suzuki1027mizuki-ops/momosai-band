@@ -62,8 +62,11 @@
     overlayOn: true, // メディアのオーバーレイ（画像・動画・画面の取り込み・YouTube / ニコニコ）の表示（O キー）
     ovSceneOn: true, // シーンのオーバーレイ（別のシーンを重ねる）の表示（Shift+O）
     overlay: {
-      // メディア：mediaKind image 画像 / video 動画ファイル / capture 画面・タブの取り込み / web YouTube・ニコニコ
-      mediaKind: 'image',
+      // メディア：mediaKind image 画像 / video 動画ファイル / capture 画面・タブの取り込み / web YouTube・ニコニコ /
+      // camera カメラ / lib メディアの一覧の 1 件（libId）
+      mediaKind: 'image', libId: '',
+      // カメラ（Web カメラ・キャプチャーボード）。cameraId が空なら既定のカメラ。mirror：左右反転（鏡）
+      cameraId: '', cameraLabel: '', cameraMirror: false,
       // 画像（透過 PNG の枠・イラストなど。data URL）。fit: contain 全体が入る / cover 画面を埋める / stretch 引き伸ばす（動画にも使う）
       image: '', imageFit: 'contain', imageBlend: 'normal', imageOpacity: 1, // blend: normal そのまま / add 光を足す / screen
       // 動画ファイル（中身は大きいので設定には入れず、mediastore.js に保存。ここは鍵と名前だけ）
@@ -75,6 +78,8 @@
       // 文字（時計・バンド名・曲名・自由な文字）を隅にずっと出す
       textOn: true, clock: false, band: false, song: false, text: '', corner: 'tr', textSize: 1, textOpacity: 0.9,
     },
+    mediaLib: [], // メディアの一覧（medialib.js。曲ごとのメディア「m:名前」・キューで使う）
+    cues: [], // キュー：{ name, scene, palette, media, ovScene }（cues.js。1 回の操作でまとめて切り替える）
     guide: true, // パネルの上に「はじめてのガイド」を出す
     panelFold: {}, // パネルの閉じている見出し { '3': true, ... }（①〜⑦）
   };

@@ -86,11 +86,12 @@
       return true;
     };
     app.getSettings = () => JSON.parse(JSON.stringify(app.settings));
-    // メディアの操作（描画しているウィンドウで。2 画面のときは出力側に頼む）：startCapture / stopCapture / webCmd
+    // メディアの操作（描画しているウィンドウで。2 画面のときは出力側に頼む）：
+    // startCapture / stopCapture / webCmd / startCamera / stopCamera / listCameras
     app.mediaCall = async (name, ...args) => {
-      if (!['startCapture', 'stopCapture', 'webCmd'].includes(name)) throw new Error('bad media call');
+      if (!['startCapture', 'stopCapture', 'webCmd', 'startCamera', 'stopCamera', 'listCameras'].includes(name)) throw new Error('bad media call');
       if (remote()) {
-        if (name === 'startCapture') { try { link.peer.focus(); } catch (e) { /* noop */ } }
+        if (name === 'startCapture' || name === 'startCamera') { try { link.peer.focus(); } catch (e) { /* noop */ } }
         return link.request({ t: 'cmd', target: 'app', name: 'mediaCall', args: [name, ...args] });
       }
       return VJ.media[name](...args);
@@ -111,6 +112,8 @@
     app.netQr = () => (remote() ? link.request({ t: 'cmd', target: 'app', name: 'netQr', args: [] }) : VJ.net.qrCodes());
     // 操作側から出力ウィンドウを閉じる前に呼ばれる（離脱確認を外す）
     app.releaseGuard = () => { VJ.guard.showing = false; return true; };
+    // キュー（i は 0 から。キー・MIDI・スマホ・OSC から。2 画面の出力ウィンドウでは操作ウィンドウへ渡す）
+    app.cue = (i) => VJ.cuesUI.recall(i);
     app.show.onTap = () => (app.extractor ? app.extractor.tap() : 0);
     app.show.onSongStart = () => { if (app.extractor) app.extractor.tempo.clearManual(); };
     // 前回の続きから再開できるように、曲・シーンの位置を保存（操作ウィンドウ以外）
