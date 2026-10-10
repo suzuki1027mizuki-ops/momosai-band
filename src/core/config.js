@@ -50,7 +50,8 @@
     speechTitle: false, // 話し声（MC）を検出したらタイトル画面にする
     demoKind: 'band', // デモ音源の種類 band / sing / speech
     lang: 'auto', // 表示の言語 auto / ja / en
-    crossfade: -1, // シーン切替のクロスフェード（秒）。0 = カット / -1 = 音楽のタイプに合わせる
+    crossfade: -1, // シーン切替の長さ（秒）。0 = カット / -1 = 音楽のタイプに合わせる
+    transition: 'fade', // シーン切替の種類（crossfade が 0 より大きいとき）：fade / wipe / iris / blinds / zoom / slide / glitch / mosaic / random
     midiMap: {}, // MIDI の割り当て（空なら既定）。{ 'n36': 'scene:ripple', 'c1': 'master', ... }
     net: { enabled: false, url: 'ws://127.0.0.1:8787/vj' }, // ブリッジ（スマホ操作・OSC・Art-Net）
     osc: { enabled: false, host: '127.0.0.1', port: 9001, rate: 30 }, // OSC で特徴量を送る
@@ -58,14 +59,21 @@
     bands: [], // 出演バンド（bands.js）。いま出ているバンドの値は上の bandName・setlistText などにある
     bandIdx: 0, // いま出ているバンドの番号
     bandPalette: -1, // いま出ているバンドの色（パネルで選んだもの。-1 = 決めていない）
-    overlayOn: true, // オーバーレイ全体の表示（O キー）
+    overlayOn: true, // メディアのオーバーレイ（画像・動画・画面の取り込み・YouTube / ニコニコ）の表示（O キー）
+    ovSceneOn: true, // シーンのオーバーレイ（別のシーンを重ねる）の表示（Shift+O）
     overlay: {
-      // 画像（透過 PNG の枠・イラストなど。data URL）を全シーンの上に。fit: contain 全体が入る / cover 画面を埋める / stretch 引き伸ばす
+      // メディア：mediaKind image 画像 / video 動画ファイル / capture 画面・タブの取り込み / web YouTube・ニコニコ
+      mediaKind: 'image',
+      // 画像（透過 PNG の枠・イラストなど。data URL）。fit: contain 全体が入る / cover 画面を埋める / stretch 引き伸ばす（動画にも使う）
       image: '', imageFit: 'contain', imageBlend: 'normal', imageOpacity: 1, // blend: normal そのまま / add 光を足す / screen
+      // 動画ファイル（中身は大きいので設定には入れず、mediastore.js に保存。ここは鍵と名前だけ）
+      videoKey: '', videoName: '', videoLoop: true, videoSound: false,
+      // YouTube / ニコニコの URL（埋め込みで、映像の上に重ねる。インターネットが必要）
+      webUrl: '',
       // いまのシーンの上に、別のシーンを重ねる（'' = 重ねない）
       scene: '', sceneBlend: 'screen', sceneOpacity: 0.7, // blend: screen / add。濃さ 1 でも足す強さは 0.6 まで（光過敏対策）
       // 文字（時計・バンド名・曲名・自由な文字）を隅にずっと出す
-      clock: false, band: false, song: false, text: '', corner: 'tr', textSize: 1, textOpacity: 0.9,
+      textOn: true, clock: false, band: false, song: false, text: '', corner: 'tr', textSize: 1, textOpacity: 0.9,
     },
     guide: true, // パネルの上に「はじめてのガイド」を出す
     panelFold: {}, // パネルの閉じている見出し { '3': true, ... }（①〜⑦）

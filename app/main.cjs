@@ -63,14 +63,35 @@ function setupSession() {
   ses.setPermissionRequestHandler((wc, permission, cb) => cb(ALLOWED.has(permission)));
   ses.setPermissionCheckHandler((wc, permission) => ALLOWED.has(permission));
   ses.setDevicePermissionHandler((d) => d.deviceType === 'serial');
-  // 「PC で再生中の音」：画面全体 + システムの音（ループバック）
   ses.setDisplayMediaRequestHandler((req, cb) => {
+    // メディアのオーバーレイの「画面・タブの取り込み」（映像だけ）：取り込むウィンドウ・画面を選んでもらう
+    if (!req.audioRequested) {
+      desktopCapturer.getSources({ types: ['window', 'screen'] }).then((sources) => {
+        const list = sources.filter((x) => !/^MOMOSAI VJ/.test(x.name)).slice(0, 12);
+        if (!list.length) { cb({}); return; }
+        const win = BrowserWindow.getFocusedWindow() || mainWin;
+        dialog.showMessageBox(win, {
+          type: 'question', message: '取り込むウィンドウ・画面を選んでください',
+          detail: 'YouTube・ニコニコなどは、ブラウザで動画を再生しておき、そのウィンドウを選びます（全画面にするときれいに入ります）。',
+          buttons: [...list.map((x) => x.name.slice(0, 60) || x.id), 'キャンセル'], cancelId: list.length, noLink: true,
+        }).then((r) => cb(r.response < list.length ? { video: list[r.response] } : {})).catch(() => cb({}));
+      }).catch(() => cb({}));
+      return;
+    }
+    // 「PC で再生中の音」：画面全体 + システムの音（ループバック）
     desktopCapturer.getSources({ types: ['screen'] }).then((sources) => {
       if (!sources.length) { cb({}); return; }
       const opt = { video: sources[0] };
       if (process.platform === 'win32' || process.platform === 'darwin') opt.audio = 'loopback';
       cb(opt);
     }).catch(() => cb({}));
+  });
+  // YouTube の埋め込みは、埋め込んだページの情報（Referer）が無いと再生できない（エラー 153）。
+  // アプリのページ（file://）からは送られないので、アプリの名前を入れる
+  ses.webRequest.onBeforeSendHeaders({ urls: ['https://www.youtube-nocookie.com/*', 'https://www.youtube.com/*'] }, (d, cb) => {
+    const h = d.requestHeaders;
+    if (!h.Referer && !h.referer) h.Referer = 'https://momosai-vj.app/';
+    cb({ requestHeaders: h });
   });
   // USB-DMX のポート選び（1 つならそれ、複数なら選ぶ）
   ses.on('select-serial-port', (event, ports, wc, cb) => {
@@ -122,7 +143,7 @@ function createMain() {
     webPreferences: { backgroundThrottling: false, contextIsolation: true, sandbox: true },
   });
   const query = { app: '1' };
-  if (bridge) query.bridge = `ws://127.0.0.1:${bridge.port}/vj`;
+  if (bridge) query.bridge = `ws://127.0.0.1:${bridge.port}/vj?k=${bridge.vjKey}`;
   if (SMOKE) query.test = '1';
   mainWin.loadFile(path.join(WEB, 'momosai-vj.html'), { query });
   mainWin.webContents.setWindowOpenHandler(({ url }) => {
@@ -131,6 +152,9 @@ function createMain() {
     return { action: 'deny' };
   });
   mainWin.webContents.on('did-create-window', (win, details) => {
+    // 出力ウィンドウも、ページの外（埋め込んだ YouTube などから）へ移らない・別のウィンドウを開かない
+    win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('file:')) e.preventDefault(); });
+    win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
     if (!isGlass(details.url)) return;
     glassWins.add(win);
     win.on('closed', () => glassWins.delete(win));

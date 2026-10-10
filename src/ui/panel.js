@@ -106,26 +106,26 @@
       $('opt-countdown').value = s.countdownTo || '';
       $('opt-countdown').addEventListener('input', () => { s.countdownTo = $('opt-countdown').value; panel.applyShow(); });
 
-      // ④ 表示
-      const out = s.output;
-      $('out-rotate').value = String(out.rotate);
-      $('out-rotate').addEventListener('change', () => { out.rotate = +$('out-rotate').value; panel.applyShow(true); });
-      $('out-fliph').checked = !!out.flipH;
-      $('out-fliph').addEventListener('change', () => { out.flipH = $('out-fliph').checked; panel.applyShow(true); });
-      $('out-flipv').checked = !!out.flipV;
-      $('out-flipv').addEventListener('change', () => { out.flipV = $('out-flipv').checked; panel.applyShow(true); });
+      // ④ 表示（バンドの切替・設定の読み込みで s.output は作り直されるので、毎回 settings から読む）
+      const out = () => panel.app.settings.output;
+      $('out-rotate').value = String(out().rotate);
+      $('out-rotate').addEventListener('change', () => { out().rotate = +$('out-rotate').value; panel.applyShow(true); });
+      $('out-fliph').checked = !!out().flipH;
+      $('out-fliph').addEventListener('change', () => { out().flipH = $('out-fliph').checked; panel.applyShow(true); });
+      $('out-flipv').checked = !!out().flipV;
+      $('out-flipv').addEventListener('change', () => { out().flipV = $('out-flipv').checked; panel.applyShow(true); });
       const bindOut = (id, key, fmt) => {
         const el = $(id), v = $(id + '-v');
-        el.value = out[key];
+        el.value = out()[key];
         v.textContent = fmt(+el.value);
-        el.addEventListener('input', () => { out[key] = +el.value; v.textContent = fmt(+el.value); if (!panel._bulk) panel.applyShow(true); });
+        el.addEventListener('input', () => { out()[key] = +el.value; v.textContent = fmt(+el.value); if (!panel._bulk) panel.applyShow(true); });
       };
       bindOut('out-size', 'size', (x) => Math.round(x * 100) + '%');
       bindOut('out-x', 'x', (x) => (x > 0 ? '+' : '') + Math.round(x * 100) + '%');
       bindOut('out-y', 'y', (x) => (x > 0 ? '+' : '') + Math.round(x * 100) + '%');
       $('btn-test').addEventListener('click', () => app.show.toggleTestPattern());
       $('btn-out-reset').addEventListener('click', () => {
-        Object.assign(out, OUT_DEFAULT);
+        Object.assign(out(), OUT_DEFAULT);
         panel.syncOutputUi();
         panel.applyShow(true);
       });
@@ -152,9 +152,18 @@
       panel.syncFlashLimit();
       bindCheck('opt-speechtitle', 'speechTitle');
       bindCheck('opt-palauto', 'paletteAuto');
-      $('opt-xfade').value = String(s.crossfade);
-      if ($('opt-xfade').selectedIndex < 0) $('opt-xfade').value = '-1';
-      $('opt-xfade').addEventListener('change', () => { s.crossfade = +$('opt-xfade').value; panel.applyShow(true); });
+      // シーンの切り替え：種類（音楽のタイプに合わせる・カット・フェード・ワイプ…）と長さ。
+      // 設定は crossfade（-1 = 音楽のタイプ / 0 = カット / 秒）と transition（種類）
+      $('opt-trans').addEventListener('change', () => {
+        const v = $('opt-trans').value;
+        if (v === 'auto') s.crossfade = -1;
+        else if (v === 'cut') s.crossfade = 0;
+        else { s.transition = v; s.crossfade = +$('opt-xfade').value || 0.5; }
+        panel.syncTransition();
+        panel.applyShow(true);
+      });
+      $('opt-xfade').addEventListener('change', () => { if (s.crossfade > 0) s.crossfade = +$('opt-xfade').value; panel.applyShow(true); });
+      panel.syncTransition();
       bindCheck('opt-toast', 'toast');
       bindCheck('opt-latsq', 'latencySquare');
       bindCheck('opt-autostart', 'autoStart');
@@ -337,6 +346,7 @@
       if ($('intensity-now').textContent !== nowTxt) $('intensity-now').textContent = nowTxt;
       VJ.scenePick.update();
       VJ.guide.tick(f);
+      if ($('overlay-box').open) panel.renderMediaStatus();
       if (perfNow - (panel._syncT || 0) > 500) { panel._syncT = perfNow; panel.syncFromSettings(); }
       if (f) {
         $('bpm-view').textContent = f.bpm && f.beatConf > 0.2 ? `${Math.round(f.bpm)} BPM${f.tempoManual ? t('（タップ）') : ''}` : '— BPM';
@@ -468,6 +478,10 @@
         if (!box.hidden) { box.hidden = true; $('btn-qr').textContent = t('スマホ用の QR コードを表示'); return; }
         let codes = [];
         try { codes = (await panel.app.netQr()) || []; } catch (e) { codes = []; }
+        // 鍵なしでつないでいる（暗証番号・QR を受け取っていない）ときは、ブリッジの /qr のページを開く（この PC からだけ見られる）
+        const io = VJ.link.role === 'control' ? (VJ.link.lastStatus && VJ.link.lastStatus.io) || {} : { net: VJ.net.state() };
+        const ni = io.net && io.net.info;
+        if (!codes.length && ni && !ni.pin && ni.port) { window.open(`http://127.0.0.1:${ni.port | 0}/qr`, '_blank'); return; }
         if (!codes.length) { panel.app.ui.toast(t('QR コードを作れません（ブリッジにつながっていないか、LAN に接続されていません）'), 'warn'); return; }
         box.innerHTML = codes.map((q) => `<figure><img src="${esc(q.img)}" alt="QR"><figcaption data-i18n-skip>${esc(q.url)}</figcaption></figure>`).join('')
           + `<div class="hint">${esc(t('スマホのカメラで読み取ると、暗証番号を入れずにつながります。QR には暗証番号が入っているので、観客から見えるところでは表示しないでください。'))}</div>`;
@@ -499,7 +513,9 @@
       if (!(s.net && s.net.enabled)) { el.className = 'status'; el.textContent = t('つないでいません'); }
       else if (n.status === 'on' && n.info) {
         el.className = 'status ok';
-        el.textContent = t('ブリッジに接続中。スマホで {0} を開き、暗証番号 {1} を入力', n.info.urls.length ? n.info.urls.join(' / ') : t('（LAN に接続されていません）'), n.info.pin)
+        const urlTxt = n.info.urls.length ? n.info.urls.join(' / ') : t('（LAN に接続されていません）');
+        el.textContent = (n.info.pin ? t('ブリッジに接続中。スマホで {0} を開き、暗証番号 {1} を入力', urlTxt, n.info.pin)
+          : t('ブリッジに接続中。スマホで {0} を開き、ブリッジの画面に出ている暗証番号を入力（下のボタンで QR のページを開けます）', urlTxt))
           + t('（接続中のスマホ {0} 台・OSC 受信 {1} 番）', n.info.phones, n.info.oscPort);
         if ($('osc-in')) $('osc-in').textContent = n.info.oscPort || '—';
         $('btn-qr').hidden = false;
@@ -612,17 +628,45 @@
       return out;
     },
 
-    /** オーバーレイ（画像・重ねるシーン・隅の文字）の欄。設定の中身は読み込みなどで入れ替わるので、毎回 settings から読む */
+    /** オーバーレイの欄（メディア・シーン・文字）。設定の中身は読み込みなどで入れ替わるので、毎回 settings から読む */
     initOverlay() {
       const s = panel.app.settings;
       const apply = () => panel.applyShow(true);
       const pct = (x) => Math.round(x * 100) + '%';
+      // メディア
       $('ov-on').addEventListener('change', () => { s.overlayOn = $('ov-on').checked; apply(); });
-      $('ov-file').addEventListener('change', panel.loadOverlayImage);
+      document.querySelectorAll('input[name=ov-kind]').forEach((r) => r.addEventListener('change', () => {
+        s.overlay.mediaKind = r.value;
+        s.overlayOn = true;
+        panel.syncOverlay();
+        apply();
+      }));
+      $('ov-file').addEventListener('change', (e) => { if (e.target.files[0]) panel.setOverlayImageFile(e.target.files[0]); });
+      $('btn-ov-paste').addEventListener('click', () => panel.pasteImage());
       $('btn-ov-clear').addEventListener('click', () => { s.overlay.image = ''; $('ov-file').value = ''; panel.syncOverlay(); apply(); });
+      $('ov-vfile').addEventListener('change', (e) => { if (e.target.files[0]) panel.setOverlayVideoFile(e.target.files[0]); });
+      $('btn-ov-vclear').addEventListener('click', () => {
+        s.overlay.videoKey = ''; s.overlay.videoName = ''; $('ov-vfile').value = '';
+        VJ.mediaStore.prune('');
+        panel.syncOverlay(); apply();
+      });
+      $('ov-vloop').addEventListener('change', () => { s.overlay.videoLoop = $('ov-vloop').checked; apply(); });
+      $('ov-vsound').addEventListener('change', () => { s.overlay.videoSound = $('ov-vsound').checked; $('ov-wsound').checked = s.overlay.videoSound; apply(); });
+      $('ov-wsound').addEventListener('change', () => { s.overlay.videoSound = $('ov-wsound').checked; $('ov-vsound').checked = s.overlay.videoSound; apply(); });
+      $('btn-ov-capture').addEventListener('click', () => panel.startCapture());
+      $('btn-ov-capstop').addEventListener('click', () => { panel.app.mediaCall('stopCapture').catch(() => {}); });
+      $('btn-ov-web').addEventListener('click', () => panel.setWebUrl($('ov-web').value));
+      $('ov-web').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); panel.setWebUrl($('ov-web').value); } });
+      $('ov-play').addEventListener('click', (e) => {
+        const b = e.target.closest('button[data-mcmd]');
+        if (b) panel.app.mediaCall('webCmd', b.dataset.mcmd).catch(() => {});
+      });
       for (const [id, key] of [['ov-fit', 'imageFit'], ['ov-imgblend', 'imageBlend'], ['ov-scene', 'scene'], ['ov-sceneblend', 'sceneBlend'], ['ov-corner', 'corner']]) {
         $(id).addEventListener('change', () => { s.overlay[key] = $(id).value; apply(); });
       }
+      // シーン・文字
+      $('ovs-on').addEventListener('change', () => { s.ovSceneOn = $('ovs-on').checked; apply(); });
+      $('ovt-on').addEventListener('change', () => { s.overlay.textOn = $('ovt-on').checked; apply(); });
       for (const [id, key] of [['ov-clock', 'clock'], ['ov-band', 'band'], ['ov-song', 'song']]) {
         $(id).addEventListener('change', () => { s.overlay[key] = $(id).checked; apply(); });
       }
@@ -630,6 +674,25 @@
       for (const [id, key] of [['ov-imgop', 'imageOpacity'], ['ov-sceneop', 'sceneOpacity'], ['ov-textop', 'textOpacity'], ['ov-textsize', 'textSize']]) {
         $(id).addEventListener('input', () => { s.overlay[key] = +$(id).value; $(id + '-v').textContent = pct(+$(id).value); apply(); });
       }
+      // 貼り付け（Ctrl+V）と、ファイルを落としたとき（落とした先のページへ移ってショーが止まらないように、どこに落としても受ける）
+      document.addEventListener('paste', (e) => panel.onPaste(e));
+      const box = $('overlay-box');
+      document.addEventListener('dragover', (e) => {
+        if (!e.dataTransfer || !Array.from(e.dataTransfer.types || []).includes('Files')) return;
+        if (e.target.closest && e.target.closest('input[type=file]')) return;
+        e.preventDefault();
+        box.classList.toggle('drop', !!(e.target.closest && e.target.closest('#overlay-box')));
+      });
+      document.addEventListener('dragleave', (e) => { if (!e.relatedTarget) box.classList.remove('drop'); });
+      document.addEventListener('drop', (e) => {
+        box.classList.remove('drop');
+        if (!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return;
+        if (e.target.closest && e.target.closest('input[type=file]')) return; // ファイルの欄はそのまま
+        e.preventDefault();
+        const f = Array.from(e.dataTransfer.files).find((x) => /^(image|video)\//.test(x.type) || /\.(mp4|webm|mov|m4v)$/i.test(x.name));
+        if (!f) { panel.app.ui.toast(t('画像か動画のファイルを落としてください（音声ファイルは ① の「音声ファイル」で）'), 'warn'); return; }
+        if (/^image\//.test(f.type)) panel.setOverlayImageFile(f); else panel.setOverlayVideoFile(f);
+      });
       // 透過ウィンドウ（ほかの画面の上に重ねる）は単体アプリだけ
       const inApp = VJ.params.app === '1';
       $('glass-row').hidden = !inApp;
@@ -643,14 +706,23 @@
       const s = panel.app.settings, o = s.overlay;
       const pct = (x) => Math.round(x * 100) + '%';
       $('ov-on').checked = !!s.overlayOn;
+      $('ovs-on').checked = !!s.ovSceneOn;
+      $('ovt-on').checked = !!o.textOn;
+      const kind = o.mediaKind || 'image';
+      document.querySelectorAll('input[name=ov-kind]').forEach((r) => { r.checked = r.value === kind; });
+      document.querySelectorAll('#overlay-box .ov-pane').forEach((p) => { p.hidden = p.dataset.kind !== kind; });
+      $('ov-play').hidden = kind !== 'video' && kind !== 'web';
+      $('ov-vwarn').hidden = kind === 'image';
       const sel = $('ov-scene');
       sel.innerHTML = `<option value="">${esc(t('重ねない'))}</option>` + VJ.scenes.list.filter((d) => !d.hidden && d.id !== 'title')
         .map((d) => `<option value="${d.id}">${esc(d.key.replace('s', 'Shift+'))} ${esc(VJ.sceneName(d))}</option>`).join('');
       sel.value = o.scene;
       if (sel.selectedIndex < 0) sel.value = '';
       for (const [id, key] of [['ov-fit', 'imageFit'], ['ov-imgblend', 'imageBlend'], ['ov-sceneblend', 'sceneBlend'], ['ov-corner', 'corner']]) $(id).value = o[key];
-      for (const [id, key] of [['ov-clock', 'clock'], ['ov-band', 'band'], ['ov-song', 'song']]) $(id).checked = !!o[key];
+      for (const [id, key] of [['ov-clock', 'clock'], ['ov-band', 'band'], ['ov-song', 'song'], ['ov-vloop', 'videoLoop'], ['ov-vsound', 'videoSound'], ['ov-wsound', 'videoSound']]) $(id).checked = !!o[key];
       if ($('ov-text').value !== o.text) $('ov-text').value = o.text;
+      if (document.activeElement !== $('ov-web') && $('ov-web').value !== o.webUrl) $('ov-web').value = o.webUrl;
+      $('ov-vname').textContent = o.videoName ? t('動画：{0}', o.videoName) : t('動画が選ばれていません');
       for (const [id, key] of [['ov-imgop', 'imageOpacity'], ['ov-sceneop', 'sceneOpacity'], ['ov-textop', 'textOpacity'], ['ov-textsize', 'textSize']]) {
         $(id).value = o[key];
         $(id + '-v').textContent = pct(o[key]);
@@ -658,20 +730,117 @@
       const img = $('ov-preview');
       img.hidden = !o.image;
       if (o.image) img.src = o.image; else img.removeAttribute('src');
+      panel.renderMediaStatus(true);
     },
 
-    /** オーバーレイの画像を読み込む（長辺 1920px 以下・900KB 程度まで） */
-    async loadOverlayImage(e) {
-      const f = e.target.files[0];
-      if (!f) return;
+    /** メディアの状態（再生中・取り込み中・読めない など）を表示（パネルの更新から、1 秒に 4 回まで） */
+    renderMediaStatus(force) {
+      const now = performance.now();
+      if (!force && now - (panel._mstT || 0) < 250) return;
+      panel._mstT = now;
+      const s = panel.app.settings, o = s.overlay, kind = o.mediaKind || 'image';
+      const st = VJ.link.role === 'control' ? (VJ.link.lastStatus && VJ.link.lastStatus.media) || {} : VJ.media.state();
+      let txt = '';
+      if (!s.overlayOn) txt = t('メディアは OFF（O キーで表示）');
+      else if (kind === 'video') txt = ({ loading: t('読み込み中…'), playing: t('再生中'), paused: t('一時停止中'), ended: t('終わりました（⏮ で最初から）'), missing: t('動画が見つかりません。もう一度選んでください'), error: t('この動画は再生できません（MP4・WebM がおすすめ）'), empty: t('動画が選ばれていません') })[st.status] || '';
+      else if (kind === 'capture') txt = st.capture ? t('取り込み中：{0}', st.label || '') : t('取り込んでいません（「取り込む画面・タブを選ぶ」）');
+      else if (kind === 'web') txt = ({ loading: t('読み込み中…'), playing: t('表示中（動かないときは ▶）'), badurl: t('YouTube / ニコニコの URL ではありません'), empty: t('URL を入れて「表示」') })[st.status] || '';
+      if ($('ov-status').textContent !== txt) $('ov-status').textContent = txt;
+      if (kind === 'capture') $('ov-play').hidden = true;
+      const cap = document.querySelector('#overlay-box .ov-pane[data-kind=capture] .hint');
+      if (cap && kind === 'capture') cap.dataset.on = st.capture ? '1' : '';
+    },
+
+    /** 画像ファイル（貼り付け・落とした・選んだ）をメディアの画像にする（長辺 1920px 以下・900KB 程度まで） */
+    async setOverlayImageFile(f) {
       try {
-        panel.app.settings.overlay.image = await panel._readImage(f, 1920, 9e5);
-        panel.app.settings.overlayOn = true;
+        const s = panel.app.settings;
+        s.overlay.image = await panel._readImage(f, 1920, 9e5);
+        s.overlay.mediaKind = 'image';
+        s.overlayOn = true;
         panel.syncOverlay();
         panel.applyShow(true);
+        panel.app.ui.toast(t('メディアに画像を入れました（O で表示・非表示）'));
       } catch (err) {
         panel.app.ui.toast(t('画像を読み込めませんでした：') + err.message, 'warn');
       }
+    },
+
+    /** 動画ファイルをメディアにする（この PC の保存場所に入れ、2 画面のときは出力ウィンドウへ渡す） */
+    async setOverlayVideoFile(f) {
+      const s = panel.app.settings;
+      const key = VJ.mediaStore.newKey();
+      const saved = await VJ.mediaStore.put(key, f);
+      VJ.link.send({ t: 'media', key, blob: f });
+      s.overlay.videoKey = key;
+      s.overlay.videoName = String(f.name || t('動画')).slice(0, 200);
+      s.overlay.mediaKind = 'video';
+      s.overlayOn = true;
+      VJ.mediaStore.prune(key);
+      panel.syncOverlay();
+      panel.applyShow(true);
+      panel.app.ui.toast(saved ? t('メディアに動画を入れました（O で表示・非表示）') : t('動画を保存できませんでした。このウィンドウを閉じるまで使えます'), saved ? undefined : 'warn');
+    },
+
+    /** YouTube / ニコニコの URL をメディアにする */
+    setWebUrl(raw) {
+      const url = String(raw || '').trim();
+      if (!VJ.media.parseWebUrl(url)) { panel.app.ui.toast(t('YouTube / ニコニコの URL ではありません'), 'warn'); return false; }
+      const s = panel.app.settings;
+      s.overlay.webUrl = /^https:\/\//i.test(url) ? url : 'https://' + url.replace(/^http:\/\//i, '');
+      s.overlay.mediaKind = 'web';
+      s.overlayOn = true;
+      panel.syncOverlay();
+      panel.applyShow(true);
+      return true;
+    },
+
+    /** 「貼り付け」ボタン：クリップボードの画像を読む（許可を聞かれることがある） */
+    async pasteImage() {
+      const cb = navigator.clipboard;
+      if (!cb || !cb.read) { panel.app.ui.toast(t('この環境ではボタンから貼り付けできません。Ctrl+V で貼り付けてください'), 'warn'); return; }
+      try {
+        for (const it of await cb.read()) {
+          const type = it.types.find((x) => x.startsWith('image/'));
+          if (type) { await panel.setOverlayImageFile(await it.getType(type)); return; }
+        }
+        panel.app.ui.toast(t('クリップボードに画像がありません（画像をコピーしてから）'), 'warn');
+      } catch (e) {
+        panel.app.ui.toast(t('クリップボードを読めませんでした。Ctrl+V で貼り付けてください'), 'warn');
+      }
+    },
+
+    /** Ctrl+V：画像・動画のファイル、YouTube / ニコニコの URL を、メディアにする（文字の欄に文字を貼るときはそのまま） */
+    onPaste(e) {
+      if (VJ.link.role === 'output') return;
+      const cd = e.clipboardData;
+      if (!cd) return;
+      const tg = e.target;
+      const editable = !!tg && (tg.isContentEditable || /^(input|textarea|select)$/i.test(tg.tagName || ''));
+      const files = Array.from(cd.files || []);
+      const img = files.find((f) => /^image\//.test(f.type)), vid = files.find((f) => /^video\//.test(f.type));
+      const text = cd.getData('text/plain') || '';
+      if (editable && (text || !(img || vid))) return;
+      if (img) { e.preventDefault(); panel.setOverlayImageFile(img); return; }
+      if (vid) { e.preventDefault(); panel.setOverlayVideoFile(vid); return; }
+      if (!editable && VJ.media.parseWebUrl(text)) { e.preventDefault(); panel.setWebUrl(text); }
+    },
+
+    /** 画面・タブの取り込みを始める（2 画面のときは出力ウィンドウに選ぶ画面が出る） */
+    async startCapture() {
+      const s = panel.app.settings;
+      s.overlay.mediaKind = 'capture';
+      s.overlayOn = true;
+      panel.syncOverlay();
+      panel.applyShow(true);
+      if (VJ.link.role === 'control') panel.app.ui.toast(t('出力ウィンドウに、取り込む画面を選ぶ画面が出ています'));
+      try {
+        await panel.app.mediaCall('startCapture');
+      } catch (e) {
+        const cancel = e && (e.name === 'NotAllowedError' || e.name === 'AbortError');
+        panel.app.ui.toast(cancel ? t('画面の取り込みがキャンセルされました') : t('画面を取り込めませんでした：') + ((e && e.message) || e), 'warn');
+      }
+      panel.renderMediaStatus(true);
     },
 
     syncOutputUi() {
@@ -760,7 +929,7 @@
       const f = e.target.files[0];
       if (!f) return;
       try {
-        panel.replaceSettings(VJ.storage.fromJSON(await f.text()));
+        panel.replaceSettings(VJ.storage.fromFile(await f.text()));
         panel.app.ui.toast(t('設定を読み込みました'));
       } catch (err) {
         alert(t('設定ファイルを読み込めませんでした：') + err.message);
@@ -775,6 +944,20 @@
       try { panel._replace(ns); } finally { panel._bulk = false; }
       panel.applyShow(true);
       VJ.storage.save(panel.app.settings);
+    },
+
+    /** シーンの切り替えの欄（種類と長さ）を設定に合わせる。長さの選択肢に無い秒数（設定ファイル）は足す */
+    syncTransition() {
+      const s = panel.app.settings, cf = +s.crossfade;
+      $('opt-trans').value = cf < 0 ? 'auto' : cf === 0 ? 'cut' : s.transition || 'fade';
+      if ($('opt-trans').selectedIndex < 0) $('opt-trans').value = 'fade';
+      const sel = $('opt-xfade');
+      if (cf > 0) {
+        const v = String(Math.min(4, cf));
+        if (!Array.from(sel.options).some((o) => o.value === v)) sel.add(new Option(t('{0} 秒', v), v));
+        sel.value = v;
+      } else if (sel.selectedIndex < 0) sel.value = '0.5';
+      sel.disabled = cf <= 0;
     },
 
     /** フラッシュの上限・激しさの表示（設定ファイルの値が選択肢に無ければ足す）と、推奨を超えたときの警告 */
@@ -801,8 +984,7 @@
       for (const [id, key] of [['opt-auto', 'auto'], ['opt-autoflash', 'autoFlash'], ['opt-noflash', 'noFlash'], ['opt-toast', 'toast'],
         ['opt-latsq', 'latencySquare'], ['opt-autostart', 'autoStart'], ['opt-desync', 'desynchronized'], ['opt-speechtitle', 'speechTitle'],
         ['opt-palauto', 'paletteAuto']]) $(id).checked = !!s[key];
-      $('opt-xfade').value = String(s.crossfade);
-      if ($('opt-xfade').selectedIndex < 0) $('opt-xfade').value = '-1';
+      panel.syncTransition();
       panel.syncFlashLimit();
       $('demo-kind').value = ['band', 'sing', 'speech'].includes(s.demoKind) ? s.demoKind : 'band';
       $('opt-lang').value = ['auto', 'ja', 'en'].includes(s.lang) ? s.lang : 'auto';
@@ -845,6 +1027,11 @@
       }
       $('opt-auto').checked = !!s.auto;
       $('ov-on').checked = !!s.overlayOn;
+      $('ovs-on').checked = !!s.ovSceneOn;
+      // 取り込みを始めた・やめた（出力ウィンドウ・キーから）ときなど、メディアの種類が変わったら欄を合わせる
+      const kind = s.overlay.mediaKind || 'image';
+      const r = document.querySelector('input[name=ov-kind]:checked');
+      if (!r || r.value !== kind) panel.syncOverlay();
     },
   };
 

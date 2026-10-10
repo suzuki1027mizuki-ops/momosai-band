@@ -9,9 +9,9 @@
 
   const SHOW_METHODS = ['selectScene', 'nextSong', 'prevSong', 'flash', 'setStrobe', 'toggleBlackout', 'setBlackout', 'cyclePalette',
     'nudgeSensitivity', 'nudgeMaster', 'toggleAuto', 'lock', 'unlock', 'showSongTitle', 'tap', 'toggleMessage', 'showMessage',
-    'toggleTestPattern', 'restoreSession', 'setMaster', 'setSensitivity', 'setPalette', 'resetShow', 'toggleOverlay'];
+    'toggleTestPattern', 'restoreSession', 'setMaster', 'setSensitivity', 'setPalette', 'resetShow', 'toggleOverlay', 'toggleSceneOverlay'];
   // 出力側から操作側へ反映してよい設定（型も確認する）
-  const PATCH_KEYS = { paletteIdx: 'number', sensitivity: 'number', master: 'number', auto: 'boolean', overlayOn: 'boolean' };
+  const PATCH_KEYS = { paletteIdx: 'number', sensitivity: 'number', master: 'number', auto: 'boolean', overlayOn: 'boolean', ovSceneOn: 'boolean' };
 
   // ---------------------------------------------------------------- 操作側のリモコン
   class RemoteShow {
@@ -139,6 +139,7 @@
       const resume = document.getElementById('resume-box');
       if (resume) resume.hidden = true; // 出力側が本番の状態を持っているので、古い「前回の続き」は出さない
       app.paused = true;
+      VJ.media.release(); // 動画・埋め込み・画面の取り込みは出力ウィンドウが受け持つ
       app.show = new RemoteShow(link, app.settings);
       app.show.state = Object.assign({}, local.show.state);
       app.engine = new RemoteEngine(link);
@@ -187,6 +188,7 @@
       app.paused = false;
       VJ.net.apply(app);
       VJ.dmx.apply(app);
+      VJ.media.sync(app);
       document.getElementById('remote').hidden = true;
       document.body.classList.remove('remote-mode');
       document.getElementById('btn-output').textContent = VJ.t('出力ウィンドウを開く（2 画面）');
@@ -204,6 +206,11 @@
         // 出力ウィンドウが開いた／再読み込みされた：設定（出演バンドの一覧も）・曲の位置・音声入力を渡す
         link.send({ t: 'settings', settings: app.settings });
         link._bandsSent = { ref: app.settings.bands, ver: VJ.bands.version };
+        link._logoSent = app.settings.logo;
+        link._ovImgSent = app.settings.overlay && app.settings.overlay.image;
+        // メディアの動画ファイル（保存場所を共有できない環境でも出せるように、中身も渡す）
+        const vk = app.settings.overlay && app.settings.overlay.videoKey;
+        if (vk) VJ.mediaStore.get(vk).then((b) => { if (b) link.send({ t: 'media', key: vk, blob: b }); });
         link._previewOn();
         const first = link.local.fresh;
         link.local.fresh = false;
@@ -327,7 +334,8 @@
           engineOpts: { source: app.engine.opts.source, deviceId: app.engine.opts.deviceId, deviceLabel: app.engine.opts.deviceLabel, channel: app.engine.opts.channel },
           hits,
           f: { bpm: f.bpm, beatConf: f.beatConf, melodic: f.melodic, tempoManual: f.tempoManual, active: f.active },
-          patch: { paletteIdx: app.settings.paletteIdx, sensitivity: app.settings.sensitivity, master: app.settings.master, auto: app.settings.auto, overlayOn: !!app.settings.overlayOn },
+          patch: { paletteIdx: app.settings.paletteIdx, sensitivity: app.settings.sensitivity, master: app.settings.master, auto: app.settings.auto, overlayOn: !!app.settings.overlayOn, ovSceneOn: !!app.settings.ovSceneOn },
+          media: VJ.media.state(),
           fps: r.fps, size: r.size, fullscreen: !!VJ.compat.fullscreenElement(),
           io: { net: VJ.net.state(), dmx: VJ.dmx.state() },
           hud: VJ.hud.text ? VJ.hud.text(app, f, performance.now()) : '',
@@ -364,8 +372,21 @@
       const app = link.app;
       if (d.t === 'preview') { link.wantPreview = !!d.on; return; }
       if (d.t === 'settings') {
+        const keep = d.keep || {};
+        const logo = app.settings.logo, img = app.settings.overlay && app.settings.overlay.image;
         for (const k of Object.keys(d.settings)) app.settings[k] = d.settings[k];
+        // 変わっていないので送られてこなかった大きい画像は、いま持っているものを使う
+        if (keep.logo) app.settings.logo = logo;
+        if (keep.ovImage && app.settings.overlay) app.settings.overlay.image = img || '';
         app.applySettings();
+        return;
+      }
+      if (d.t === 'media') {
+        // 操作ウィンドウで選んだ動画ファイル。保存場所から読めなかった（見つからない）ときは読み直す
+        if (typeof d.key === 'string' && d.blob instanceof Blob) {
+          VJ.mediaStore.hold(d.key, d.blob);
+          if (VJ.media.videoKey === d.key && VJ.media.status === 'missing') { VJ.media.videoKey = ''; VJ.media.sync(app); }
+        }
         return;
       }
       if (d.t !== 'cmd') return;

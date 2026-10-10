@@ -48,16 +48,17 @@ test('ロゴ：タイトルでバンド名の代わり・隅の透かし', async
 });
 
 test('オーバーレイ：画像・重ねるシーン・隅の文字が描かれる。O キーとパネルで切り替えられる', async () => {
+  const BASE_OVERLAY = await page.evaluate(() => VJ.defaultSettings.overlay);
   // 左半分が不透明な白、右半分が透明の画像
   const image = await page.evaluate(() => { const c = document.createElement('canvas'); c.width = 200; c.height = 100; const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, 100, 100); return c.toDataURL(); });
-  const ov = (o, on) => Object.assign({}, BASE, { overlayOn: on !== false, overlay: Object.assign({ image: '', imageFit: 'contain', imageBlend: 'normal', imageOpacity: 1, scene: '', sceneBlend: 'screen', sceneOpacity: 0.5, clock: false, band: false, song: false, text: '', corner: 'tr', textSize: 1, textOpacity: 0.9 }, o) });
+  const ov = (o, on) => Object.assign({}, BASE, { overlayOn: on !== false, ovSceneOn: true, overlay: Object.assign({}, BASE_OVERLAY, { image: '', imageFit: 'contain', imageBlend: 'normal', imageOpacity: 1, scene: '', sceneBlend: 'screen', sceneOpacity: 0.5, textOn: true, clock: false, band: false, song: false, text: '', corner: 'tr', textSize: 1, textOpacity: 0.9 }, o) });
   const last = async (settings) => { const r = await run({ samples: 'demo', seconds: 0.6, sceneId: 'stars', settings, grid: [8, 4], logoWait: 300 }); return r.luma[r.luma.length - 1]; };
   const base = await last(ov({}));
   // 画像：画面に合わせて引き伸ばすと左半分が白、右半分（透明）はシーンのまま。行 0 = 画面下
   const a = await last(ov({ image, imageFit: 'stretch' }));
   assert.ok(a[8] > 0.8 && a[19] > 0.8, '左半分は画像 ' + a[8]);
   assert.ok(a[15] < 0.2 && a[20] < 0.2, '右半分は透ける ' + a[15]);
-  // 濃さを半分にすると薄くなる。まとめて消す（overlayOn = false）と出ない
+  // 濃さを半分にすると薄くなる。メディアを消す（overlayOn = false）と出ない
   const half = await last(ov({ image, imageFit: 'stretch', imageOpacity: 0.5 }));
   assert.ok(half[8] > base[8] + 0.05 && half[8] < 0.6, '半分の濃さ ' + half[8]);
   const off = await last(ov({ image, imageFit: 'stretch' }, false));
@@ -75,12 +76,14 @@ test('オーバーレイ：画像・重ねるシーン・隅の文字が描か�
   assert.ok(tr[31] > base[31] + 0.1 && tr[0] < base[0] + 0.05, `右上の文字 ${tr[31]} / ${base[31]}`);
   const bl = await last(ov({ text: '■■■■■■■■', corner: 'bl', textSize: 2, textOpacity: 1 }));
   assert.ok(bl[0] > base[0] + 0.1 && bl[31] < base[31] + 0.05, `左下の文字 ${bl[0]} / ${base[0]}`);
-  // O キーでまとめて切替。パネルの欄が設定に入る
-  await page.evaluate(() => { VJ.panel.toggle(false); VJ.app.settings.overlayOn = true; });
+  // O キーでメディア、Shift+O でシーンのオーバーレイを切替。パネルの欄が設定に入る
+  await page.evaluate(() => { VJ.panel.toggle(false); VJ.app.settings.overlayOn = true; VJ.app.settings.ovSceneOn = true; });
   await page.keyboard.press('KeyO');
-  assert.equal(await page.evaluate(() => VJ.app.settings.overlayOn), false);
+  assert.deepEqual(await page.evaluate(() => [VJ.app.settings.overlayOn, VJ.app.settings.ovSceneOn]), [false, true]);
   await page.keyboard.press('KeyO');
-  assert.equal(await page.evaluate(() => VJ.app.settings.overlayOn), true);
+  await page.keyboard.press('Shift+KeyO');
+  assert.deepEqual(await page.evaluate(() => [VJ.app.settings.overlayOn, VJ.app.settings.ovSceneOn]), [true, false]);
+  await page.keyboard.press('Shift+KeyO');
   await page.evaluate(() => { VJ.panel.toggle(true); document.querySelectorAll('#panel details').forEach((d) => { d.open = true; }); });
   await page.selectOption('#ov-scene', 'waves');
   await page.check('#ov-clock');

@@ -133,6 +133,16 @@
         add('warn', (+s.flashLimit ? t('フラッシュの上限が 1 秒に {0} 回です', s.flashLimit) : t('フラッシュの上限が「制限なし」です'))
           + t('（推奨は 3 回まで。光過敏性発作のおそれ）。会場に「強い光の点滅があります」と必ず掲示してください（⑤）'));
       } else add('ok', t('フラッシュは 1 秒に {0} 回まで（光過敏対策）。会場に「光の点滅があります」と掲示してください', s.flashLimit));
+      // メディアのオーバーレイ（動画の中の点滅は制限できない）
+      const ov = s.overlay || {};
+      if (s.overlayOn && ['video', 'capture', 'web'].includes(ov.mediaKind)) {
+        const ms = remote ? ls.media || {} : VJ.media.state();
+        const name = { video: t('動画ファイル'), capture: t('画面・タブの取り込み'), web: 'YouTube / ニコニコ' }[ov.mediaKind];
+        add('warn', t('メディアに{0}を使っています。動画の中の点滅はフラッシュの上限で制限できないので、事前に確認してください', name));
+        if (ov.mediaKind === 'capture' && !ms.capture) add('warn', t('画面の取り込みが止まっています（⑤ のメディア）'));
+        if (ov.mediaKind === 'video' && (ms.status === 'missing' || ms.status === 'error')) add('bad', t('メディアの動画を読めません（⑤ で選び直す）'));
+        if (ov.mediaKind === 'web') add('info', t('YouTube / ニコニコはインターネットが必要です。会場の回線で再生できるか確かめてください'));
+      }
       // スリープ
       if (VJ.compat.features().wakeLock) add('ok', t('「ショー開始」で画面のスリープを止めます'));
       else add('warn', t('この環境では画面のスリープを止められません。PC の設定でスリープ・画面オフを「なし」に'));

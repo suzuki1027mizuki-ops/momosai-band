@@ -110,6 +110,8 @@ export function oscToCommand(msg) {
     case '/vj/sens': return isFinite(num(v)) ? { name: 'sens', args: [num(v)] } : null;
     case '/vj/strobe': return { name: 'strobe', args: [num(v) !== 0] };
     case '/vj/test': return pressed ? { name: 'test', args: [] } : null;
+    case '/vj/media': return { name: 'media', args: msg.args.length ? [num(v) !== 0] : [] };
+    case '/vj/overlay/scene': return { name: 'ovscene', args: msg.args.length ? [num(v) !== 0] : [] };
     case '/vj/band': return isFinite(num(v)) && num(v) >= 1 ? { name: 'band', args: [Math.round(num(v))] } : null;
     case '/vj/band/next': return pressed ? { name: 'band', args: ['next'] } : null;
     case '/vj/band/prev': return pressed ? { name: 'band', args: ['prev'] } : null;
@@ -277,6 +279,10 @@ export async function startBridge(opts = {}) {
   const host = opts.host ?? '0.0.0.0';
   const oscHost = opts.oscHost ?? '127.0.0.1';
   const pin = String(opts.pin ?? crypto.randomInt(0, 10000)).padStart(4, '0');
+  // VJ 本体の鍵：/vj?k=… でつないだ VJ 本体にだけ暗証番号と QR を渡す（Origin: null は、ファイルから開いた VJ 本体だけでなく
+  // ほかのサイトの「サンドボックスの枠」からも来るので、Origin だけでは見分けられない）
+  const vjKey = String(opts.vjKey || crypto.randomBytes(12).toString('hex'));
+  const keyOk = (k) => typeof k === 'string' && k.length === vjKey.length && crypto.timingSafeEqual(Buffer.from(k), Buffer.from(vjKey));
   const log = opts.log || (() => {});
   const remoteHtml = fs.readFileSync(path.join(HERE, 'remote.html'));
   const vjs = new Set(), phones = new Set();
@@ -322,11 +328,12 @@ export async function startBridge(opts = {}) {
     return qrCache.get(u);
   };
   const urls = () => lanAddresses().map((a) => `http://${a.includes(':') ? `[${a}]` : a}:${boundPort}/`);
-  const info = () => ({
-    t: 'info', pin, port: boundPort, oscPort: boundOsc, oscLan: oscHost !== '127.0.0.1', urls: urls(), phones: phones.size,
-    qr: urls().slice(0, 3).map((u) => ({ url: u, svg: qrOf(u) })),
+  /** VJ 本体へ渡す情報。鍵の無い接続には暗証番号・QR を渡さない（ブリッジの画面か /qr で見てもらう） */
+  const info = (trusted) => ({
+    t: 'info', pin: trusted ? pin : '', port: boundPort, oscPort: boundOsc, oscLan: oscHost !== '127.0.0.1', urls: urls(), phones: phones.size,
+    qr: trusted ? urls().slice(0, 3).map((u) => ({ url: u, svg: qrOf(u) })) : [],
   });
-  const broadcastInfo = () => { for (const v of vjs) v.send(info()); };
+  const broadcastInfo = () => { for (const v of vjs) v.send(info(v.trusted)); };
 
   const server = http.createServer((req, res) => {
     const url = (req.url || '/').split('?')[0];
@@ -362,12 +369,14 @@ ${list.length ? list.map((u) => `<figure style="display:inline-block;margin:10px
   server.on('upgrade', (req, socket) => {
     // 断る前に相手が切っても（RST）ブリッジが落ちないように、最初にエラーを受ける
     socket.on('error', () => {});
-    const url = (req.url || '').split('?')[0];
+    const [url, query] = (req.url || '').split('?');
     const addr = socket.remoteAddress || '';
     const key = req.headers['sec-websocket-key'];
     const kind = url === '/vj' ? 'vj' : url === '/phone' ? 'phone' : null;
-    // VJ 本体は同じ PC からだけ
-    if (!kind || !key || (kind === 'vj' && (!isLoopback(addr) || !vjOriginOk(req.headers.origin)))) {
+    // VJ 本体は同じ PC からだけ。スマホはこのブリッジが出したページからだけ（ほかのサイトのページから暗証番号を総当たりされないように）
+    const origin = req.headers.origin;
+    const phoneOk = origin === undefined || origin === `http://${req.headers.host}`;
+    if (!kind || !key || (kind === 'vj' && (!isLoopback(addr) || !vjOriginOk(origin))) || (kind === 'phone' && !phoneOk)) {
       try { socket.end('HTTP/1.1 403 Forbidden\r\n\r\n'); } catch (e) { /* noop */ }
       setTimeout(() => socket.destroy(), 1000).unref();
       return;
@@ -377,8 +386,9 @@ ${list.length ? list.map((u) => `<figure style="display:inline-block;margin:10px
     socket.setNoDelay(true);
     const ws = new WsConn(socket, kind, addr);
     if (kind === 'vj') {
+      ws.trusted = keyOk(new URLSearchParams(query || '').get('k'));
       vjs.add(ws);
-      ws.send(info());
+      ws.send(info(ws.trusted));
       log('VJ 本体が接続しました');
       ws.onmessage = (m) => {
         if (m.t === 'status' && m.s && typeof m.s === 'object') {
@@ -402,7 +412,15 @@ ${list.length ? list.map((u) => `<figure style="display:inline-block;margin:10px
           art = a && a.enabled && typeof a.host === 'string' && a.host.length < 256 ? { host: a.host, universe: Math.max(0, Math.min(32767, a.universe | 0)) } : null;
         }
       };
-      ws.onclose = () => { vjs.delete(ws); log('VJ 本体が切断しました'); };
+      ws.onclose = () => {
+        vjs.delete(ws);
+        log('VJ 本体が切断しました');
+        // VJ 本体がいなくなったら、スマホに「つながっていない」と知らせる（古い状態のまま操作できるように見えないように）
+        if (!vjs.size && lastStatus) {
+          lastStatus = Object.assign({}, lastStatus, { connected: false });
+          for (const p of phones) if (p.authed) p.send({ t: 'status', s: lastStatus });
+        }
+      };
     } else {
       phones.add(ws);
       ws.authed = false;
@@ -449,8 +467,8 @@ ${list.length ? list.map((u) => `<figure style="display:inline-block;margin:10px
   const ka = setInterval(() => { const now = Date.now(); for (const c of [...vjs, ...phones]) c.keepAlive(now, IDLE_MS); }, 2000);
   ka.unref();
   return {
-    port: boundPort, oscPort: boundOsc, pin, stats,
-    get urls() { return info().urls; },
+    port: boundPort, oscPort: boundOsc, pin, vjKey, stats,
+    get urls() { return info(false).urls; },
     close() {
       clearInterval(ka);
       for (const c of [...vjs, ...phones]) c.close(1001);
@@ -465,9 +483,15 @@ ${list.length ? list.map((u) => `<figure style="display:inline-block;margin:10px
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const arg = (name, def) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : def; };
   const oscLan = process.argv.includes('--osc-lan');
-  const b = await startBridge({ port: +arg('--port', 8787), oscPort: +arg('--osc', 9000), pin: arg('--pin'), oscHost: oscLan ? '0.0.0.0' : '127.0.0.1', log: (m) => console.log(m) });
+  // VJ 本体の鍵は、このフォルダに保存して毎回同じにする（パネルに 1 回貼れば、次からもパネルに QR が出る）
+  const keyFile = path.join(HERE, '.vjkey');
+  let vjKey = '';
+  try { vjKey = fs.readFileSync(keyFile, 'utf8').trim(); } catch (e) { /* 初回 */ }
+  if (!/^[0-9a-f]{24}$/.test(vjKey)) { vjKey = crypto.randomBytes(12).toString('hex'); try { fs.writeFileSync(keyFile, vjKey); } catch (e) { /* 書けないときは毎回変わる */ } }
+  const b = await startBridge({ port: +arg('--port', 8787), oscPort: +arg('--osc', 9000), pin: arg('--pin'), vjKey, oscHost: oscLan ? '0.0.0.0' : '127.0.0.1', log: (m) => console.log(m) });
   console.log('MOMOSAI VJ ブリッジを起動しました');
   console.log(`  VJ 本体の設定パネル ⑦ で「ブリッジにつなぐ」を押してください（ws://127.0.0.1:${b.port}/vj）`);
+  console.log(`  パネルにも暗証番号・QR を出すには、⑦ のアドレス欄をこれにしてください: ws://127.0.0.1:${b.port}/vj?k=${b.vjKey}`);
   console.log(`  スマホで開く: ${b.urls.join('  ') || '(LAN に接続されていません)'}   暗証番号: ${b.pin}`);
   if (b.urls.length) {
     // スマホのカメラで読み取れる QR（暗証番号入り）。Mac のターミナルは白地なので反転

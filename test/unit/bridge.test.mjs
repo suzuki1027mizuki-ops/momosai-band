@@ -86,10 +86,16 @@ test('ブリッジ：スマホは暗証番号でつながり、操作が VJ に�
     assert.match(html, /MOMOSAI VJ リモコン/);
     assert.equal((await fetch(`http://127.0.0.1:${b.port}/../../etc/passwd`)).status, 404);
 
-    const vjInfo = open(`ws://127.0.0.1:${b.port}/vj`).then(async (vj) => ({ vj, info: await nextMessage(vj, (m) => m.t === 'info') }));
+    // 鍵なしでつないだ VJ 本体（ほかのサイトの「サンドボックスの枠」と見分けられない）には暗証番号を渡さない
+    const anon = await open(`ws://127.0.0.1:${b.port}/vj`);
+    const ai = await nextMessage(anon, (m) => m.t === 'info');
+    assert.deepEqual([ai.pin, ai.qr.length, ai.port], ['', 0, b.port]);
+    anon.close();
+    const vjInfo = open(`ws://127.0.0.1:${b.port}/vj?k=${b.vjKey}`).then(async (vj) => ({ vj, info: await nextMessage(vj, (m) => m.t === 'info') }));
     const { vj, info } = await vjInfo;
     assert.equal(info.pin, '4321');
     assert.equal(info.oscPort, b.oscPort);
+    assert.equal((await nextMessage(await open(`ws://127.0.0.1:${b.port}/vj?k=${'0'.repeat(24)}`), (m) => m.t === 'info')).pin, '', '鍵がちがえば渡さない');
 
     // 間違った暗証番号 → 操作できない
     const ph = await open(`ws://127.0.0.1:${b.port}/phone`);
@@ -206,6 +212,12 @@ test('ブリッジ：断られた接続をすぐ切られても・変な設定�
     const res = await fetch(`http://127.0.0.1:${b.port}/status`).then((r) => r.json());
     assert.equal(res.ok, true, 'ブリッジは動き続けている');
     ok.s.destroy();
+    // スマホの口は、このブリッジが出したページ（http://ホスト名）か、ブラウザ以外からだけ
+    assert.match((await rawUpgrade(b.port, '/phone', 'Origin: null\r\n')).status, /403/);
+    assert.match((await rawUpgrade(b.port, '/phone', 'Origin: https://evil.example\r\n')).status, /403/);
+    const po = await rawUpgrade(b.port, '/phone', 'Origin: http://x\r\n'); // Host: x で開いたページ
+    assert.match(po.status, /101/);
+    po.s.destroy();
     assert.ok(vjOriginOk(undefined) && vjOriginOk('null') && vjOriginOk('file://') && vjOriginOk('http://localhost:5173') && vjOriginOk('http://127.0.0.1'));
     assert.ok(!vjOriginOk('https://example.com') && !vjOriginOk('http://localhost.evil.com') && !vjOriginOk('http://127.0.0.1.evil.com'));
   } finally {
@@ -229,7 +241,7 @@ function getWithHost(port, path, host, address = '127.0.0.1') {
 test('ブリッジ：VJ 本体に QR コード（暗証番号入り）を渡す。/qr はこの PC から・この PC のアドレスでだけ。見本画像をスマホへ渡す', async () => {
   const b = await startBridge({ port: 0, oscPort: false, pin: '5678', host: '0.0.0.0' });
   try {
-    const vj = await open(`ws://127.0.0.1:${b.port}/vj`);
+    const vj = await open(`ws://127.0.0.1:${b.port}/vj?k=${b.vjKey}`);
     const info = await nextMessage(vj, (m) => m.t === 'info');
     assert.ok(Array.isArray(info.qr));
     assert.equal(info.qr.length, Math.min(3, info.urls.length));
@@ -315,7 +327,15 @@ test('照明（DMX）：パレットの色・音量・キックのチェイス�
     VJ.dmx.compute(show, Object.assign({}, f, { kickN: k, onsetFlags: 1 }), c, k * 0.1, out);
     if (Math.max(...dims()) > Math.max(...base) + 20) n++;
   }
-  assert.ok(VJ.dmx._pulseAt <= 1.0 && VJ.dmx._pulseAt >= 0.6, 'last pulse ' + VJ.dmx._pulseAt);
+  // 映像のフラッシュと同じ制限器（1 秒に 3 回のうち、キメの 1 回分を残して 2 回）
+  assert.ok(Math.abs(VJ.dmx._pulseAt - 0.5) < 1e-9, 'last pulse ' + VJ.dmx._pulseAt);
+  assert.equal(show.limiter.times.length, 2);
+  // 「フラッシュを一切使わない」ときは強く光らせない
+  const s2 = Object.assign({}, VJ.defaultSettings, { noFlash: true });
+  const show2 = new VJ.ShowController(s2);
+  const at0 = VJ.dmx._pulseAt;
+  for (let k = 11; k <= 20; k++) VJ.dmx.compute(show2, Object.assign({}, f, { kickN: k, onsetFlags: 1 }), c, 10 + k * 0.4, out);
+  assert.equal(VJ.dmx._pulseAt, at0);
   // 暗転
   show.state.black = 1;
   VJ.dmx.compute(show, f, c, 5, out);

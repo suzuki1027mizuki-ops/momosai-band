@@ -38,4 +38,7 @@ test('設定：型の合わない値・壊れた中身は捨てる', () => {
   assert.equal(s.crossfade, 1);
   assert.equal(s.speechTitle, true);
   assert.throws(() => VJ.storage.fromJSON('{not json'));
+  // 「設定を読み込み」：ほかの JSON（設定ファイルでないもの）は読まない（全部が初期値に戻らないように）
+  for (const bad of ['{"name":"x"}', 'null', '[]', '3']) assert.throws(() => VJ.storage.fromFile(bad), /設定ファイルではありません|not a settings/);
+  assert.equal(VJ.storage.fromFile(VJ.storage.toJSON(Object.assign({}, VJ.defaultSettings, { bandName: 'Z' }))).bandName, 'Z');
 });

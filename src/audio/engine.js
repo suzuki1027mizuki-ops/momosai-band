@@ -37,7 +37,9 @@
       this.diag = { chunk: 0, chunkMax: 0, align: 0, alignMiss: 0, gaps: 0, restarts: 0, reconnects: 0 };
       this._watch = { t: -1, perf: 0, lastResume: 0 };
       this._reconnectTimer = null;
-      this._onDeviceChange = () => { if (this.status === 'lost' || this.status === 'reconnecting') this._tryReconnect(); };
+      // マイクの抜き差しだけで再接続する（「PC で再生中の音」の共有が終わったあとに、プロジェクターをつないだなどで
+      // 勝手にマイクに切り替わらないように）
+      this._onDeviceChange = () => { if (this.opts.source === 'mic' && (this.status === 'lost' || this.status === 'reconnecting')) this._tryReconnect(); };
       this._empty = new Float32Array(0);
     }
 
@@ -84,7 +86,7 @@
       const proc = new MediaStreamTrackProcessor({ track, maxBufferSize: 96 });
       const reader = proc.readable.getReader();
       const tap = (this._tap = {
-        reader, sr: sampleRate || 48000, ch: 2, stop: false, gap: false,
+        reader, sr: sampleRate || 48000, ch: 2, stop: false, gap: false, started: performance.now(), lastIn: 0, lastFeed: 0,
         pend: new Float32Array(N), pn: 0,
         l: new Float32Array(4096), r: new Float32Array(4096),
         ml: new Float32Array(1024), mr: new Float32Array(1024),
@@ -94,10 +96,13 @@
           for (;;) {
             const { value, done } = await reader.read();
             if (done) break;
-            try { if (!tap.stop) this._tapFrame(tap, value); } finally { value.close(); }
+            // 1 かたまりの読み取りに失敗しても、読み続ける
+            try { if (!tap.stop) this._tapFrame(tap, value); } catch (e) { this.diag.gaps++; tap.gap = true; } finally { value.close(); }
             if (tap.stop) break;
           }
-        } catch (e) { /* トラックが止まった：track.onended が知らせる */ }
+        } catch (e) { /* トラックが止まった */ }
+        // 自分で止めたのでなければ、共有が終わったと知らせる（「動作中」のまま音が来ない状態にしない）
+        if (!tap.stop && this._tap === tap) this._displayEnded();
       })();
     }
 
@@ -105,6 +110,7 @@
     _tapFrame(tap, d) {
       const n = d.numberOfFrames, ch = d.numberOfChannels;
       if (!n) return;
+      tap.lastIn = performance.now();
       tap.sr = d.sampleRate;
       tap.ch = ch;
       if (ch !== this.channels) { this.channels = ch; this.meter.mono = ch < 2; }
@@ -135,6 +141,8 @@
     /** 入力を開始。source: 'mic' | 'demo'（demo: band / sing / speech）| 'file' | 'display' | 'buffer' */
     async start(opts) {
       Object.assign(this.opts, opts || {});
+      // 開始の番号：共有の画面・マイクの許可を待っている間に、止めた・別の入力を始めたときは、あとから来た結果を捨てる
+      const token = (this._startToken = (this._startToken || 0) + 1);
       this._set('starting');
       this._playToken = (this._playToken || 0) + 1;
       this._nextDecoded = null;
@@ -145,7 +153,7 @@
       if (ctx) { try { await ctx.resume(); } catch (e) { /* noop */ } }
       try {
         if (this.opts.source === 'mic') {
-          await this._startMic(this.opts.deviceId);
+          await this._startMic(this.opts.deviceId, token);
         } else if (this.opts.source === 'demo') {
           const kind = this.opts.demo || 'band';
           const s = kind === 'sing' || kind === 'speech' ? VJ.voiceSynth.demo(kind, ctx.sampleRate) : VJ.synth.demoSong(ctx.sampleRate);
@@ -160,19 +168,30 @@
           await this._playFile(0);
           return 0;
         } else if (this.opts.source === 'display') {
-          await this._startDisplay(tapMode);
+          await this._startDisplay(tapMode, token);
         } else if (this.opts.source === 'buffer') {
           return this._startBuffer(this.opts.audioBuffer, !!this.opts.loop, this.opts.when);
         }
         this._set('running');
       } catch (e) {
+        if (e && e.name === 'Superseded') return 0; // あとから始めた・止めた方が優先
+        if (token !== this._startToken) return 0;
         this._set('error', describeError(e));
         throw e;
       }
       return 0;
     }
 
-    async _startMic(deviceId) {
+    /** 許可・共有を待っている間に start / stop がもう一度呼ばれていたら、受け取った入力を止めて Superseded を投げる */
+    _checkToken(token, stream) {
+      if (token === undefined || token === this._startToken) return;
+      if (stream) for (const t of stream.getTracks()) t.stop();
+      const e = new Error('superseded');
+      e.name = 'Superseded';
+      throw e;
+    }
+
+    async _startMic(deviceId, token) {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error(VJ.t('マイク入力が使えません（Chrome で開いてください）'));
       }
@@ -190,6 +209,7 @@
         }
       }
       if (!stream) stream = await navigator.mediaDevices.getUserMedia({ audio: base });
+      this._checkToken(token, stream);
       this.stream = stream;
       const track = stream.getAudioTracks()[0];
       const st = track.getSettings ? track.getSettings() : {};
@@ -247,7 +267,7 @@
      *  デバイスを開くので、この入力では使わない。「出力先なし」の AudioContext（sinkId: none）は出力を
      *  開かないが、描画で忙しいページでは時計が実時間の 65% ほどでしか進まず、音が間引かれてテンポがずれる
      *  （実測）ので使えない */
-    async _startDisplay(tap) {
+    async _startDisplay(tap, token) {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
         throw new Error(VJ.t('この環境では「PC で再生中の音」を使えません（Chrome / Edge で開いてください）'));
       }
@@ -259,6 +279,7 @@
         audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
         systemAudio: 'include', selfBrowserSurface: 'exclude', surfaceSwitching: 'include',
       });
+      this._checkToken(token, stream);
       const track = stream.getAudioTracks()[0];
       if (!track) {
         for (const t of stream.getTracks()) t.stop();
@@ -363,6 +384,7 @@
 
     stop() {
       this._playToken = (this._playToken || 0) + 1;
+      this._startToken = (this._startToken || 0) + 1;
       this._stopSource();
       this._set('idle');
     }
@@ -417,7 +439,16 @@
       const tap = this._tap;
       if (tap) {
         // トラックから直接読んでいるとき：たまっている分をそのまま渡す（位置合わせは要らない）
-        if (this.status !== 'running') { out.samples = this._empty; out.gapped = false; this.hasTail = false; tap.pn = 0; return out; }
+        if (this.status !== 'running' && this.status !== 'lost') { out.samples = this._empty; out.gapped = false; this.hasTail = false; tap.pn = 0; return out; }
+        // 音が届かない（共有が終わった・止められた）間は、無音として進める。解析が「大きい音」のまま止まって、
+        // 映像が盛り上がったまま・タイトルにも戻らない、とならないように
+        const nowMs = performance.now();
+        if (tap.pn > 0) tap.lastFeed = nowMs;
+        else if (this.status === 'lost' || nowMs - (tap.lastIn || tap.started || nowMs) > 150) {
+          const z = Math.min(N >> 1, Math.round(((nowMs - (tap.lastFeed || nowMs)) * tap.sr) / 1000));
+          if (z > 0) { tap.pend.fill(0, 0, z); tap.pn = z; }
+          tap.lastFeed = nowMs;
+        }
         const n = tap.pn, buf = this.buf;
         const gapped = tap.gap || !this.hasTail;
         buf.copyWithin(0, n);

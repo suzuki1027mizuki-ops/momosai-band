@@ -26,6 +26,9 @@ body.nocursor #panel, body.nocursor #panel * { cursor: auto !important; }
 #stage { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; background: #000; }
 /* 透過ウィンドウ（単体アプリの「ほかの画面の上に重ねる」）：背景を透明に */
 html.glass, html.glass body, html.glass #stage { background: transparent; }
+#panel .ov-pane[hidden] { display: none; }
+#panel .ov-play button { padding: 2px 10px; }
+#panel #overlay-box.drop { outline: 2px dashed var(--accent); outline-offset: 2px; }
 #ov-preview { max-height: 60px; max-width: 200px; background: repeating-conic-gradient(#333 0% 25%, #222 0% 50%) 50% / 12px 12px; border-radius: 4px; }
 [hidden] { display: none !important; }
 
@@ -368,12 +371,24 @@ body.remote-mode #stage { opacity: 0.25; }
   </div>
   <div class="row">
     <span>シーンの切り替え</span>
-    <select id="opt-xfade">
-      <option value="-1">音楽のタイプに合わせる</option>
-      <option value="0">カット（すぐ）</option>
-      <option value="0.5">0.5 秒でフェード</option>
-      <option value="1">1 秒でフェード</option>
-      <option value="2">2 秒でフェード</option>
+    <select id="opt-trans">
+      <option value="auto">音楽のタイプに合わせる</option>
+      <option value="cut">カット（すぐ）</option>
+      <option value="fade">フェード</option>
+      <option value="wipe">ワイプ</option>
+      <option value="iris">円（中央から）</option>
+      <option value="blinds">ブラインド</option>
+      <option value="zoom">ズーム</option>
+      <option value="slide">スライド（押し出す）</option>
+      <option value="glitch">グリッチ</option>
+      <option value="mosaic">モザイク</option>
+      <option value="random">おまかせ（毎回ちがう）</option>
+    </select>
+    <select id="opt-xfade" title="切り替えにかける時間">
+      <option value="0.3">0.3 秒</option>
+      <option value="0.5" selected>0.5 秒</option>
+      <option value="1">1 秒</option>
+      <option value="2">2 秒</option>
     </select>
   </div>
   <div class="row"><span>感度</span><input type="range" id="opt-sens" min="-5" max="5" step="1"><span id="opt-sens-v"></span></div>
@@ -386,14 +401,56 @@ body.remote-mode #stage { opacity: 0.25; }
   </div>
   <div class="hint">「自動で変える」は、曲の区切り（キメ・小節の頭）ごとに、盛り上がりに合った色へゆっくり移します（およそ 20〜30 秒おき。曲ごとの色の指定があるときはそのまま。モノクロとカスタムは使いません）。</div>
   <details id="overlay-box">
-    <summary>オーバーレイ（画像・シーン・文字を重ねる）</summary>
-    <div class="row"><label><input type="checkbox" id="ov-on"> <span data-i18n-html>オーバーレイを表示（<kbd>O</kbd> キーで切替）</span></label></div>
-    <div class="row"><b class="sub">画像</b><span class="hint">枠やイラスト（透過 PNG など）を、すべてのシーンの上に</span></div>
-    <div class="row">
-      <input type="file" id="ov-file" accept="image/*">
-      <button id="btn-ov-clear">消す</button>
+    <summary>メディアを重ねる（画像・動画・画面の取り込み・YouTube / ニコニコ）</summary>
+    <div class="row"><label><input type="checkbox" id="ov-on"> <span data-i18n-html>メディアを表示（<kbd>O</kbd> キーで切替）</span></label></div>
+    <div class="row ov-kinds">
+      <label><input type="radio" name="ov-kind" value="image"> 画像</label>
+      <label><input type="radio" name="ov-kind" value="video"> 動画ファイル</label>
+      <label><input type="radio" name="ov-kind" value="capture"> 画面・タブの取り込み</label>
+      <label><input type="radio" name="ov-kind" value="web"> YouTube / ニコニコ</label>
     </div>
-    <div class="row"><img id="ov-preview" alt="" hidden></div>
+    <div class="ov-pane" data-kind="image">
+      <div class="row">
+        <input type="file" id="ov-file" accept="image/*">
+        <button id="btn-ov-paste" title="コピーした画像を貼り付ける">貼り付け</button>
+        <button id="btn-ov-clear">消す</button>
+      </div>
+      <div class="hint" data-i18n-html>枠やイラスト（透過 PNG など）を、すべてのシーンの上に。コピーした画像は <kbd>Ctrl</kbd>+<kbd>V</kbd>（Mac は <kbd>⌘</kbd>+<kbd>V</kbd>）でも貼り付けられます。ファイルをこの欄に落としても入ります。</div>
+      <div class="row"><img id="ov-preview" alt="" hidden></div>
+    </div>
+    <div class="ov-pane" data-kind="video">
+      <div class="row">
+        <input type="file" id="ov-vfile" accept="video/*,.mp4,.webm,.mov,.m4v">
+        <button id="btn-ov-vclear">消す</button>
+      </div>
+      <div class="row"><span class="hint" id="ov-vname"></span></div>
+      <div class="row">
+        <label><input type="checkbox" id="ov-vloop"> くり返す</label>
+        <label><input type="checkbox" id="ov-vsound"> 音を出す</label>
+      </div>
+      <div class="hint">MP4（H.264）・WebM がおすすめ。動画はこの PC の中に保存され、次に開いたときも使えます（設定ファイルの書き出しには入りません）。</div>
+    </div>
+    <div class="ov-pane" data-kind="capture">
+      <div class="row">
+        <button id="btn-ov-capture" class="primary">取り込む画面・タブを選ぶ</button>
+        <button id="btn-ov-capstop">やめる</button>
+      </div>
+      <div class="hint">YouTube・ニコニコ・スライドなどを別のタブ（またはウィンドウ）で開いて再生し、そのタブを選びます。動画を全画面・シアターモードにすると、動画だけがきれいに入ります。インターネットの動画をそのまま流すときの、いちばん確実な方法です。</div>
+    </div>
+    <div class="ov-pane" data-kind="web">
+      <div class="row">
+        <input type="text" id="ov-web" spellcheck="false" placeholder="https://www.youtube.com/watch?v=… / https://www.nicovideo.jp/watch/sm…" style="flex: 1; width: auto">
+        <button id="btn-ov-web">表示</button>
+      </div>
+      <div class="row"><label><input type="checkbox" id="ov-wsound"> 音を出す</label></div>
+      <div class="hint">インターネットが必要です。埋め込みは映像のいちばん上に重なり、揺れ・フラッシュの演出は掛かりません（濃さ・重ね方・明るさ・暗転は合わせます）。2 画面のときの手元のプレビューには映りません。ブラウザ版（HTML ファイルを開いて使う）では YouTube が「エラー 153」で再生できないことがあります。そのときは単体アプリ版か「画面・タブの取り込み」で。</div>
+    </div>
+    <div class="row ov-play" id="ov-play">
+      <button data-mcmd="play" title="再生">▶</button>
+      <button data-mcmd="pause" title="一時停止">⏸</button>
+      <button data-mcmd="restart" title="最初から">⏮</button>
+      <span class="hint" id="ov-status"></span>
+    </div>
     <div class="row">
       <select id="ov-fit">
         <option value="contain">全体が入るように</option>
@@ -406,8 +463,13 @@ body.remote-mode #stage { opacity: 0.25; }
         <option value="screen">やわらかく足す（スクリーン）</option>
       </select>
     </div>
-    <div class="row"><span>画像の濃さ</span><input type="range" id="ov-imgop" min="0" max="1" step="0.05"><span id="ov-imgop-v"></span></div>
-    <div class="row"><b class="sub">シーン</b><span class="hint">いまのシーンの上に、もう 1 つのシーンを重ねる</span></div>
+    <div class="row"><span>濃さ</span><input type="range" id="ov-imgop" min="0" max="1" step="0.05"><span id="ov-imgop-v"></span></div>
+    <div class="warnbox" id="ov-vwarn" hidden>⚠ 動画・取り込んだ画面・YouTube の中の点滅は、このソフトでは制限できません（フラッシュの上限は効きません）。強い点滅のある動画は使わないでください。</div>
+  </details>
+  <details id="ovscene-box">
+    <summary>シーンを重ねる</summary>
+    <div class="row"><label><input type="checkbox" id="ovs-on"> <span data-i18n-html>重ねるシーンを表示（<kbd>Shift</kbd>+<kbd>O</kbd> で切替）</span></label></div>
+    <div class="hint">いまのシーンの上に、もう 1 つのシーンを重ねます。</div>
     <div class="row">
       <select id="ov-scene"></select>
       <select id="ov-sceneblend">
@@ -416,7 +478,11 @@ body.remote-mode #stage { opacity: 0.25; }
       </select>
     </div>
     <div class="row"><span>シーンの濃さ</span><input type="range" id="ov-sceneop" min="0" max="1" step="0.05"><span id="ov-sceneop-v"></span></div>
-    <div class="row"><b class="sub">文字</b><span class="hint">隅にずっと表示</span></div>
+    <div class="hint">シーンを重ねると描く量が 2 倍になります（重いときは重ねるのをやめてください）。まぶしくなりすぎないよう、重ねる強さは「シーンの濃さ」100% でも 6 割までです。</div>
+  </details>
+  <details id="ovtext-box">
+    <summary>隅に文字を出す（時計・バンド名・曲名）</summary>
+    <div class="row"><label><input type="checkbox" id="ovt-on"> 文字を表示</label></div>
     <div class="row">
       <label><input type="checkbox" id="ov-clock"> 時計</label>
       <label><input type="checkbox" id="ov-band"> バンド名</label>
@@ -430,10 +496,10 @@ body.remote-mode #stage { opacity: 0.25; }
     </div>
     <div class="row"><span>文字の大きさ</span><input type="range" id="ov-textsize" min="0.5" max="2" step="0.1"><span id="ov-textsize-v"></span></div>
     <div class="row"><span>文字の濃さ</span><input type="range" id="ov-textop" min="0" max="1" step="0.05"><span id="ov-textop-v"></span></div>
-    <div class="hint">シーンを重ねると描く量が 2 倍になります（重いときは重ねるのをやめてください）。まぶしくなりすぎないよう、重ねる強さは「シーンの濃さ」100% でも 6 割までです。テストパターン（G）の間はオーバーレイを出しません。</div>
-    <div class="row" id="glass-row" hidden><button id="btn-glass">ほかの画面の上に重ねて表示（透過ウィンドウ）</button></div>
-    <div class="hint" id="glass-hint">VJ の映像を透かして、ほかの画面（YouTube など）の上に重ねて表示するのは、単体アプリ版でできます（ブラウザではウィンドウを透明にできません）。</div>
   </details>
+  <div class="hint">テストパターン（G）の間は、メディア・シーン・文字のオーバーレイを出しません。</div>
+  <div class="row" id="glass-row" hidden><button id="btn-glass">ほかの画面の上に重ねて表示（透過ウィンドウ）</button></div>
+  <div class="hint" id="glass-hint">VJ の映像を透かして、ほかの画面（YouTube など）の上に重ねて表示するのは、単体アプリ版でできます（ブラウザではウィンドウを透明にできません）。</div>
   <details id="scene-adjust">
     <summary>シーンごとの調整（量・大きさ・速さなど）</summary>
     <div class="row"><select id="sp-scene"></select><label><input type="checkbox" id="sp-follow" checked> 表示中のシーンに合わせる</label></div>
@@ -444,7 +510,7 @@ body.remote-mode #stage { opacity: 0.25; }
     <summary>詳しい設定</summary>
     <div class="row"><span>オートで使うシーン</span></div>
     <div class="row" id="auto-scenes"></div>
-    <div class="row"><span>無音とみなす音量</span><input type="range" id="opt-gate" min="-80" max="-30" step="1"><span id="opt-gate-v"></span></div>
+    <div class="row"><span>無音とみなす音量</span><input type="range" id="opt-gate" min="-80" max="-20" step="1"><span id="opt-gate-v"></span></div>
     <div class="hint">会場のざわざわで反応してしまうときは右へ（大きく）。小さい音に反応しないときは左へ。</div>
     <div class="row"><span>画質上限</span><input type="range" id="opt-scale" min="0.4" max="1" step="0.05"><span id="opt-scale-v"></span></div>
     <div class="row">
@@ -564,6 +630,7 @@ body.remote-mode #stage { opacity: 0.25; }
 <script src="src/core/i18n.js"></script>
 <script src="src/core/i18n-en.js"></script>
 <script src="src/core/storage.js"></script>
+<script src="src/core/mediastore.js"></script>
 <script src="src/core/profiles.js"></script>
 <script src="src/dsp/biquad.js"></script>
 <script src="src/dsp/fft.js"></script>
@@ -580,6 +647,7 @@ body.remote-mode #stage { opacity: 0.25; }
 <script src="src/gfx/gl.js"></script>
 <script src="src/gfx/text.js"></script>
 <script src="src/gfx/renderer.js"></script>
+<script src="src/gfx/media.js"></script>
 <script src="src/scenes/common.js"></script>
 <script src="src/scenes/title.js"></script>
 <script src="src/scenes/ripple.js"></script>

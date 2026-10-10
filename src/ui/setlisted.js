@@ -21,10 +21,12 @@
         if (!b) return;
         if (ed.stale()) { ed.render(true); return; }
         const i = +b.dataset.i, act = b.dataset.act, songs = ed.model.songs;
-        if (act === 'up' && i > 0) [songs[i - 1], songs[i]] = [songs[i], songs[i - 1]];
-        else if (act === 'down' && i < songs.length - 1) [songs[i + 1], songs[i]] = [songs[i], songs[i + 1]];
+        // 並べ替え・削除では、シーンを選んでいる曲・「消す？」の曲の番号も一緒に動かす（別の曲を変えない・消さないように）
+        const follow = (map) => { ed._picking = ed._picking < 0 ? -1 : map(ed._picking); ed._del = ed._del < 0 ? -1 : map(ed._del); };
+        if (act === 'up' && i > 0) { [songs[i - 1], songs[i]] = [songs[i], songs[i - 1]]; follow((x) => (x === i ? i - 1 : x === i - 1 ? i : x)); }
+        else if (act === 'down' && i < songs.length - 1) { [songs[i + 1], songs[i]] = [songs[i], songs[i + 1]]; follow((x) => (x === i ? i + 1 : x === i + 1 ? i : x)); }
         else if (act === 'del') { ed._del = ed._del === i ? -1 : i; ed.render(true); return; }
-        else if (act === 'del-yes') { songs.splice(i, 1); ed._del = -1; if (ed._picking === i) ed._picking = -1; }
+        else if (act === 'del-yes') { songs.splice(i, 1); follow((x) => (x === i ? -1 : x > i ? x - 1 : x)); ed._del = -1; }
         else if (act === 'del-no') { ed._del = -1; ed.render(true); return; }
         else if (act === 'add') { songs.push({ title: t('新しい曲 {0}', songs.length + 1), scenes: [], palette: null, notitle: false, line: null, dirty: true }); ed._focusLast = true; }
         else if (act === 'pick') { ed._picking = ed._picking === i ? -1 : i; ed.render(true); return; }

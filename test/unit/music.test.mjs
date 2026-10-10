@@ -86,6 +86,14 @@ test('テンポ推定：ドラムの無い曲で速いテンポ（倍）に上�
   assert.ok(late.every((f) => f.bpm < 165), 'max ' + Math.max(...late.map((f) => f.bpm)).toFixed(1));
 });
 
+test('タップテンポ：何回たたいても、最初のタップが小節の頭（直近 8 回だけ覚えていても数はずれない）', () => {
+  for (const n of [3, 4, 8, 9, 10, 11, 13]) {
+    const tr = new VJ.dsp.TempoTracker(SR, 128);
+    for (let i = 0; i < n; i++) tr.tap(SR + i * SR * 0.5);
+    assert.ok(Math.abs(tr.state(SR + 16 * SR * 0.5).bar) < 1e-6, `${n} taps`);
+  }
+});
+
 test('拍の位置：拍フラグがキックの位置とそろう', () => {
   const s = song({ bpm: 120, seed: 1, humanize: 0, sections: [{ bars: 16, drums: 'click' }] });
   const r = analyze(VJ, s.samples, SR, { keepFrames: true });

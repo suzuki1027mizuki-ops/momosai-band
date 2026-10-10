@@ -294,15 +294,19 @@ test('オーバーレイ：重ねるシーン・画像・隅の文字をフレ�
   c._applyScene('ripple');
   const texts = [];
   const getText = (main, sub, align) => { texts.push([main, sub, align]); return { tex: {} }; };
-  const step = (t) => { c.update(fakeFeatures(), 1 / 60, t); return c.frame(fakeFeatures(), 1 / 60, getText); };
+  // 出す・消すは 0.35 秒かけてなめらかに変わるので、0.5 秒ぶん進めてから見る
+  const step = (t) => { for (let i = 29; i >= 0; i--) c.update(fakeFeatures(), 1 / 60, t - i / 60); return c.frame(fakeFeatures(), 1 / 60, getText); };
   let fr = step(1);
   // 重ねるシーン：自分の状態を持って毎フレーム動く（星空の u_fly が進む）
   assert.equal(fr.overlay.scene.id, 'stars');
   assert.ok(Math.abs(fr.overlay.mix - 0.4 * 0.6) < 1e-9, '重ねる強さは濃さ × 0.6 まで（光過敏対策） ' + fr.overlay.mix);
   assert.equal(fr.overlay.mode, 'add');
-  // フラッシュの上限を自分で上げているときは、そのままの濃さ
+  // フラッシュの上限を自分で上げているときは、そのままの濃さ（「フラッシュを一切使わない」ときは上げない）
   s.flashLimit = 6;
   assert.ok(Math.abs(step(1.5).overlay.mix - 0.4) < 1e-9);
+  s.noFlash = true;
+  assert.ok(Math.abs(step(1.6).overlay.mix - 0.4 * 0.6) < 1e-9);
+  s.noFlash = false;
   s.flashLimit = 3;
   const fly0 = fr.overlay.uniforms.u_fly;
   fr = step(2);
@@ -325,14 +329,35 @@ test('オーバーレイ：重ねるシーン・画像・隅の文字をフレ�
   assert.equal(step(3).overlay, null);
   c._applyScene('ripple');
   assert.ok(step(4).overlay);
-  // O（toggleOverlay）でまとめて消す・出す
+  // メディア（O）・シーン（Shift+O）・文字は別々に消す・出す。急に消えない（0.35 秒でなめらかに）
   c.toggleOverlay();
+  c.update(fakeFeatures(), 1 / 60, 4.6);
+  const half = c.frame(fakeFeatures(), 1 / 60, getText).ovImage;
+  assert.ok(half && half.alpha > 0.5 && half.alpha < 0.7, 'O を押した直後は少しずつ消える ' + (half && half.alpha));
   fr = step(5);
   assert.equal(s.overlayOn, false);
-  assert.deepEqual([fr.overlay, fr.ovImage, fr.text3], [null, null, null]);
+  assert.ok(fr.overlay && !fr.ovImage && fr.text3, 'O はメディアだけ');
+  c.toggleSceneOverlay();
+  fr = step(5.5);
+  assert.equal(s.ovSceneOn, false);
+  assert.ok(!fr.overlay && !fr.ovImage && fr.text3, 'Shift+O はシーンだけ');
+  overlay.textOn = false;
+  assert.equal(step(5.6).text3, null, '文字は「文字を表示」で');
+  overlay.textOn = true;
   c.toggleOverlay();
+  c.toggleSceneOverlay();
   fr = step(6);
   assert.ok(fr.overlay && fr.ovImage && fr.text3);
+  // メディアの種類：動画・画面の取り込みは仕上げで重ね（ovImage）、YouTube / ニコニコは別（ovWeb）
+  overlay.mediaKind = 'video';
+  fr = step(6.1);
+  assert.ok(fr.ovImage && !fr.ovWeb);
+  overlay.mediaKind = 'web';
+  assert.equal(step(6.2).ovWeb, null, 'URL が無ければ出さない');
+  overlay.webUrl = 'https://youtu.be/dQw4w9WgXcQ';
+  fr = step(6.3);
+  assert.ok(!fr.ovImage && fr.ovWeb && Math.abs(fr.ovWeb.alpha - 0.7) < 1e-9);
+  overlay.mediaKind = 'image';
   // テストパターン（位置合わせ）の間は出さない
   c.toggleTestPattern();
   fr = step(7);
@@ -345,6 +370,49 @@ test('オーバーレイ：重ねるシーン・画像・隅の文字をフレ�
   // 設定の読み込み：無い項目・おかしな値は既定に
   const ld = VJ.storage.fromJSON(JSON.stringify({ overlay: { scene: 'eq', sceneOpacity: 7, imageFit: 'zoom', image: 'javascript:alert(1)', corner: 'xx', textSize: 'big' } })).overlay;
   assert.deepEqual([ld.scene, ld.sceneOpacity, ld.imageFit, ld.image, ld.corner, ld.textSize, ld.sceneBlend], ['eq', 1, 'contain', '', 'tr', 1, 'screen']);
+  const ld2 = VJ.storage.fromJSON(JSON.stringify({ overlayOn: false, overlay: { mediaKind: 'film', videoKey: '../x', webUrl: 'javascript:alert(1)' } }));
+  assert.deepEqual([ld2.overlay.mediaKind, ld2.overlay.videoKey, ld2.overlay.webUrl], ['image', '', '']);
+  assert.equal(ld2.ovSceneOn, false, '古い設定で O が OFF だったら、シーンのオーバーレイも OFF');
+  assert.equal(VJ.storage.fromJSON(JSON.stringify({ overlayOn: false, ovSceneOn: true })).ovSceneOn, true);
+});
+
+test('シーンの切り替え：種類（ワイプなど）と長さ。おまかせは毎回変わり、途中で切り替えたら続きはフェード', () => {
+  const s = Object.assign({}, VJ.defaultSettings, { auto: false, crossfade: 0.5, transition: 'wipe', setlistText: '' });
+  const c = new VJ.ShowController(s);
+  let t = 0;
+  const step = () => { t += 1 / 60; c.update(fakeFeatures(), 1 / 60, t); return c.frame(fakeFeatures(), 1 / 60, null); };
+  step();
+  c._applyScene('ripple');
+  for (let i = 0; i < 60; i++) step();
+  c._applyScene('tunnel');
+  let fr = step();
+  assert.equal(fr.xfade.type, 'wipe');
+  assert.ok(fr.xfade.seed >= 0 && fr.xfade.seed < 1);
+  for (let i = 0; i < 10; i++) step();
+  c._applyScene('eq'); // 途中で切り替え
+  assert.equal(step().xfade.type, 'fade');
+  for (let i = 0; i < 60; i++) step();
+  // おまかせ：同じ種類が続かない
+  s.transition = 'random';
+  const seen = [];
+  for (let k = 0; k < 12; k++) {
+    c._applyScene(k % 2 ? 'ripple' : 'tunnel');
+    seen.push(step().xfade.type);
+    for (let i = 0; i < 60; i++) step();
+  }
+  assert.ok(new Set(seen).size >= 4, seen.join(','));
+  for (let i = 1; i < seen.length; i++) assert.notEqual(seen[i], seen[i - 1]);
+  // 音楽のタイプに合わせる（-1）：バンドはカット、しっとりはフェード
+  s.crossfade = -1;
+  c._applyScene('ripple');
+  assert.equal(step().xfade, null);
+  s.profile = 'calm';
+  c.applySettings(s);
+  c._applyScene('tunnel');
+  assert.equal(step().xfade.type, 'fade');
+  // 設定の読み込み：知らない種類はフェードに
+  assert.equal(VJ.storage.fromJSON(JSON.stringify({ transition: 'spin' })).transition, 'fade');
+  assert.equal(VJ.storage.fromJSON(JSON.stringify({ transition: 'glitch' })).transition, 'glitch');
 });
 
 test('オート：一定時間後のアクセントで切替・無音でタイトル・強打で復帰', () => {

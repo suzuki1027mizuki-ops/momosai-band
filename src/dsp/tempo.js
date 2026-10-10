@@ -242,8 +242,9 @@
     /** タップテンポ（sample = 押した時点のサンプル位置） */
     tap(sample) {
       const t = this.taps;
-      if (t.length && (sample - t[t.length - 1]) / this.sr > 2.0) t.length = 0;
+      if (t.length && (sample - t[t.length - 1]) / this.sr > 2.0) { t.length = 0; this.tapCount = 0; }
       t.push(sample);
+      this.tapCount = (this.tapCount || 0) + 1; // 間隔の計算には直近 8 回だけ使うが、小節の頭は最初のタップから数える
       if (t.length > 8) t.shift();
       if (t.length < 3) return 0;
       const iv = [];
@@ -261,12 +262,12 @@
       this.indexBase = 0;
       this.conf = 1;
       // 最初のタップを小節の頭とみなす
-      this.downOffset = (((-(t.length - 1)) % 4) + 4) % 4;
+      this.downOffset = (((-(this.tapCount - 1)) % 4) + 4) % 4;
       this.posStrength.fill(0);
       return bpm;
     }
 
-    clearManual() { this.manual = null; this.taps.length = 0; }
+    clearManual() { this.manual = null; this.taps.length = 0; this.tapCount = 0; }
 
     /** 現在（sample）の拍の状態 */
     state(sample, out) {

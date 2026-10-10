@@ -49,7 +49,7 @@
         try { m = JSON.parse(e.data); } catch (err) { return; }
         if (!m || typeof m !== 'object') return;
         if (m.t === 'info') {
-          net.info = { pin: String(m.pin || ''), urls: Array.isArray(m.urls) ? m.urls.map(String) : [], oscPort: m.oscPort | 0, phones: m.phones | 0 };
+          net.info = { pin: String(m.pin || ''), urls: Array.isArray(m.urls) ? m.urls.map(String) : [], oscPort: m.oscPort | 0, phones: m.phones | 0, port: m.port | 0 };
           // スマホ用の QR コード（SVG）。形を確かめて、画像として表示する
           net.qr = (Array.isArray(m.qr) ? m.qr : []).filter((q) => q && typeof q.url === 'string' && typeof q.svg === 'string' && /^<svg[\s>]/.test(q.svg) && q.svg.length < 100000)
             .slice(0, 3).map((q) => ({ url: q.url, img: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(q.svg) }));
@@ -127,6 +127,9 @@
           net._strobeUntil = a0 && from === 'phone' ? performance.now() + 1500 : 0;
           break;
         case 'test': show.toggleTestPattern(); break;
+        // オーバーレイ：引数なしで切替、0 / 1 で OFF / ON
+        case 'media': if (typeof a0 !== 'boolean' || a0 !== !!app.settings.overlayOn) show.toggleOverlay(); break;
+        case 'ovscene': if (typeof a0 !== 'boolean' || a0 !== !!app.settings.ovSceneOn) show.toggleSceneOverlay(); break;
         case 'band': {
           // 'next' / 'prev' か、1 から始まる番号（スマホは確認してから送る）
           if (!VJ.bandsUI) return false;

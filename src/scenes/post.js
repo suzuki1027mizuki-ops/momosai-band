@@ -10,6 +10,8 @@ out vec4 outColor;
 uniform sampler2D u_scene;
 uniform sampler2D u_scene2;  // クロスフェード中の前のシーン
 uniform float u_mix;         // 前のシーンの割合（0 = 今のシーンだけ）
+uniform float u_trans;       // 切替の種類 0 フェード / 1 ワイプ / 2 円 / 3 ブラインド / 4 ズーム / 5 スライド / 6 グリッチ / 7 モザイク
+uniform float u_tseed;       // 切替ごとの乱数（向き・ずれ方）
 uniform sampler2D u_text;
 uniform sampler2D u_text2;
 uniform sampler2D u_logo;
@@ -40,9 +42,62 @@ vec4 sampleRect(sampler2D t, vec4 rect, vec2 uv) {
   return texture(t, clamp(q, 0.0, 1.0)) * inside;
 }
 
+// 切替の途中：今のシーン（u_scene）と前のシーン（u_scene2）を種類ごとに混ぜる。どの種類も、画面のどの場所も
+// 前 → 今 へ 1 回だけ変わる（行き来しない＝点滅にならない）
+vec3 transAt(vec2 p) {
+  float t = clamp(1.0 - u_mix, 0.0, 1.0); // 進み具合 0 → 1
+  int k = int(u_trans + 0.5);
+  float asp = u_lres.x / u_lres.y;
+  // 向き：乱数で左右・上下（ワイプ・スライド・ブラインド）
+  float sd = u_tseed * 4.0;
+  vec2 ax = sd < 2.0 ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+  float sg = mod(floor(sd), 2.0) < 0.5 ? 1.0 : -1.0;
+  float s = sg > 0.0 ? dot(p, ax) : 1.0 - dot(p, ax);
+  vec2 pa = p, pb = p; // 今・前のシーンを読む位置
+  float w;             // 今のシーンの割合
+  if (k == 1) {        // ワイプ（境目をやわらかく）
+    float e = mix(1.05, -0.05, t);
+    w = smoothstep(e - 0.04, e + 0.04, s);
+  } else if (k == 2) { // 円（中央から広がる）
+    float d = length((p - 0.5) * vec2(asp, 1.0));
+    float R = t * (0.5 * sqrt(asp * asp + 1.0) + 0.08) - 0.04;
+    w = 1.0 - smoothstep(R - 0.04, R + 0.02, d);
+  } else if (k == 3) { // ブラインド（10 本の帯）
+    float f = fract(s * 10.0);
+    float e = t * 1.1 - 0.05;
+    w = 1.0 - smoothstep(e - 0.05, e + 0.05, f);
+  } else if (k == 4) { // ズーム（前のシーンは寄りながら消え、今のシーンは少し寄った所から落ち着く）
+    vec2 c = p - 0.5;
+    pa = 0.5 + c * (0.85 + 0.15 * t);
+    pb = 0.5 + c / (1.0 + 0.6 * t);
+    w = t;
+  } else if (k == 5) { // スライド（押し出す）
+    float e = 1.0 - t;
+    pb = p + ax * sg * t;
+    pa = p - ax * sg * e;
+    w = smoothstep(e - 0.004, e + 0.004, s);
+  } else if (k == 6) { // グリッチ（横の帯ごとに、ずれながら 1 回だけ切り替わる）
+    float row = floor(p.y * 24.0);
+    float at = hash12(vec2(row, u_tseed * 97.0)) * 0.85 + 0.075;
+    float g = exp(-pow((t - at) * 12.0, 2.0));
+    float dx = (hash12(vec2(row, u_tseed * 31.0 + 7.0)) - 0.5) * 0.14 * g;
+    pa = p + vec2(dx, 0.0);
+    pb = pa;
+    w = step(at, t);
+  } else if (k == 7) { // モザイク（粗くなって、ます目ごとに切り替わり、細かく戻る）
+    float ps = sin(3.14159 * t) / 22.0;
+    vec2 g = p * vec2(asp, 1.0);
+    if (ps > 0.003) { pa = (floor(g / ps) + 0.5) * ps / vec2(asp, 1.0); pb = pa; }
+    float n = hash12(floor(g * 22.0) + u_tseed * 53.0);
+    w = step(0.3 + 0.4 * n, t);
+  } else {             // フェード
+    w = t;
+  }
+  return mix(texture(u_scene2, pb).rgb, texture(u_scene, pa).rgb, w);
+}
+
 vec3 sceneAt(vec2 p) {
-  vec3 a = texture(u_scene, p).rgb;
-  if (u_mix > 0.001) a = mix(a, texture(u_scene2, p).rgb, u_mix);
+  vec3 a = u_mix > 0.001 ? (u_trans < 0.5 ? mix(texture(u_scene, p).rgb, texture(u_scene2, p).rgb, u_mix) : transAt(p)) : texture(u_scene, p).rgb;
   if (u_ovMix > 0.001) {
     vec3 o = max(texture(u_scene3, p).rgb, 0.0) * u_ovMix;
     a = u_ovMode > 0.5 ? a + o : a + o - min(a, vec3(1.0)) * min(o, vec3(1.0));

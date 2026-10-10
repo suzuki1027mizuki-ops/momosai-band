@@ -27,6 +27,10 @@
   const PAL_SEC = 26; // パレットの自動：この秒数たってから、次の曲の区切りで変える（激しさで伸び縮み）
   const PAL_FADE = 1.5; // 自動で変えるときは、この秒数かけて色を移す
   const OV_MAX = 0.6; // オーバーレイで重ねるシーンの強さの上限（「シーンの濃さ」100% のとき）
+  const OV_FADE = 0.35; // オーバーレイを出す・消すのにかける時間（秒）
+
+  // シーン切替の種類（仕上げのシェーダの u_trans の番号と同じ順）
+  const TRANSITIONS = ['fade', 'wipe', 'iris', 'blinds', 'zoom', 'slide', 'glitch', 'mosaic'];
 
   class ShowController {
     constructor(settings) {
@@ -43,6 +47,8 @@
       this._palTo = new Float32Array(12);
       this._palMix = 1; // 色を移している途中（0 → 1）
       this._palAt = 0; // 最後にパレットが変わった時刻
+      // オーバーレイの見え方（出す・消すをなめらかに）。起動したときは設定どおりの状態から
+      this._ovA = { scene: 0, media: settings.overlayOn ? 1 : 0, text: settings.overlay && settings.overlay.textOn ? 1 : 0 };
       this._palRng = VJ.util.rng(4321);
       // 激しさの自動：いまの段階（0 控えめ〜3 最大。小数あり）と、そこから作った 1 行
       this.autoLv = 2;
@@ -82,11 +88,19 @@
       this.state.auto = !!s.auto;
       this.state.master = clamp(+s.master || 1, 0.2, 1);
       this.state.sens = clamp(s.sensitivity | 0, -5, 5);
-      // settings.paletteIdx は常に「いま使っているパレット」（曲ごとのパレットも反映される）
-      this.state.paletteIdx = s.paletteIdx | 0;
+      // settings.paletteIdx は常に「いま使っているパレット」（曲ごとのパレットも反映される）。
+      // 変わったとき（バンドの色など）は自動の色替えの時計も戻す（すぐに上書きしないように）。
+      // 同じ色のまま（ほかの設定の変更）なら、色を移している途中を止めない
+      const pi = s.paletteIdx | 0;
       this.profile = VJ.profileById(s.profile);
       this.limiter.setLimit(s.flashLimit === undefined ? VJ.flashConfig.maxPerSec : s.flashLimit);
-      this._palette();
+      if (pi !== this.state.paletteIdx || this._palMix >= 1) {
+        if (pi !== this.state.paletteIdx) this._palAt = this.now;
+        this.state.paletteIdx = pi;
+        this._palette();
+      } else {
+        this._palette(false, true);
+      }
       if (this.onSensitivity) this.onSensitivity(this.state.sens);
     }
     /** 自動のフラッシュ（キメ・ブレイク明け・シーンの反転など）を使うか */
@@ -136,10 +150,10 @@
       const i = this.state.songIdx;
       return !this.state.endState && i >= 0 && this.setlist && this.setlist.songs[i] ? this.setlist.songs[i] : null;
     }
-    /** パレットの色を反映。smooth = true なら PAL_FADE 秒かけて移す（自動で変わるとき） */
-    _palette(smooth) {
+    /** パレットの色を反映。smooth = true なら PAL_FADE 秒かけて移す（自動で変わるとき）。keep = true は移している途中のまま、行き先だけ直す */
+    _palette(smooth, keep) {
       VJ.paletteFloat(VJ.paletteColors(this.state.paletteIdx, this.settings.customPalette), this._palTo);
-      if (smooth) { this._palFrom.set(this.palFloat); this._palMix = 0; } else { this.palFloat.set(this._palTo); this._palMix = 1; }
+      if (keep) { /* 行き先だけ */ } else if (smooth) { this._palFrom.set(this.palFloat); this._palMix = 0; } else { this.palFloat.set(this._palTo); this._palMix = 1; }
       const c = [this._palTo[9], this._palTo[10], this._palTo[11]];
       // フラッシュ色はパレットの 4 色目を白寄りに（赤系は白へ）
       this.state.flashColor = VJ.safety.safeFlashColor(c.map((v) => 0.55 + 0.45 * v));
@@ -148,6 +162,18 @@
     // ---- シーン ----------------------------------------------------------
     /** シーンの調整値（設定パネルのスライダー）。out は使い回す Float32Array(4) */
     sceneParams(def, out) { return VJ.scenes.paramValues(def, this.settings.sceneParams && this.settings.sceneParams[def.id], out); }
+
+    /** 切替の種類（crossfade が 0 より大きいとき）。「おまかせ」は毎回変える（同じものが続かないように） */
+    transitionType() {
+      if (+this.settings.crossfade < 0) return 'fade'; // 音楽のタイプに合わせる：フェード
+      const t = this.settings.transition || 'fade';
+      if (t !== 'random') return TRANSITIONS.includes(t) ? t : 'fade';
+      this._tk = (this._tk || 0) + 1;
+      const i = Math.floor(VJ.util.hash(this._tk * 7 + 3) * (TRANSITIONS.length - 1));
+      const pick = TRANSITIONS[i >= TRANSITIONS.indexOf(this._tLast) ? i + 1 : i];
+      this._tLast = pick;
+      return pick;
+    }
 
     /** シーン切替のクロスフェード秒数（0 = カット）。設定が -1 なら音楽のタイプの既定 */
     crossfadeSec() {
@@ -175,7 +201,10 @@
           if (m > 0.5 && px.id !== def.id && this.sceneAvailable(px.id)) out = { id: px.id, start: px.start, uniforms: px.uniforms, w0: m };
           else out.w0 = 1 - m;
         }
-        this.xfade = Object.assign(out, { t0: this.now, dur });
+        // 種類（ワイプなど）。途中で切り替えたときは、続きをフェードにする（絵の一部だけが急に変わらないように）
+        const type = px && px.id !== prev ? 'fade' : this.transitionType();
+        this._seedN = (this._seedN || 0) + 1;
+        this.xfade = Object.assign(out, { t0: this.now, dur, type, seed: VJ.util.hash(this._seedN * 31 + 17) });
       } else {
         this.xfade = null;
       }
@@ -360,22 +389,29 @@
       const v = clamp(Math.round(step), -5, 5);
       if (v !== this.state.sens) this.nudgeSensitivity(v - this.state.sens);
     }
-    /** オーバーレイ（画像・重ねるシーン・隅の文字）をまとめて出す・消す */
+    /** メディアのオーバーレイ（画像・動画・画面の取り込み・YouTube / ニコニコ）を出す・消す（O） */
     toggleOverlay() {
       this.settings.overlayOn = !this.settings.overlayOn;
-      this._toast(this.settings.overlayOn ? t('オーバーレイ: ON') : t('オーバーレイ: OFF'));
+      this._toast(this.settings.overlayOn ? t('メディア: ON') : t('メディア: OFF'));
+    }
+    /** シーンのオーバーレイ（別のシーンを重ねる）を出す・消す（Shift+O） */
+    toggleSceneOverlay() {
+      this.settings.ovSceneOn = !this.settings.ovSceneOn;
+      const o = this.settings.overlay;
+      if (this.settings.ovSceneOn && !(o && o.scene)) this._toast(t('重ねるシーンが選ばれていません（⑤ のシーンのオーバーレイ）'), 'warn');
+      else this._toast(this.settings.ovSceneOn ? t('シーンの重ね: ON') : t('シーンの重ね: OFF'));
     }
     /** オーバーレイで重ねるシーン（無い・使えない・いまのシーンと同じ・テストパターン中は null） */
     overlayScene() {
       const o = this.settings.overlay, id = o && o.scene, s = this.state;
-      if (!this.settings.overlayOn || !id || id === s.sceneId || s.sceneId === 'test' || !(o.sceneOpacity > 0)) return null;
+      if (!this.settings.ovSceneOn || !id || id === s.sceneId || s.sceneId === 'test' || !(o.sceneOpacity > 0)) return null;
       const def = VJ.scenes.byId[id];
       return def && !def.hidden && this.sceneAvailable(id) ? def : null;
     }
     /** オーバーレイの文字：[下の大きい行, 上の小さい行]。時計・バンド名は上、曲名・自由な文字は下（下が無ければ上を大きく） */
-    overlayText(nowDate) {
+    overlayText(nowDate, fading) {
       const o = this.settings.overlay;
-      if (!this.settings.overlayOn || !o) return ['', ''];
+      if (!o || (!o.textOn && !fading)) return ['', ''];
       const top = [], main = [], pad = (x) => String(x).padStart(2, '0');
       if (o.clock) { const d = nowDate || new Date(); top.push(`${pad(d.getHours())}:${pad(d.getMinutes())}`); }
       if (o.band && this.bandName()) top.push(this.bandName());
@@ -537,7 +573,13 @@
       }
 
       // オーバーレイで重ねるシーン（フラッシュは出させない）。選び直したら状態を作り直す
-      const od = this.overlayScene();
+      // 出す・消すは 0.35 秒でなめらかに（O の連打でも、全画面の明るさが急に変わらないように）。消える間も動かし続ける
+      const A = this._ovA, k = dt / OV_FADE, testing = s.sceneId === 'test';
+      const od0 = this.overlayScene();
+      A.scene = testing ? 0 : clamp(A.scene + (od0 ? k : -k), 0, 1);
+      A.media = testing ? 0 : clamp(A.media + (this.settings.overlayOn ? k : -k), 0, 1);
+      A.text = testing ? 0 : clamp(A.text + (this.settings.overlay && this.settings.overlay.textOn ? k : -k), 0, 1);
+      const od = od0 || (A.scene > 0 && this._ov ? VJ.scenes.byId[this._ov.id] : null);
       if (!od) this._ov = null;
       else {
         if (!this._ov || this._ov.id !== od.id) { const st0 = {}; od.init(st0); this._ov = { id: od.id, st: st0, start: now, uniforms: null, param: null }; }
@@ -671,14 +713,16 @@
       const isTitle = s.sceneId === 'title';
       fr.titleLogo = isTitle && !s.endState && (logo === 'title' || logo === 'both');
       // バンド名の文字：タイトルと、文字を使うシーン（声の輪など。def.title）で
-      const usesTitle = isTitle || fr.scene.title || (this.xfade && VJ.scenes.byId[this.xfade.id] && (this.xfade.id === 'title' || VJ.scenes.byId[this.xfade.id].title));
+      const ovd = this._ov && VJ.scenes.byId[this._ov.id];
+      const usesTitle = isTitle || fr.scene.title || (this.xfade && VJ.scenes.byId[this.xfade.id] && (this.xfade.id === 'title' || VJ.scenes.byId[this.xfade.id].title))
+        || (ovd && (ovd.id === 'title' || ovd.title)); // 重ねるシーンがバンド名を使うときも
       fr.titleTex = usesTitle && getText ? getText(this.titleText(), this.titleSub()).tex : null;
       fr.logoCorner = (logo === 'corner' || (logo === 'both' && !isTitle)) && s.sceneId !== 'test' ? this.settings.logoCorner || 'br' : '';
       fr.latSq = this.settings.latencySquare ? s.latSq : -1;
       fr.vignette = s.sceneId === 'test' ? 0 : 0.6;
       fr.param = this.sceneParams(fr.scene, fr.param);
-      // オーバーレイ（テストパターン中は出さない）
-      const o = this.settings.overlay, ovOn = !!this.settings.overlayOn && !!o && s.sceneId !== 'test';
+      // オーバーレイ（テストパターン中は出さない）。シーン・メディア・文字は別々に ON/OFF
+      const o = this.settings.overlay, ovOn = !!o && s.sceneId !== 'test';
       const ovs = this._ov;
       if (ovOn && ovs && VJ.scenes.byId[ovs.id]) {
         const ov = fr._ov || (fr._ov = { scene: null, uniforms: null, param: null, sceneTime: 0, mix: 0, mode: 'screen' });
@@ -688,27 +732,39 @@
         ov.sceneTime = this.now - ovs.start;
         // 光過敏対策：動きの激しいシーンどうしをそのまま足すと、領域の明るさの変化が 1 秒 3 回を超えることがある
         // （実測）ので、重ねる強さは OV_MAX まで。フラッシュの上限を自分で上げているときは、そのまま足す
-        ov.mix = clamp(+o.sceneOpacity || 0, 0, 1) * (VJ.safety.overSafe(this.settings.flashLimit) ? 1 : OV_MAX);
+        // 「フラッシュを一切使わない」ときは、上限を上げていても OV_MAX まで
+        ov.mix = clamp(+o.sceneOpacity || 0, 0, 1) * (!this.settings.noFlash && VJ.safety.overSafe(this.settings.flashLimit) ? 1 : OV_MAX) * this._ovA.scene;
         ov.mode = o.sceneBlend;
         fr.overlay = ov;
       } else {
         fr.overlay = null;
       }
-      if (ovOn && o.image && o.imageOpacity > 0) {
+      // メディア：画像・動画・画面の取り込みは仕上げで重ねる。YouTube / ニコニコは media.js がキャンバスの上に重ねる
+      const kind = ovOn ? o.mediaKind || 'image' : '';
+      const mA = this._ovA.media;
+      const mediaOn = ovOn && mA > 0.001 && o.imageOpacity > 0;
+      if (mediaOn && (kind === 'image' ? !!o.image : kind === 'video' || kind === 'capture')) {
         const oi = fr._oi || (fr._oi = { alpha: 0, fit: 'contain', mode: 'normal' });
-        oi.alpha = clamp(+o.imageOpacity || 0, 0, 1);
+        oi.alpha = clamp(+o.imageOpacity || 0, 0, 1) * mA;
         oi.fit = o.imageFit;
         oi.mode = o.imageBlend;
         fr.ovImage = oi;
       } else {
         fr.ovImage = null;
       }
-      const ot = ovOn && getText ? this.overlayText() : null;
+      if (mediaOn && kind === 'web' && o.webUrl) {
+        const ow = fr._ow || (fr._ow = { alpha: 0 });
+        ow.alpha = clamp(+o.imageOpacity || 0, 0, 1) * mA;
+        fr.ovWeb = ow;
+      } else {
+        fr.ovWeb = null;
+      }
+      const ot = ovOn && getText && this._ovA.text > 0.001 ? this.overlayText(undefined, true) : null;
       if (ot && ot[0] && o.textOpacity > 0) {
         const t3 = fr._text3 || (fr._text3 = { tex: null, alpha: 0, corner: 'tr', size: 1 });
         t3.corner = o.corner;
         t3.tex = getText(ot[0], ot[1], t3.corner[1] === 'l' ? 'left' : 'right').tex;
-        t3.alpha = clamp(+o.textOpacity || 0, 0, 1);
+        t3.alpha = clamp(+o.textOpacity || 0, 0, 1) * this._ovA.text;
         t3.size = o.textSize || 1;
         fr.text3 = t3;
       } else {
@@ -722,6 +778,8 @@
         xf.param = this.sceneParams(xf.scene, xf.param);
         xf.sceneTime = this.now - x.start;
         xf.mix = this._xmix(x);
+        xf.type = x.type || 'fade';
+        xf.seed = x.seed || 0;
         // タイトルからのフェードアウト中もロゴのまま（文字に変わらない）
         xf.titleLogo = x.id === 'title' && !s.endState && (logo === 'title' || logo === 'both');
         fr.xfade = xf;
@@ -733,4 +791,5 @@
   }
 
   VJ.ShowController = ShowController;
+  VJ.ShowController.TRANSITIONS = TRANSITIONS;
 })(globalThis.VJ = globalThis.VJ || {});

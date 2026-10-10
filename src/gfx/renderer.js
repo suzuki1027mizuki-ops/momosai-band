@@ -34,6 +34,8 @@
       this.logoUrl = '';
       this.ovImg = null; // オーバーレイの画像 { tex, aspect }
       this.ovImgUrl = '';
+      this.ovVideo = null; // オーバーレイの動画（<video>。動画ファイル・画面の取り込み）
+      this.ovVid = null; // その絵のテクスチャ { tex, aspect }
       this.ovSlot = null; // 重ねるシーンの描画先（使うときに作る）
       canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); this.lost = true; this.lostCount = (this.lostCount || 0) + 1; }, false);
       canvas.addEventListener('webglcontextrestored', () => {
@@ -73,6 +75,8 @@
       if (this.logoUrl) { const u = this.logoUrl; this.logoUrl = ''; this.setLogo(u); }
       this.ovImg = null;
       if (this.ovImgUrl) { const u = this.ovImgUrl; this.ovImgUrl = ''; this.setOverlayImage(u); }
+      this.ovVid = null;
+      if (this.ovVideo) { const v = this.ovVideo; this.ovVideo = null; this.setOverlayVideo(v); }
       this.slots = null;
       this.ovSlot = null;
       this.tw = 0; this.th = 0;
@@ -161,6 +165,53 @@
     setLogo(url) { this._setImage('logo', 'logoUrl', url); }
     /** オーバーレイの画像（data URL）。空なら消す */
     setOverlayImage(url) { this._setImage('ovImg', 'ovImgUrl', url); }
+
+    /** オーバーレイの動画（<video>。null で消す）。絵は描くたびに新しいフレームだけテクスチャへ送る */
+    setOverlayVideo(video) {
+      video = video || null;
+      if (video === this.ovVideo && (!video || this.ovVid)) return;
+      const gl = this.gl;
+      if (this.ovVid) { gl.deleteTexture(this.ovVid.tex); this.ovVid = null; }
+      this.ovVideo = video;
+      this._vidNew = true;
+      this._vidUp = 0;
+      if (!video || this.lost) return;
+      const tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      this.ovVid = { tex, aspect: 16 / 9, ready: false };
+      // 新しいフレームが来たときだけ送る（描画 60fps・動画 30fps で 2 回送らないように）
+      if (video.requestVideoFrameCallback) {
+        const cb = () => { if (this.ovVideo !== video) return; this._vidNew = true; video.requestVideoFrameCallback(cb); };
+        video.requestVideoFrameCallback(cb);
+      }
+    }
+
+    /** 動画の新しいフレームをテクスチャへ（フレームの通知が来ない環境でも 1 秒に 4 回は送る） */
+    _uploadVideo() {
+      const v = this.ovVideo, t = this.ovVid;
+      if (!v || !t || v.readyState < 2 || !v.videoWidth) return;
+      const now = performance.now();
+      if (!this._vidNew && t.ready && now - this._vidUp < 250) return;
+      this._vidNew = false;
+      this._vidUp = now;
+      const gl = this.gl;
+      gl.bindTexture(gl.TEXTURE_2D, t.tex);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+      try {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, v);
+        t.aspect = v.videoWidth / Math.max(1, v.videoHeight);
+        t.ready = true;
+      } catch (e) {
+        // 別のサイトの動画など、読めない絵（ここには来ない想定）
+        t.ready = false;
+      }
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    }
 
     /** 画像（data URL）をテクスチャにして this[slot] = { tex, aspect } に入れる。空なら消す */
     _setImage(slot, urlKey, url) {
@@ -280,6 +331,8 @@
       this._resize();
       const f = fr.f;
       this._upload(f);
+      // オーバーレイの動画の新しいフレーム（テクスチャの割り当てを変えるので、シーン・仕上げの前に）
+      if (fr.ovImage && this.ovVid) this._uploadVideo();
 
       let def = fr.scene;
       if (!this.programs[def.id]) def = VJ.scenes.byId.title;
@@ -306,6 +359,8 @@
       const q = this.post.use();
       q.tex('u_scene2', dst2 ? dst2.tex : this.texBlank);
       q.set('u_mix', dst2 ? x.mix : 0);
+      q.set('u_trans', dst2 ? Math.max(0, VJ.ShowController.TRANSITIONS.indexOf(x.type || 'fade')) : 0);
+      q.set('u_tseed', dst2 ? x.seed || 0 : 0);
       q.tex('u_scene3', dst3 ? dst3.tex : this.texBlank);
       q.set('u_ovMix', dst3 ? ov.mix : 0);
       q.set('u_ovMode', ov && ov.mode === 'add' ? 1 : 0);
@@ -420,13 +475,14 @@
         r[1] = corner[0] === 'b' ? m : 1 - r[3] - m;
         q.set('u_logoRect', r);
       }
-      // オーバーレイ：画像（合わせ方 contain 全体が入る / cover 画面を埋める / stretch 引き伸ばす）
-      const oi = fr.ovImage && this.ovImg ? fr.ovImage : null;
-      q.tex('u_ovImg', oi ? this.ovImg.tex : this.texBlank);
+      // オーバーレイ：画像・動画（合わせ方 contain 全体が入る / cover 画面を埋める / stretch 引き伸ばす）
+      const src = this.ovVid && this.ovVid.ready ? this.ovVid : this.ovVideo ? null : this.ovImg;
+      const oi = fr.ovImage && src ? fr.ovImage : null;
+      q.tex('u_ovImg', oi ? src.tex : this.texBlank);
       q.set('u_ovImgAlpha', oi ? oi.alpha : 0);
       if (oi) {
         q.set('u_ovImgMode', oi.mode === 'add' ? 1 : oi.mode === 'screen' ? 2 : 0);
-        const A = this.lw / this.lh, a = this.ovImg.aspect;
+        const A = this.lw / this.lh, a = src.aspect;
         // 画面の幅・高さに対する割合。cover は、はみ出す側が 1 を超える
         let w = 1, h = 1;
         if (oi.fit !== 'stretch') {

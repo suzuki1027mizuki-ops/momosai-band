@@ -112,6 +112,20 @@ test('激しさ：キックで画面が寄る（同じ音・同じ動きの大�
   assert.ok(hit > 0.003, 'キックの直後は寄った分だけ違う ' + hit);
 });
 
+test('シーンの切り替え：どの種類（ワイプ・円・ブラインド・ズーム・スライド・グリッチ・モザイク）でも、続けて切り替えて 1 秒に 3 フラッシュ以下。途中は 2 つのシーンが混ざる', async () => {
+  const types = await page.evaluate(() => VJ.ShowController.TRANSITIONS);
+  assert.deepEqual(types, ['fade', 'wipe', 'iris', 'blinds', 'zoom', 'slide', 'glitch', 'mosaic']);
+  const order = ['aurora', 'tunnel', 'bokeh', 'eq', 'waves', 'glitch', 'kaleido', 'horizon'];
+  for (const type of types) {
+    const actions = {};
+    for (let i = 0; i < 8; i++) actions[30 + i * 40] = [['selectScene', order[i], { immediate: true }]];
+    const r = await run({ samples: 'demo', seconds: 6, sceneId: 'ripple', settings: { auto: false, autoFlash: true, crossfade: 0.5, transition: type }, grid: [4, 3], actions, pngAt: [30 + 40 * 3 + 15] });
+    const rf = regionFlashes(r.luma, 60);
+    assert.ok(Math.max(...rf) <= 3, `${type}: ${rf.join(' ')}`);
+    saveDataUrl(r.pngs[30 + 40 * 3 + 15], `e2e-transition-${type}.png`);
+  }
+});
+
 test('光過敏：オートモードでシーンが切り替わっても基準内', async () => {
   const r = await run({ samples: 'demo', seconds: 70, sceneId: 'ripple', settings: { auto: true, autoFlash: true, setlistText: '' }, grid: [4, 3] });
   const rf = regionFlashes(r.luma, 60);

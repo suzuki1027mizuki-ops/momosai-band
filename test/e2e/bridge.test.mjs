@@ -14,11 +14,16 @@ after(async () => { bridge.close(); await browser.close(); });
 
 test('スマホの操作画面から暗証番号でつなぎ、シーン・暗転・曲送りを操作できる。状態がスマホに表示される。OSC でも操作できる', async () => {
   const { page, errors } = await openApp(browser, DIST, '', { width: 1000, height: 700 });
-  // VJ 本体：設定パネル ⑦ でブリッジにつなぐ
-  await page.evaluate((url) => { document.getElementById('net-url').value = url; document.getElementById('net-url').dispatchEvent(new Event('change')); }, `ws://127.0.0.1:${bridge.port}/vj`);
+  // VJ 本体：設定パネル ⑦ でブリッジにつなぐ。鍵なしのアドレスでは、暗証番号はパネルに出さない（ブリッジの画面で見る）
+  const setUrl = (url) => page.evaluate((url) => { document.getElementById('net-url').value = url; document.getElementById('net-url').dispatchEvent(new Event('change')); }, url);
+  await setUrl(`ws://127.0.0.1:${bridge.port}/vj`);
   await page.check('#net-on');
   await page.waitForFunction(() => VJ.net.status === 'on' && VJ.net.info, null, { timeout: 10000 });
-  await page.waitForFunction(() => /2468/.test(document.getElementById('net-status').textContent), null, { timeout: 5000 });
+  await page.waitForFunction(() => /ブリッジの画面に出ている暗証番号/.test(document.getElementById('net-status').textContent), null, { timeout: 5000 });
+  assert.doesNotMatch(await page.textContent('#net-status'), /2468/);
+  // ブリッジの画面に出る鍵つきのアドレスにすると、パネルにも出る
+  await setUrl(`ws://127.0.0.1:${bridge.port}/vj?k=${bridge.vjKey}`);
+  await page.waitForFunction(() => /2468/.test(document.getElementById('net-status').textContent), null, { timeout: 10000 });
   await page.fill('#setlist', 'A | 2\nB | 3');
 
   // スマホ（別のページ）
@@ -62,7 +67,7 @@ test('スマホの操作画面から暗証番号でつなぎ、シーン・暗�
 
 test('QR コード：パネルに QR が出て、暗証番号入りの URL で開くとそのままつながる。スマホにシーンの見本画像と出演バンドの切替', async () => {
   const { page, errors } = await openApp(browser, DIST, '', { width: 1000, height: 800 });
-  await page.evaluate((url) => { document.getElementById('net-url').value = url; document.getElementById('net-url').dispatchEvent(new Event('change')); }, `ws://127.0.0.1:${bridge.port}/vj`);
+  await page.evaluate((url) => { document.getElementById('net-url').value = url; document.getElementById('net-url').dispatchEvent(new Event('change')); }, `ws://127.0.0.1:${bridge.port}/vj?k=${bridge.vjKey}`);
   await page.check('#net-on');
   await page.waitForFunction(() => VJ.net.status === 'on' && VJ.net.info, null, { timeout: 10000 });
   await page.waitForSelector('#btn-qr', { state: 'visible' });

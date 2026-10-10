@@ -34,6 +34,8 @@
       { id: 'msg1', name: 'テロップ 2', kind: 'trigger' },
       { id: 'msg2', name: 'テロップ 3', kind: 'trigger' },
       { id: 'test', name: 'テストパターン', kind: 'trigger' },
+      { id: 'media', name: 'メディアのオーバーレイ ON/OFF', kind: 'trigger' },
+      { id: 'ovscene', name: 'シーンのオーバーレイ ON/OFF', kind: 'trigger' },
       { id: 'master', name: '全体の明るさ（つまみ）', kind: 'value' },
       { id: 'sens', name: '感度（つまみ）', kind: 'value' },
     );
@@ -123,6 +125,8 @@
       else if (action === 'palette') show.cyclePalette(1);
       else if (/^msg[0-2]$/.test(action)) show.toggleMessage(+action[3]);
       else if (action === 'test') show.toggleTestPattern();
+      else if (action === 'media') show.toggleOverlay();
+      else if (action === 'ovscene') show.toggleSceneOverlay();
       else return false;
       return true;
     },

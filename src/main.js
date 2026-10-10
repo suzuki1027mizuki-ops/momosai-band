@@ -13,7 +13,7 @@
   function boot() {
     const settings = VJ.storage.load();
     // 単体アプリ：内蔵のブリッジ（同じ PC）に自動でつなぐ
-    if (VJ.params.bridge && /^ws:\/\/127\.0\.0\.1:\d+\/vj$/.test(VJ.params.bridge)) {
+    if (VJ.params.bridge && /^ws:\/\/127\.0\.0\.1:\d+\/vj(\?k=[0-9a-f]{24})?$/.test(VJ.params.bridge)) {
       settings.net = Object.assign({}, settings.net, { url: VJ.params.bridge, enabled: true });
     }
     const app = (VJ.app = { settings, errors: 0, errorsInRow: 0, paused: false, frameNo: 0, onFrame: null });
@@ -60,12 +60,17 @@
         const msg = Object.assign({}, s);
         if (link._bandsSent && link._bandsSent.ref === s.bands && link._bandsSent.ver === VJ.bands.version) delete msg.bands;
         else link._bandsSent = { ref: s.bands, ver: VJ.bands.version };
-        link.send({ t: 'settings', settings: msg });
+        // ロゴ・オーバーレイの画像（大きい）も、変わったときだけ送る（スライダーを動かすたびに送らない）
+        const keep = {};
+        if (link._logoSent === s.logo) { delete msg.logo; keep.logo = true; } else link._logoSent = s.logo;
+        const img = s.overlay && s.overlay.image;
+        if (img && link._ovImgSent === img) { msg.overlay = Object.assign({}, s.overlay, { image: '' }); keep.ovImage = true; } else link._ovImgSent = img;
+        link.send({ t: 'settings', settings: msg, keep });
         return;
       }
       app.renderer.setOutput(s.output);
       app.renderer.setLogo(s.logo);
-      app.renderer.setOverlayImage((s.overlay && s.overlay.image) || '');
+      VJ.media.sync(app); // メディアのオーバーレイ（画像・動画・画面の取り込み・YouTube / ニコニコ）
       app.renderer.setMaxScale(s.maxScale);
       if (!app.paused) { VJ.net.apply(app); VJ.dmx.apply(app); }
       if (link.role === 'output' && VJ.i18n.resolve(s.lang) !== VJ.i18n.lang) VJ.i18n.setLang(VJ.i18n.resolve(s.lang));
@@ -81,6 +86,15 @@
       return true;
     };
     app.getSettings = () => JSON.parse(JSON.stringify(app.settings));
+    // メディアの操作（描画しているウィンドウで。2 画面のときは出力側に頼む）：startCapture / stopCapture / webCmd
+    app.mediaCall = async (name, ...args) => {
+      if (!['startCapture', 'stopCapture', 'webCmd'].includes(name)) throw new Error('bad media call');
+      if (remote()) {
+        if (name === 'startCapture') { try { link.peer.focus(); } catch (e) { /* noop */ } }
+        return link.request({ t: 'cmd', target: 'app', name: 'mediaCall', args: [name, ...args] });
+      }
+      return VJ.media[name](...args);
+    };
     // サウンドチェックの測定（音声を解析しているウィンドウで。2 画面のときは出力側に頼む）
     app.scBegin = () => {
       if (remote()) return link.request({ t: 'cmd', target: 'app', name: 'scBegin', args: [] });
@@ -227,7 +241,9 @@
         const cap = settings.fpsCap;
         if (!cap || ts - lastRender >= 1000 / cap - 4) {
           lastRender = ts;
-          app.renderer.render(app.show.frame(f, dt, app.getText), ts);
+          const fr = app.show.frame(f, dt, app.getText);
+          app.renderer.render(fr, ts);
+          VJ.media.frame(fr);
           if (link.role === 'output') link.previewFrame(app.renderer.canvas, ts);
         }
         app.lastFeatures = f;

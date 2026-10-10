@@ -23,7 +23,7 @@
     ['B', '暗転 ON/OFF'], ['C / Shift+C', 'パレット 次 / 前'], ['↑ / ↓', '感度'], ['Shift+↑ / ↓', '全体の明るさ'],
     ['A', 'オート ON/OFF'], ['Enter', 'タップテンポ（拍に合わせて 3 回以上）'], ['Q / W / E', 'テロップ 1〜3 を表示・消す'],
     ['N / Shift+N', '次のバンド / 前のバンド（演奏中は 2 回押す）'],
-    ['T', '曲名をもう一度表示'], ['O', 'オーバーレイ ON/OFF'], ['G', 'テストパターン（位置合わせ）'], ['F', '全画面にする'], ['D', '診断表示'],
+    ['T', '曲名をもう一度表示'], ['O / Shift+O', 'メディアのオーバーレイ / シーンのオーバーレイ ON/OFF'], ['G', 'テストパターン（位置合わせ）'], ['F', '全画面にする'], ['D', '診断表示'],
     ['H', 'このヘルプ'], ['M', '設定パネル'], ['L', 'ロック（長押しで解除）'], ['R（2 秒長押し）', 'ソフトリセット'],
     ['Esc', 'パネルを閉じる（全画面中は長押しで解除）'],
   ];
@@ -100,7 +100,7 @@
       else if (code === 'KeyW') show.toggleMessage(1);
       else if (code === 'KeyE') show.toggleMessage(2);
       else if (code === 'KeyG') show.toggleTestPattern();
-      else if (code === 'KeyO') show.toggleOverlay();
+      else if (code === 'KeyO') { if (shift) show.toggleSceneOverlay(); else show.toggleOverlay(); }
       else if (code === 'KeyF') ui.enterFullscreen();
       else if (code === 'KeyD') ui.toggleHud();
       else if (code === 'KeyH') ui.toggleHelp();
