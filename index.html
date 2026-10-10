@@ -24,6 +24,9 @@ html, body { margin: 0; height: 100%; background: #000; color: var(--text); font
 body.nocursor, body.nocursor * { cursor: none !important; }
 body.nocursor #panel, body.nocursor #panel * { cursor: auto !important; }
 #stage { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; background: #000; }
+/* 透過ウィンドウ（単体アプリの「ほかの画面の上に重ねる」）：背景を透明に */
+html.glass, html.glass body, html.glass #stage { background: transparent; }
+#ov-preview { max-height: 60px; max-width: 200px; background: repeating-conic-gradient(#333 0% 25%, #222 0% 50%) 50% / 12px 12px; border-radius: 4px; }
 [hidden] { display: none !important; }
 
 /* 設定パネル（映像の上に右側だけ） */
@@ -229,7 +232,7 @@ body.remote-mode #stage { opacity: 0.25; }
     <select id="device"><option value="">（既定のデバイス）</option></select>
     <button id="btn-refresh" title="デバイス一覧を更新">↻</button>
   </div>
-  <div class="hint" id="display-opts" hidden data-i18n-html>YouTube・音楽アプリ・DJ ソフトなど PC で流している音に反応します。開始すると共有する画面を聞かれるので、<b>「システム音声を共有」</b>（タブなら「タブの音声も共有」）をオンにして選んでください。サイトのタブが一覧に無いときは<b>「画面全体」</b>を選びます（Windows）。2 画面のときは、選ぶ画面が出力ウィンドウに出ます。Mac は Chrome のタブの音だけ使えます。</div>
+  <div class="hint" id="display-opts" hidden data-i18n-html>YouTube・音楽アプリ・DJ ソフトなど PC で流している音に反応します。開始すると共有する画面を聞かれるので、<b>「画面全体」</b>で画面を選び、<b>「システムの音声を含めて共有する」をオン</b>にして共有します（最初はオフです。Chrome のタブを選ぶときは「タブの音声を含めて共有する」）。2 画面のときは、選ぶ画面が出力ウィンドウに出ます。音が届かないときは、VJ を開き直して最初にこの入力を始めてください。Mac は Chrome のタブの音だけ使えます。</div>
   <div class="row" id="file-opts" hidden>
     <input type="file" id="file" multiple accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac">
     <button id="btn-skip" title="次の曲（複数選んだとき）" hidden>次の曲 ▶▶</button>
@@ -339,9 +342,12 @@ body.remote-mode #stage { opacity: 0.25; }
       <option value="1">ふつう</option>
       <option value="2">激しい（おすすめ）</option>
       <option value="3">最大</option>
+      <option value="-1">自動（曲の盛り上がりに合わせる）</option>
     </select>
+    <span class="hint" id="intensity-now"></span>
   </div>
   <div class="hint">激しいほど、キックで画面が寄る・スネアで揺れる・拍ごとに軽く光る・オートの切替が速くなります（しっとり系・歌・司会のタイプでは弱め。フラッシュを一切使わないときは寄り・揺れもしません）。</div>
+  <div class="hint">「自動」は、静かなところは控えめに、サビでは激しく、と曲の盛り上がりを追って変わります（MC・無音のあいだは控えめ）。</div>
   <div class="row">
     <label><input type="checkbox" id="opt-noflash"> フラッシュを一切使わない（光に配慮が必要な会場）</label>
   </div>
@@ -375,8 +381,59 @@ body.remote-mode #stage { opacity: 0.25; }
   <div class="row"><span>明るさ</span><input type="range" id="opt-master" min="0.2" max="1" step="0.1"><span id="opt-master-v"></span></div>
   <div class="row">
     <span>パレット</span><select id="opt-palette"></select>
+    <label><input type="checkbox" id="opt-palauto"> 自動で変える</label>
     <span id="custom-colors"></span>
   </div>
+  <div class="hint">「自動で変える」は、曲の区切り（キメ・小節の頭）ごとに、盛り上がりに合った色へゆっくり移します（およそ 20〜30 秒おき。曲ごとの色の指定があるときはそのまま。モノクロとカスタムは使いません）。</div>
+  <details id="overlay-box">
+    <summary>オーバーレイ（画像・シーン・文字を重ねる）</summary>
+    <div class="row"><label><input type="checkbox" id="ov-on"> <span data-i18n-html>オーバーレイを表示（<kbd>O</kbd> キーで切替）</span></label></div>
+    <div class="row"><b class="sub">画像</b><span class="hint">枠やイラスト（透過 PNG など）を、すべてのシーンの上に</span></div>
+    <div class="row">
+      <input type="file" id="ov-file" accept="image/*">
+      <button id="btn-ov-clear">消す</button>
+    </div>
+    <div class="row"><img id="ov-preview" alt="" hidden></div>
+    <div class="row">
+      <select id="ov-fit">
+        <option value="contain">全体が入るように</option>
+        <option value="cover">画面を埋める（はみ出しは切る）</option>
+        <option value="stretch">画面に合わせて引き伸ばす</option>
+      </select>
+      <select id="ov-imgblend">
+        <option value="normal">そのまま重ねる</option>
+        <option value="add">光として足す（黒は透明）</option>
+        <option value="screen">やわらかく足す（スクリーン）</option>
+      </select>
+    </div>
+    <div class="row"><span>画像の濃さ</span><input type="range" id="ov-imgop" min="0" max="1" step="0.05"><span id="ov-imgop-v"></span></div>
+    <div class="row"><b class="sub">シーン</b><span class="hint">いまのシーンの上に、もう 1 つのシーンを重ねる</span></div>
+    <div class="row">
+      <select id="ov-scene"></select>
+      <select id="ov-sceneblend">
+        <option value="screen">やわらかく足す（スクリーン）</option>
+        <option value="add">光として足す（加算）</option>
+      </select>
+    </div>
+    <div class="row"><span>シーンの濃さ</span><input type="range" id="ov-sceneop" min="0" max="1" step="0.05"><span id="ov-sceneop-v"></span></div>
+    <div class="row"><b class="sub">文字</b><span class="hint">隅にずっと表示</span></div>
+    <div class="row">
+      <label><input type="checkbox" id="ov-clock"> 時計</label>
+      <label><input type="checkbox" id="ov-band"> バンド名</label>
+      <label><input type="checkbox" id="ov-song"> 曲名</label>
+    </div>
+    <div class="row"><input type="text" id="ov-text" maxlength="60" placeholder="自由な文字（例：#ももさい祭）"></div>
+    <div class="row">
+      <select id="ov-corner">
+        <option value="tr">右上</option><option value="tl">左上</option><option value="br">右下</option><option value="bl">左下</option>
+      </select>
+    </div>
+    <div class="row"><span>文字の大きさ</span><input type="range" id="ov-textsize" min="0.5" max="2" step="0.1"><span id="ov-textsize-v"></span></div>
+    <div class="row"><span>文字の濃さ</span><input type="range" id="ov-textop" min="0" max="1" step="0.05"><span id="ov-textop-v"></span></div>
+    <div class="hint">シーンを重ねると描く量が 2 倍になります（重いときは重ねるのをやめてください）。まぶしくなりすぎないよう、重ねる強さは「シーンの濃さ」100% でも 6 割までです。テストパターン（G）の間はオーバーレイを出しません。</div>
+    <div class="row" id="glass-row" hidden><button id="btn-glass">ほかの画面の上に重ねて表示（透過ウィンドウ）</button></div>
+    <div class="hint" id="glass-hint">VJ の映像を透かして、ほかの画面（YouTube など）の上に重ねて表示するのは、単体アプリ版でできます（ブラウザではウィンドウを透明にできません）。</div>
+  </details>
   <details id="scene-adjust">
     <summary>シーンごとの調整（量・大きさ・速さなど）</summary>
     <div class="row"><select id="sp-scene"></select><label><input type="checkbox" id="sp-follow" checked> 表示中のシーンに合わせる</label></div>

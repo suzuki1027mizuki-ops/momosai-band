@@ -9,16 +9,16 @@
 
   const SHOW_METHODS = ['selectScene', 'nextSong', 'prevSong', 'flash', 'setStrobe', 'toggleBlackout', 'setBlackout', 'cyclePalette',
     'nudgeSensitivity', 'nudgeMaster', 'toggleAuto', 'lock', 'unlock', 'showSongTitle', 'tap', 'toggleMessage', 'showMessage',
-    'toggleTestPattern', 'restoreSession', 'setMaster', 'setSensitivity', 'setPalette', 'resetShow'];
+    'toggleTestPattern', 'restoreSession', 'setMaster', 'setSensitivity', 'setPalette', 'resetShow', 'toggleOverlay'];
   // 出力側から操作側へ反映してよい設定（型も確認する）
-  const PATCH_KEYS = { paletteIdx: 'number', sensitivity: 'number', master: 'number', auto: 'boolean' };
+  const PATCH_KEYS = { paletteIdx: 'number', sensitivity: 'number', master: 'number', auto: 'boolean', overlayOn: 'boolean' };
 
   // ---------------------------------------------------------------- 操作側のリモコン
   class RemoteShow {
     constructor(link, settings) {
       this.link = link;
       this.settings = settings;
-      this.state = { sceneId: 'title', locked: false, songIdx: -1, endState: false, auto: !!settings.auto, sens: 0, master: 1, paletteIdx: 0, blackout: false, pending: null };
+      this.state = { sceneId: 'title', locked: false, songIdx: -1, endState: false, auto: !!settings.auto, sens: 0, master: 1, paletteIdx: 0, blackout: false, pending: null, intLv: 2 };
       this.limiter = { denied: 0 };
       this.listeners = [];
       this.applySettings(settings);
@@ -95,8 +95,10 @@
       });
     },
 
-    /** 操作側：出力ウィンドウを開く（ポップアップがブロックされないよう、クリック直後にまず開く） */
-    openOutput(app) {
+    /** 操作側：出力ウィンドウを開く（ポップアップがブロックされないよう、クリック直後にまず開く）。
+     *  opts.glass：透過ウィンドウで（単体アプリ。ほかの画面の上に重ねて表示する） */
+    openOutput(app, opts) {
+      const glass = !!(opts && opts.glass);
       // 閉じている途中の出力ウィンドウ（「閉じる」の直後）は、前面に出さずに新しく開く
       const closing = link._closing && !link._closing.closed && link._closing === link.peer ? link._closing : null;
       if (link.role === 'control' && link.peer && !link.peer.closed && !closing) { link.peer.focus(); return; }
@@ -104,11 +106,12 @@
       const base = location.href.replace(/[?#].*$/, '');
       const keep = ['test', 'scale', 'pr', 'desync'].filter((k) => VJ.params[k] !== undefined).map((k) => `&${k}=${encodeURIComponent(VJ.params[k])}`).join('');
       // 同じ名前だと閉じている途中のウィンドウが使い回されるので、そのときは別の名前で
-      const w = window.open(base + '?role=output' + keep, closing ? 'momosai-vj-output-' + Date.now() : 'momosai-vj-output', 'popup,width=960,height=540');
+      const w = window.open(base + '?role=output' + (glass ? '&overlay=1' : '') + keep, closing || glass ? 'momosai-vj-output-' + Date.now() : 'momosai-vj-output', 'popup,width=960,height=540');
       if (!w) { app.ui.toast(VJ.t('出力ウィンドウを開けませんでした（ポップアップのブロックを解除してください）'), 'warn'); return; }
       link.adopt(app, w, true);
-      // 画面が 2 つあれば、もう一方（プロジェクター）へ移す（「ウィンドウの管理」の許可が必要）
-      if (window.getScreenDetails) {
+      // 画面が 2 つあれば、もう一方（プロジェクター）へ移す（「ウィンドウの管理」の許可が必要）。
+      // 透過ウィンドウの場所はアプリ側で決める
+      if (window.getScreenDetails && !glass) {
         window.getScreenDetails().then((sd) => {
           const other = sd.screens.find((x) => x !== sd.currentScreen);
           if (other && !w.closed) { w.moveTo(other.availLeft, other.availTop); w.resizeTo(other.availWidth, other.availHeight); }
@@ -219,9 +222,12 @@
         Object.assign(show.state, d.state);
         show.limiter.denied = d.denied;
         eng.meter = d.meter;
+        const dev = eng.diag.device;
         eng.diag = d.diag;
         Object.assign(eng.opts, d.engineOpts);
         if (eng.status !== d.engineStatus) eng._set(d.engineStatus, d.engineMessage);
+        // 入力の名前・チャンネル数は状態の通知より遅れて届くので、届いたら表示し直す
+        else if (eng.status === 'running' && d.diag.device !== dev) VJ.panel.renderStatus(eng.status, eng.message);
         const now = performance.now(), L = VJ.hud.lamps;
         if (d.hits & 1) L.k = now;
         if (d.hits & 2) L.s = now;
@@ -286,9 +292,12 @@
       document.body.classList.add('output');
       VJ.panel.toggle(false);
       const hint = document.getElementById('out-hint');
-      hint.hidden = false;
-      setTimeout(() => { hint.hidden = true; }, 8000);
-      document.addEventListener('dblclick', () => { VJ.guard.enterFullscreen(); hint.hidden = true; });
+      // 透過ウィンドウは操作を受け取らない（クリックは下の画面に届く）ので、全画面の案内は出さない
+      if (VJ.params.overlay !== '1') {
+        hint.hidden = false;
+        setTimeout(() => { hint.hidden = true; }, 8000);
+        document.addEventListener('dblclick', () => { VJ.guard.enterFullscreen(); hint.hidden = true; });
+      }
       app.show.on((msg, kind) => link.send({ t: 'toast', msg, kind }));
       app.engine.on((status, message) => {
         link.send({ t: 'engine', status, message });
@@ -309,7 +318,7 @@
         link.send({
           t: 'status',
           role: 'output',
-          state: { sceneId: s.sceneId, pending: s.pending ? { id: s.pending.id } : null, songIdx: s.songIdx, endState: s.endState, auto: s.auto, locked: s.locked, blackout: s.blackout, sens: s.sens, master: s.master, paletteIdx: s.paletteIdx },
+          state: { sceneId: s.sceneId, pending: s.pending ? { id: s.pending.id } : null, songIdx: s.songIdx, endState: s.endState, auto: s.auto, locked: s.locked, blackout: s.blackout, sens: s.sens, master: s.master, paletteIdx: s.paletteIdx, intLv: s.intLv },
           denied: app.show.limiter.denied,
           meter: app.engine.updateMeters(),
           diag: app.engine.diagnostics(),
@@ -318,7 +327,7 @@
           engineOpts: { source: app.engine.opts.source, deviceId: app.engine.opts.deviceId, deviceLabel: app.engine.opts.deviceLabel, channel: app.engine.opts.channel },
           hits,
           f: { bpm: f.bpm, beatConf: f.beatConf, melodic: f.melodic, tempoManual: f.tempoManual, active: f.active },
-          patch: { paletteIdx: app.settings.paletteIdx, sensitivity: app.settings.sensitivity, master: app.settings.master, auto: app.settings.auto },
+          patch: { paletteIdx: app.settings.paletteIdx, sensitivity: app.settings.sensitivity, master: app.settings.master, auto: app.settings.auto, overlayOn: !!app.settings.overlayOn },
           fps: r.fps, size: r.size, fullscreen: !!VJ.compat.fullscreenElement(),
           io: { net: VJ.net.state(), dmx: VJ.dmx.state() },
           hud: VJ.hud.text ? VJ.hud.text(app, f, performance.now()) : '',

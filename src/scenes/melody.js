@@ -1,13 +1,17 @@
 /* Shift+2: メロディ線 — 声や旋律の音程を光の線で描く（カラオケの音程バーのように右から左へ流れる）。
  * 横 = 時間（右寄りの縦線が「今」、左ほど昔・約 2.7 秒）、縦 = 音程（半音ごとの段。C の段は少し明るい）。
- * 線の太さはその時の音量、色は音程。無声のところで線が切れる。今の位置に光る点、音の変わり目に小さなきらめき。
+ * 線の太さはその時の音量、色は音程。線は 1 本につながるように描く：短い息つぎ・子音の切れ目は橋渡しし、
+ * 音が跳ぶところはなめらかな曲線でつなぎ（跳ぶ間は細く）、今の位置の点まで続ける。左へはなめらかに流れる。
+ * 長い休み（約 0.2 秒以上）だけ線が切れる。今の位置に光る点、音の変わり目に小さなきらめき。
  * キックは縦の小節線のように左へ流れる。和音の多いバンド演奏（音程が取れない）では線が薄くなり、
  * 代わりにスペクトルで段が淡く光る背景が主役になる。表示する音域は最近の音程に合わせてゆっくり移動。 */
 (function (VJ) {
   'use strict';
   const NB = 32; // 太さの履歴の区間数（音程の履歴と同じ約 2.7 秒）
   const NN = 6; // きらめきの数
-  const JUMP = 2.5 / 48; // これ以上の音程の跳びでは線をつながない（半音 2.5 個）
+  const JUMP = 2.5 / 48; // これ以上の音程の跳びは「跳び」として細い線でつなぐ（半音 2.5 個）
+  const NH = 128; // 音程の履歴の点数
+  const GAP = 9; // この点数（約 0.19 秒）までの無声は橋渡しする
   VJ.scenes.register({
     id: 'melody', key: 's2', name: 'Melody', nameJa: 'メロディ線', aliases: ['メロディ', '音程'], cost: 1,
     params: [
@@ -23,6 +27,8 @@
       st.notes = new Float32Array(NN * 3);
       for (let i = 0; i < NN; i++) st.notes[i * 3] = 99;
       st.noteN = -1; st.kickN = -1; st.sinceNote = 1;
+      st.ph = new Float32Array(NH).fill(-1); st.raw = new Float32Array(NH).fill(-1); st.tmp = new Float32Array(NH);
+      st.sub = 0;
     },
     update(st, f, dt) {
       const sr = f.sampleRate || 48000;
@@ -65,12 +71,57 @@
         st.sinceNote = 0;
       }
       st.noteN = f.noteN; st.kickN = f.kickN;
-      return { u_lv: st.lv, u_lvlNow: st.lvl, u_center: st.center, u_qual: st.qual, u_histSec: histSec, u_notes: st.notes, u_voS: st.vo };
+
+      // 線をきれいにつなぐための下ごしらえ（履歴 → st.ph）
+      const hn = Math.min(NH, ph.length), raw = st.raw, out = st.ph, tmp = st.tmp;
+      // 履歴が進んだか（1 点 = 1024 サンプル）。進んでいない間は経過時間ぶんだけ左へずらして、なめらかに流す
+      let moved = false;
+      for (let i = NH - 12; i < NH && !moved; i++) moved = raw[i] !== ph[ph.length - NH + i];
+      const stepSec = 1024 / sr;
+      if (moved) st.sub = 0; else st.sub = Math.min(st.sub + dt, stepSec);
+      for (let i = 0; i < hn; i++) raw[NH - hn + i] = ph[ph.length - hn + i];
+      // 1) 単発の外れ（前後から半音 3 個以上はなれた 1 点）は前後の平均に
+      for (let i = 0; i < NH; i++) {
+        const a = raw[i - 1], b = raw[i], c = raw[i + 1];
+        tmp[i] = i > 0 && i < NH - 1 && a >= 0 && b >= 0 && c >= 0 && Math.abs(a - c) < 1.5 / 48 && Math.abs(b - (a + c) / 2) > 3 / 48 ? (a + c) / 2 : b;
+      }
+      // 2) 短い無声（息つぎ・子音）は前後をつないで埋める。端（いちばん新しい側）の無声は、声が続いていれば直前の音程のまま
+      for (let i = 0; i < NH; i++) out[i] = tmp[i];
+      for (let i = 0; i < NH;) {
+        if (out[i] >= 0) { i++; continue; }
+        let j = i;
+        while (j < NH && out[j] < 0) j++;
+        if (i > 0 && j - i <= GAP) {
+          const a = out[i - 1], b = j < NH ? out[j] : a;
+          if (j < NH || f.voiced > 0.5) for (let q = i; q < j; q++) { const u = (q - i + 1) / (j - i + 1); out[q] = a + (b - a) * u * u * (3 - 2 * u); }
+        }
+        i = j;
+      }
+      // 3) 細かいふるえを均す（1-2-1）。音が跳ぶところは均さない（段差をなまらせない）
+      for (let i = 0; i < NH; i++) tmp[i] = out[i];
+      for (let i = 1; i < NH - 1; i++) {
+        const a = tmp[i - 1], b = tmp[i], c = tmp[i + 1];
+        if (a >= 0 && b >= 0 && c >= 0 && Math.abs(a - b) < JUMP && Math.abs(c - b) < JUMP) out[i] = (a + 2 * b + c) / 4;
+      }
+      // 4) 音が跳ぶところは、前後あわせて 7 点（約 0.15 秒）かけて S 字の曲線でつなぐ
+      for (let i = 4; i < NH; i++) {
+        if (out[i] < 0 || out[i - 1] < 0 || Math.abs(out[i] - out[i - 1]) < JUMP) continue;
+        const s0 = i - 4, e = Math.min(NH - 1, i + 3);
+        const a = out[s0] >= 0 ? out[s0] : out[i - 1], b = out[e] >= 0 ? out[e] : out[i];
+        for (let q = s0 + 1; q < e; q++) {
+          if (out[q] < 0) continue;
+          const u = (q - s0) / (e - s0);
+          out[q] = a + (b - a) * u * u * u * (u * (u * 6 - 15) + 10);
+        }
+        i = e;
+      }
+      return { u_lv: st.lv, u_lvlNow: st.lvl, u_center: st.center, u_qual: st.qual, u_histSec: histSec, u_notes: st.notes, u_voS: st.vo, u_ph: out, u_sub: st.sub / stepSec };
     },
     frag: `
 uniform float u_lv[${NB}];
 uniform vec3 u_notes[${NN}];
-uniform float u_lvlNow, u_center, u_qual, u_histSec, u_voS;
+uniform float u_lvlNow, u_center, u_qual, u_histSec, u_voS, u_sub;
+uniform vec4 u_ph[${NH / 4}];   // 音程の履歴（下ごしらえ済み。4 点ずつ）
 
 #define XNOW 0.84
 #define JUMP ${JUMP.toFixed(5)}
@@ -87,6 +138,10 @@ float lvAt(float hx) {
   float v = mix(u_lv[i0], u_lv[i1], fract(b));
   return mix(v, u_lvlNow, smoothstep(1.0 - 1.5 / ${NB}.0, 1.0, hx));
 }
+// 履歴の i 番目（0 = 昔、${NH - 1} = 今）。無声は -1
+float phAt(float i) { int k = int(clamp(i, 0.0, ${NH - 1}.0)); return u_ph[k / 4][k % 4]; }
+// 画面上の位置：履歴が 1 点進むまでの間は u_sub（0..1）だけ左へずらす
+float phX(float i, float A) { return (i - u_sub) / ${NH - 1}.0 * XNOW * A; }
 float segDist(vec2 p, vec2 a, vec2 b, out float t) {
   vec2 ab = b - a;
   t = clamp(dot(p - a, ab) / max(dot(ab, ab), 1e-8), 0.0, 1.0);
@@ -144,39 +199,42 @@ void main() {
   float dNow = (uv.x - XNOW) * A;
   col += pal(u_pitch * 2.0 + drift) * exp(-dNow * dNow * 20000.0) * (0.06 + 0.06 * u_voiced);
 
-  // メロディ線：左右の近くの点（品質で 14 点 / 10 点）を結ぶ区間までの距離。
-  // 無声・大きな跳びでは切る（端は丸く）
+  // メロディ線：左右の近くの点（品質で 16 点 / 12 点）を順に結ぶ区間までの距離。
+  // 音が跳ぶ区間もつなぐ（細く）。長い無声では切る（端は丸く）。右端は今の位置の点までつなぐ
   float hx = uv.x / XNOW;
-  int nPts = u_quality > 0.5 ? 14 : 10;
+  float fi = hx * 127.0 + u_sub;    // この画素の履歴上の位置（点の番号）
+  int nPts = u_quality > 0.5 ? 16 : 12;
   float hw = float(nPts / 2);       // 片側の点の数
-  float i0 = floor(hx * 127.0) - hw + 1.0;
-  float best = 1e3, bestP = 0.0, bestHx = 0.0;
+  float i0 = floor(fi) - hw + 1.0;
+  float best = 1e3, bestP = 0.0, bestI = 0.0, bestThin = 1.0;
   float pPrev = -1.0;
   vec2 aPrev = vec2(0.0);
-  for (int k = 0; k < 14; k++) {
-    if (k >= nPts) break;
+  for (int k = 0; k < 17; k++) {
+    if (k > nPts) break;
     float ii = i0 + float(k);
-    if (ii < 0.0 || ii > 127.0) { pPrev = -1.0; continue; }
-    float pc = pitchHist(ii / 127.0);
-    vec2 pt = vec2(ii / 127.0 * XNOW * A, pitchY(pc));
+    float pc = -1.0;
+    vec2 pt = vec2(0.0);
+    if (ii >= 0.0 && ii <= 127.0) { pc = phAt(ii); pt = vec2(phX(ii, A), pitchY(pc)); }
+    else if (ii > 127.0 && ii < 128.5 && u_voiced > 0.5) { pc = u_pitch; pt = vec2(XNOW * A, pitchY(pc)); }
     if (pc >= 0.0) {
       float t = 0.0, d;
-      if (pPrev >= 0.0 && abs(pc - pPrev) < JUMP) {
+      if (pPrev >= 0.0) {
         d = segDist(q, aPrev, pt, t);
-        if (d < best) { best = d; bestP = mix(pPrev, pc, t); bestHx = (ii - 1.0 + t) / 127.0; }
+        if (d < best) { best = d; bestP = mix(pPrev, pc, t); bestI = ii - 1.0 + t; bestThin = 1.0 - 0.5 * smoothstep(JUMP * 0.3, JUMP, abs(pc - pPrev)); }
       } else {
         d = length(q - pt);
-        if (d < best) { best = d; bestP = pc; bestHx = ii / 127.0; }
+        if (d < best) { best = d; bestP = pc; bestI = ii; bestThin = 1.0; }
       }
     }
     pPrev = pc;
     aPrev = pt;
   }
-  float lw = max((0.005 + 0.022 * lvAt(bestHx)) * u_param.y, 1.3 / u_res.y);
+  float bestHx = clamp((bestI - u_sub) / 127.0, 0.0, 1.0);
+  float lw = max((0.005 + 0.022 * lvAt(bestHx)) * u_param.y * bestThin, 1.3 / u_res.y);
   float hr = lw * 1.4 + 0.007;                 // にじみの幅
   float age = smoothstep(0.0, 0.45, bestHx);   // 昔の部分ほど淡く
   // 調べた点の範囲の端で光が切れて四角く見えないよう、端に近いほど弱める
-  float win = 1.0 - smoothstep(hw - 3.0, hw - 1.0, abs(hx - bestHx) * 127.0);
+  float win = 1.0 - smoothstep(hw - 3.0, hw - 1.0, abs(fi - bestI));
   float amt = age * win * mix(0.45, 1.0, u_qual);
   vec3 lc = pal(bestP * 2.0 + drift + 0.05);
   float core = exp(-best * best / (lw * lw));
@@ -204,7 +262,7 @@ void main() {
     float a = ev.x;
     if (a > 1.2) continue;
     float ex = 1.0 - a / u_histSec;
-    float pe = pitchHist(ex);
+    float pe = phAt(floor(ex * 127.0 + 0.5));
     vec2 sp = vec2(ex * XNOW * A, pitchY(pe >= 0.0 ? pe : ev.y));
     vec2 d = rot(a * 1.5) * (q - sp);
     float s = (0.025 + 0.03 * ev.z) * (1.0 - 0.4 * a);

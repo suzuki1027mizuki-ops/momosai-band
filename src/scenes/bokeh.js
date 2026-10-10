@@ -1,4 +1,5 @@
-/* Shift+4: 光の粒 — ピントの外れた光の玉（ボケ）が 3 層の奥行きでゆっくり漂う（しっとりした曲・合唱・司会向け）。
+/* Shift+4: 光の粒 — ピントの外れた光の玉（ボケ）が 3 層の奥行きで漂う（しっとりした曲・合唱・司会向け）。
+ * 玉は 1 つずつふらふら動きながら流れ、層ごとにゆっくり向きを変える。音量で流れが速くなる。
  * 音量で玉が少し大きく・柔らかく、キックでその近くの玉がふくらんで押しのけられる（明るさは面積で割って保つ）。
  * 声の音程で色合いが少しずれ、声が出ている間は暖かい光が差す。高音で奥の小さな玉がきらめく。 */
 (function (VJ) {
@@ -18,7 +19,7 @@
       st.voiced += ((f.voiced || 0) - st.voiced) * k(0.6);
       st.pitch += ((f.pitch === undefined ? 0.5 : f.pitch) - st.pitch) * k(0.8);
       st.high += (f.high - st.high) * k(0.3);
-      st.drift += (0.035 + 0.05 * st.lvl) * dt;
+      st.drift += (0.1 + 0.2 * st.lvl) * dt;
       return { u_drift: st.drift, u_lvlS: st.lvl, u_voicedS: st.voiced, u_pitchS: st.pitch, u_highS: st.high };
     },
     frag: `
@@ -66,8 +67,9 @@ void main() {
     float fl = float(L);
     float cell = 0.1 * pow(1.95, fl);         // 奥 0.1 → 手前 0.38
     float spd = 0.45 + 0.45 * fl;              // 視差：手前ほど速く流れる
-    vec2 off = vec2(0.1 * sin(u_drift * 0.7 + fl * 2.1) + u_drift * 0.25 * spd, -u_drift * spd);
-    vec2 q = (p + off) / cell;
+    vec2 off = vec2(0.22 * sin(u_drift * 0.9 + fl * 2.1) + u_drift * 0.25 * spd, -u_drift * spd + 0.08 * cos(u_drift * 0.6 + fl * 1.3));
+    // 層ごとにゆっくり向きを変える（全体が同じ向きに流れ続けないように）
+    vec2 q = (rot(0.16 * sin(u_drift * 0.5 + fl * 1.9)) * p + off) / cell;
     vec2 id0 = floor(q);
     // 近い 2×2 マスだけ調べる（玉の半径をマスの半分までにしてあるので足りる）
     vec2 sg = step(0.5, q - id0) * 2.0 - 1.0;
@@ -83,7 +85,8 @@ void main() {
       float cl = 0.45 + 0.75 * (0.5 + 0.5 * sin(wc.x * 3.3 + fl * 1.9) * sin(wc.y * 2.6 + fl * 4.1));
       if (h > dens * cl) continue;
       vec2 h2 = hash22(id + fl * 11.7);
-      vec2 c = id + 0.5 + (h2 - 0.5) * 0.4 + 0.08 * vec2(sin(u_time * 0.31 + h2.x * 40.0), cos(u_time * 0.27 + h2.y * 30.0));
+      // 1 つずつふらふら動く（中心のずれは 0.36 マスまで：半径 0.5 マスと合わせて隣の 2×2 マスに収まる）
+      vec2 c = id + 0.5 + (h2 - 0.5) * 0.4 + 0.16 * vec2(sin(u_time * (0.5 + 0.7 * h2.x) + h2.x * 40.0), cos(u_time * (0.45 + 0.6 * h2.y) + h2.y * 30.0));
       vec2 cs = c * cell - off;                // 画面上の中心
       float sw = 0.0;
       vec2 push = vec2(0.0);
@@ -96,7 +99,7 @@ void main() {
       }
       float hs = fract(h * 13.7 + h2.x);
       float r = min(cell * (0.14 + 0.34 * hs * hs) * grow * (1.0 + 0.55 * sw), cell * 0.5);
-      vec2 d = R * ((q - c) * cell - push * 0.06 * cell / 0.1);
+      vec2 d = R * ((q - c) * cell - push * 0.12 * cell / 0.1);
       float x = apert(d) / r;
       if (x > 1.3) continue;
       // 中は淡く輪郭が明るい（ぼけの縁）＋外側にかすかな光
@@ -104,7 +107,7 @@ void main() {
       float rim = smoothstep(0.5, 1.0, x);
       float a = edge * (0.5 + 0.5 * rim * rim * (1.0 - 0.7 * ls)) + 0.2 * exp(-max(x - 1.0, 0.0) * 8.0) * smoothstep(1.3, 1.0, x);
       // ゆっくり現れて消える
-      float life = smoothstep(-0.5, 0.5, sin(u_time * (0.1 + 0.15 * h2.y) + h * 60.0));
+      float life = smoothstep(-0.5, 0.5, sin(u_time * (0.3 + 0.4 * h2.y) + h * 60.0));
       vec3 c0 = pal(h * 2.3 + fl * 0.19 + hueShift);
       c0 = mix(c0, warm, 0.3 * u_voicedS);
       float tw = L == 0 ? 1.0 + 0.45 * u_highS * sin(u_time * 8.0 + h * 80.0) : 1.0;

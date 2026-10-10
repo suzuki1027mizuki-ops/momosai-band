@@ -17,16 +17,17 @@
       this.aspect = W / H;
     }
 
-    /** lines = { main, sub } のテクスチャを返す（キャッシュ） */
-    get(main, sub) {
-      const key = (sub || '') + '\u0000' + (main || '');
+    /** lines = { main, sub } のテクスチャを返す（キャッシュ）。align：'left' / 'right' で端にそろえる（省略 = 中央） */
+    get(main, sub, align) {
+      const al = align === 'left' || align === 'right' ? align : 'center';
+      const key = (sub || '') + '\u0000' + (main || '') + (al === 'center' ? '' : '\u0000' + al);
       let e = this.cache.get(key);
       if (e) {
         this.cache.delete(key);
         this.cache.set(key, e); // LRU
         return e;
       }
-      e = this._make(main || '', sub || '');
+      e = this._make(main || '', sub || '', al);
       this.cache.set(key, e);
       while (this.cache.size > 8) {
         const k = this.cache.keys().next().value;
@@ -36,10 +37,11 @@
       return e;
     }
 
-    _make(main, sub) {
+    _make(main, sub, align) {
       const c = this.ctx, gl = this.gl;
+      const X = align === 'left' ? W * 0.02 : align === 'right' ? W * 0.98 : W / 2;
       c.clearRect(0, 0, W, H);
-      c.textAlign = 'center';
+      c.textAlign = align || 'center';
       c.textBaseline = 'middle';
       c.lineJoin = 'round';
       const fit = (text, maxSize, maxW) => {
@@ -55,10 +57,10 @@
         c.shadowBlur = size * 0.12;
         c.lineWidth = Math.max(4, size * 0.07);
         c.strokeStyle = 'rgba(0,0,0,0.7)';
-        c.strokeText(text, W / 2, y);
+        c.strokeText(text, X, y);
         c.shadowBlur = 0;
         c.fillStyle = '#ffffff';
-        c.fillText(text, W / 2, y);
+        c.fillText(text, X, y);
       };
       if (sub) {
         const s2 = fit(sub, 96, W * 0.9);

@@ -23,6 +23,13 @@ uniform float u_punch, u_rgb; // 激しさ：キックで寄る（拡大率）�
 uniform vec2 u_shake;         // 激しさ：スネアで揺れる（画面の高さに対する割合）
 uniform vec3 u_flashColor;
 uniform vec4 u_textRect, u_text2Rect, u_logoRect;
+// オーバーレイ：重ねるシーン（濃さ・重ね方 0 = スクリーン / 1 = 加算）、画像（重ね方 0 = そのまま / 1 = 加算 / 2 = スクリーン）、隅の文字
+uniform sampler2D u_scene3;
+uniform sampler2D u_ovImg;
+uniform sampler2D u_text3;
+uniform float u_ovMix, u_ovMode, u_ovImgAlpha, u_ovImgMode, u_text3Alpha;
+uniform vec4 u_ovImgRect, u_text3Rect;
+uniform float u_alphaOut;    // 1 = 透過ウィンドウ（単体アプリ）：暗いところを透明にして出す
 
 float hash12(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 
@@ -36,6 +43,10 @@ vec4 sampleRect(sampler2D t, vec4 rect, vec2 uv) {
 vec3 sceneAt(vec2 p) {
   vec3 a = texture(u_scene, p).rgb;
   if (u_mix > 0.001) a = mix(a, texture(u_scene2, p).rgb, u_mix);
+  if (u_ovMix > 0.001) {
+    vec3 o = max(texture(u_scene3, p).rgb, 0.0) * u_ovMix;
+    a = u_ovMode > 0.5 ? a + o : a + o - min(a, vec3(1.0)) * min(o, vec3(1.0));
+  }
   return a;
 }
 
@@ -44,6 +55,7 @@ void main() {
   // 物理 → 表示エリア内の 0..1
   vec2 q = (px - (u_area.xy - u_area.zw * 0.5)) / u_area.zw;
   vec3 col = vec3(0.0);
+  float cov = 0.0;             // 文字・ロゴ・画像が覆っている割合（透過ウィンドウで、暗い色の部分も透けないように）
   if (q.x >= 0.0 && q.x <= 1.0 && q.y >= 0.0 && q.y <= 1.0) {
     if (u_flip.x > 0.5) q.x = 1.0 - q.x;
     if (u_flip.y > 0.5) q.y = 1.0 - q.y;
@@ -69,13 +81,23 @@ void main() {
     float v = smoothstep(1.25, 0.35, length(c * vec2(aspect, 1.0)) * 1.1);
     col *= mix(1.0, v, u_vignette);
 
-    if (u_logoAlpha > 0.001) { vec4 t = sampleRect(u_logo, u_logoRect, uv); col = mix(col, t.rgb, t.a * u_logoAlpha); }
-    if (u_textAlpha > 0.001) { vec4 t = sampleRect(u_text, u_textRect, uv); col = mix(col, t.rgb, t.a * u_textAlpha); }
-    if (u_text2Alpha > 0.001) { vec4 t = sampleRect(u_text2, u_text2Rect, uv); col = mix(col, t.rgb, t.a * u_text2Alpha); }
+    // オーバーレイの画像（枠・イラスト）：シーンの上、ロゴ・文字の下。揺れ・寄りは掛けない
+    if (u_ovImgAlpha > 0.001) {
+      vec4 t = sampleRect(u_ovImg, u_ovImgRect, uv);
+      float k = t.a * u_ovImgAlpha;
+      if (u_ovImgMode < 0.5) { col = mix(col, t.rgb, k); cov = max(cov, k); }
+      else if (u_ovImgMode < 1.5) col += t.rgb * k;
+      else col += t.rgb * k * (1.0 - min(col, vec3(1.0)));
+    }
+    if (u_logoAlpha > 0.001) { vec4 t = sampleRect(u_logo, u_logoRect, uv); col = mix(col, t.rgb, t.a * u_logoAlpha); cov = max(cov, t.a * u_logoAlpha); }
+    if (u_text3Alpha > 0.001) { vec4 t = sampleRect(u_text3, u_text3Rect, uv); col = mix(col, t.rgb, t.a * u_text3Alpha); cov = max(cov, t.a * u_text3Alpha); }
+    if (u_textAlpha > 0.001) { vec4 t = sampleRect(u_text, u_textRect, uv); col = mix(col, t.rgb, t.a * u_textAlpha); cov = max(cov, t.a * u_textAlpha); }
+    if (u_text2Alpha > 0.001) { vec4 t = sampleRect(u_text2, u_text2Rect, uv); col = mix(col, t.rgb, t.a * u_text2Alpha); cov = max(cov, t.a * u_text2Alpha); }
 
     col += u_flashColor * u_flash;
     col *= u_master;
     col *= 1.0 - u_black;
+    cov *= 1.0 - u_black;
   }
 
   // 遅延計測用：右下（物理）の小さな四角
@@ -85,6 +107,13 @@ void main() {
   }
   // ディザ（グラデーションの段差を防ぐ）
   col += (hash12(px + fract(u_time) * 97.0) - 0.5) / 255.0;
-  outColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+  col = clamp(col, 0.0, 1.0);
+  // 透過ウィンドウ：明るさを不透明度にする（黒 = 透明）。色は不透明度を掛けた形（premultiplied）で出す
+  float aOut = 1.0;
+  if (u_alphaOut > 0.5) {
+    aOut = max(clamp(max(col.r, max(col.g, col.b)) * 1.8, 0.0, 1.0), cov);
+    col = min(col, vec3(aOut));
+  }
+  outColor = vec4(col, aOut);
 }`;
 })(globalThis.VJ = globalThis.VJ || {});

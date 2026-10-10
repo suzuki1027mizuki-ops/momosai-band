@@ -18,8 +18,12 @@
     }
     const app = (VJ.app = { settings, errors: 0, errorsInRow: 0, paused: false, frameNo: 0, onFrame: null });
     const canvas = document.getElementById('stage');
+    // 透過ウィンドウ（単体アプリの「ほかの画面の上に重ねる」）：背景を透明にして、暗いところが透けるように描く
+    const glass = VJ.params.role === 'output' && VJ.params.overlay === '1';
+    if (glass) document.documentElement.classList.add('glass');
     try {
       app.renderer = new VJ.Renderer(canvas, {
+        transparent: glass,
         desynchronized: settings.desynchronized && VJ.params.desync !== '0',
         maxScale: settings.maxScale,
         fixedScale: +VJ.params.scale || 0,
@@ -43,7 +47,7 @@
       }
       return app.extractor;
     };
-    app.getText = (main, sub) => app.renderer.text.get(main, sub);
+    app.getText = (main, sub, align) => app.renderer.text.get(main, sub, align);
     const link = VJ.link;
     const remote = () => link.role === 'control';
 
@@ -61,6 +65,7 @@
       }
       app.renderer.setOutput(s.output);
       app.renderer.setLogo(s.logo);
+      app.renderer.setOverlayImage((s.overlay && s.overlay.image) || '');
       app.renderer.setMaxScale(s.maxScale);
       if (!app.paused) { VJ.net.apply(app); VJ.dmx.apply(app); }
       if (link.role === 'output' && VJ.i18n.resolve(s.lang) !== VJ.i18n.lang) VJ.i18n.setLang(VJ.i18n.resolve(s.lang));
@@ -275,6 +280,7 @@
           const settings = Object.assign({}, app.settings, o.settings || {});
           app.renderer.setOutput(settings.output);
           if (settings.logo !== undefined) app.renderer.setLogo(settings.logo);
+          app.renderer.setOverlayImage((settings.overlay && settings.overlay.image) || '');
           const show = new VJ.ShowController(settings);
           show.sceneAvailable = (id) => app.renderer.available(id);
           const fx = new VJ.dsp.FeatureExtractor({ sampleRate: sr, config: VJ.makeDspConfig(settings) });
@@ -313,6 +319,7 @@
         } finally {
           app.renderer.setOutput(app.settings.output);
           app.renderer.setLogo(app.settings.logo);
+          app.renderer.setOverlayImage((app.settings.overlay && app.settings.overlay.image) || '');
           app.paused = false;
         }
       },

@@ -81,7 +81,8 @@
       this.lastSwitch = now;
       this.switches++;
       const out = { scene: next, reason: 'auto' };
-      if (this.switches % 2 === 0 && !(song && song.palette !== null)) out.palette = 1;
+      // シーン 2 回に 1 回、色も変える（パレットの自動が ON のときはそちらに任せる）
+      if (this.switches % 2 === 0 && !(song && song.palette !== null) && !(show.settings && show.settings.paletteAuto)) out.palette = 1;
       return out;
     }
 

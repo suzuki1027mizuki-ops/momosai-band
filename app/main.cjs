@@ -98,6 +98,24 @@ function outputWindowOptions() {
   };
 }
 
+/** 透過ウィンドウ（オーバーレイ）：映像を透かして、ほかの画面（YouTube など）の上に重ねて表示する。
+ *  プロジェクター（主画面でない方）があればそこ、無ければ主画面いっぱい。枠なし・いちばん手前・操作は受け取らない
+ *  （クリックは下の画面に届く）。閉じるのは操作ウィンドウの「出力ウィンドウを閉じる」から */
+const isGlass = (url) => /[?&]overlay=1(&|$)/.test(url);
+const glassWins = new Set();
+function glassWindowOptions() {
+  const primary = screen.getPrimaryDisplay();
+  const ext = screen.getAllDisplays().find((d) => d.id !== primary.id);
+  const b = (ext || primary).bounds;
+  return {
+    // 画面とぴったり同じ大きさにすると Windows が全画面のウィンドウとして扱い、透けなくなることがあるので 1 px 小さく
+    x: b.x, y: b.y, width: b.width, height: b.height - 1,
+    transparent: true, frame: false, backgroundColor: '#00000000', hasShadow: false, resizable: false, movable: false,
+    alwaysOnTop: true, skipTaskbar: true, focusable: false, fullscreenable: false, title: 'MOMOSAI VJ オーバーレイ',
+    webPreferences: { backgroundThrottling: false, contextIsolation: true, sandbox: true },
+  };
+}
+
 function createMain() {
   mainWin = new BrowserWindow({
     width: 1280, height: 800, backgroundColor: '#000000', title: 'MOMOSAI VJ', autoHideMenuBar: true,
@@ -108,13 +126,25 @@ function createMain() {
   if (SMOKE) query.test = '1';
   mainWin.loadFile(path.join(WEB, 'momosai-vj.html'), { query });
   mainWin.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('file:') && url.includes('role=output')) return { action: 'allow', overrideBrowserWindowOptions: outputWindowOptions() };
+    if (url.startsWith('file:') && url.includes('role=output')) return { action: 'allow', overrideBrowserWindowOptions: isGlass(url) ? glassWindowOptions() : outputWindowOptions() };
     if (/^https?:/.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
+  mainWin.webContents.on('did-create-window', (win, details) => {
+    if (!isGlass(details.url)) return;
+    glassWins.add(win);
+    win.on('closed', () => glassWins.delete(win));
+    win.setAlwaysOnTop(true, 'screen-saver');
+    win.setIgnoreMouseEvents(true);
+    win.setMenuBarVisibility(false);
+  });
   // ページ内のリンクで別のページへ移らない
   mainWin.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('file:')) { e.preventDefault(); if (/^https?:/.test(url)) shell.openExternal(url); } });
-  mainWin.on('closed', () => { mainWin = null; });
+  mainWin.on('closed', () => {
+    mainWin = null;
+    // 透過ウィンドウは自分では閉じられない（操作を受け取らない）ので、操作ウィンドウと一緒に閉じる
+    for (const w of glassWins) { if (!w.isDestroyed()) w.destroy(); }
+  });
   return mainWin;
 }
 
@@ -212,9 +242,32 @@ function smoke(win) {
       res.windows = BrowserWindow.getAllWindows().length;
       // 2 つ目のウィンドウは、上の「閉じる」で閉じているはず
       res.ok2 = res.afterClose === 'solo' && res.windows === 1;
+      // 透過ウィンドウ（オーバーレイ）：枠なし・いちばん手前で開き、キャンバスが透明度を持ち、暗いところが透明で出る
+      await stage('glass');
+      await js('VJ.link.openOutput(VJ.app, { glass: true }); true');
+      await poll("!!(VJ.link.lastStatus && VJ.link.lastStatus.engineStatus === 'running')", 40000);
+      const gw = [...glassWins][0];
+      res.glass = { opened: !!gw, onTop: !!gw && gw.isAlwaysOnTop(), focusable: gw ? gw.isFocusable() : null, bounds: gw ? gw.getBounds() : null };
+      if (gw) {
+        Object.assign(res.glass, await gw.webContents.executeJavaScript(`(async () => {
+          const r = VJ.app.renderer, gl = r.gl;
+          // 描いた直後のフレームで読む（描画バッファは次の合成で消える）
+          const px = await new Promise((done) => { VJ.app.onFrame = () => { const b = new Uint8Array(4 * 64); gl.readPixels(0, 0, 8, 8, gl.RGBA, gl.UNSIGNED_BYTE, b); VJ.app.onFrame = null; done(Array.from(b)); }; });
+          let minA = 255, maxA = 0;
+          for (let i = 3; i < px.length; i += 4) { minA = Math.min(minA, px[i]); maxA = Math.max(maxA, px[i]); }
+          return { cls: document.documentElement.classList.contains('glass'), alpha: gl.getContextAttributes().alpha, transparent: !!r.opts.transparent,
+            bg: getComputedStyle(document.body).backgroundColor, cornerAlpha: [minA, maxA], scene: VJ.app.show.state.sceneId };
+        })()`, true));
+      }
+      await stage('closeGlass');
+      await js('VJ.link.closeOutput(); true');
+      await poll("VJ.link.role === 'solo'", 20000);
+      res.glass.closed = glassWins.size === 0 && BrowserWindow.getAllWindows().length === 1;
+      res.okGlass = res.glass.opened && res.glass.onTop && res.glass.focusable === false && res.glass.cls && res.glass.alpha === true && res.glass.transparent
+        && res.glass.cornerAlpha[0] < 250 && res.glass.closed;
       res.bridgePin = bridge ? bridge.pin : null;
       res.ok = res.engine === 'running' && res.frames > 30 && (!process.env.MOMOSAI_FAKE_WAV || res.level > -60) && res.failed.length === 0 && res.net === 'on' && res.pin === res.bridgePin
-        && res.ok2 && res.role === 'control' && res.outputStatus === 'running' && res.outputNet === 'on';
+        && res.ok2 && res.role === 'control' && res.outputStatus === 'running' && res.outputNet === 'on' && res.okGlass;
       clearTimeout(timer);
       done(res);
     } catch (e) {

@@ -10,6 +10,7 @@
 
   const compat = {
     browser,
+    windows: /Windows/.test(ua),
     get name() { return { chromium: 'Chrome / Edge', firefox: 'Firefox', safari: 'Safari', other: VJ.t('このブラウザ') }[browser]; },
 
     /** 機能ごとの有無 */

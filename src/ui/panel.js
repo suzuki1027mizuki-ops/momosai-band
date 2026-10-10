@@ -92,6 +92,7 @@
       $('opt-logocorner').value = s.logoCorner;
       $('opt-logocorner').addEventListener('change', () => { s.logoCorner = $('opt-logocorner').value; panel.applyShow(true); });
       panel.renderLogo();
+      panel.initOverlay();
       for (let i = 0; i < 3; i++) {
         $('msg-' + i).value = s.messages[i] || '';
         $('msg-' + i).addEventListener('input', () => { s.messages[i] = $('msg-' + i).value; panel.applyShow(); });
@@ -150,6 +151,7 @@
       $('opt-intensity').addEventListener('change', () => { s.intensity = +$('opt-intensity').value; panel.applyShow(true); });
       panel.syncFlashLimit();
       bindCheck('opt-speechtitle', 'speechTitle');
+      bindCheck('opt-palauto', 'paletteAuto');
       $('opt-xfade').value = String(s.crossfade);
       if ($('opt-xfade').selectedIndex < 0) $('opt-xfade').value = '-1';
       $('opt-xfade').addEventListener('change', () => { s.crossfade = +$('opt-xfade').value; panel.applyShow(true); });
@@ -299,7 +301,9 @@
 
     renderStatus(st, msg) {
       const el = $('audio-status'), e = panel.app.engine;
-      el.className = 'status ' + (st === 'running' ? 'ok' : st === 'error' ? 'bad' : st === 'idle' ? '' : 'warn');
+      // 入力中でも「PC の音が届いていません」のような注意が付いているときは注意の色で
+      const note = st === 'running' && msg && e.opts.source === 'display';
+      el.className = 'status ' + (note ? 'warn' : st === 'running' ? 'ok' : st === 'error' ? 'bad' : st === 'idle' ? '' : 'warn');
       if (st === 'running') {
         const d = e.diagnostics();
         el.textContent = t('入力中：{0}（{1}Hz / {2}ch）', d.device, d.sampleRate, d.channels) + (msg ? ' — ' + msg : '');
@@ -327,6 +331,10 @@
       $('lh').classList.toggle('on', perfNow - L.h < 120);
       $('la').classList.toggle('on', perfNow - L.a < 200);
       $('lb').classList.toggle('on', perfNow - L.b < 120);
+      // 激しさが自動のとき、いまの段階を表示
+      const sh = panel.app.show, lvName = ['控えめ', 'ふつう', '激しい', '最大'][sh.state.intLv];
+      const nowTxt = +panel.app.settings.intensity < 0 && lvName ? t('いま：{0}', t(lvName)) : '';
+      if ($('intensity-now').textContent !== nowTxt) $('intensity-now').textContent = nowTxt;
       VJ.scenePick.update();
       VJ.guide.tick(f);
       if (perfNow - (panel._syncT || 0) > 500) { panel._syncT = perfNow; panel.syncFromSettings(); }
@@ -406,6 +414,7 @@
       panel.renderSetlist();
       panel.renderAutoScenes();
       panel.renderSceneParams(true);
+      panel.syncOverlay();
       if ($('midi-map-box').open) panel.renderMidiMap();
       panel.renderKeys();
       VJ.scenePick.render(app);
@@ -574,25 +583,94 @@
       const f = e.target.files[0];
       if (!f) return;
       try {
-        const url = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(f); });
-        const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error(t('画像を読み込めません'))); i.src = url; });
-        const k = Math.min(1, 1024 / Math.max(img.naturalWidth, img.naturalHeight));
-        const c = document.createElement('canvas');
-        c.width = Math.max(1, Math.round(img.naturalWidth * k));
-        c.height = Math.max(1, Math.round(img.naturalHeight * k));
-        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-        let out = c.toDataURL('image/png');
-        for (const q of [0.92, 0.8, 0.65]) {
-          if (out.length <= 4e5) break;
-          const w = c.toDataURL('image/webp', q);
-          if (w.startsWith('data:image/webp') && w.length < out.length) out = w;
-        }
+        const out = await panel._readImage(f, 1024, 4e5);
         panel.app.settings.logo = out;
         if (panel.app.settings.logoMode === 'off') { panel.app.settings.logoMode = 'title'; $('opt-logomode').value = 'title'; }
         panel.renderLogo();
         panel.applyShow(true);
       } catch (err) {
         panel.app.ui.toast(t('ロゴ画像を読み込めませんでした：') + err.message, 'warn');
+      }
+    },
+
+    /** 画像ファイルを読み、長辺 maxSide px 以下に縮めて data URL にする。maxLen 文字を超えるときは WebP にして小さくする
+     *  （透明度は残る） */
+    async _readImage(f, maxSide, maxLen) {
+      const url = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(f); });
+      const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error(t('画像を読み込めません'))); i.src = url; });
+      const k = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(img.naturalWidth * k));
+      c.height = Math.max(1, Math.round(img.naturalHeight * k));
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      let out = c.toDataURL('image/png');
+      for (const q of [0.92, 0.8, 0.65]) {
+        if (out.length <= maxLen) break;
+        const w = c.toDataURL('image/webp', q);
+        if (w.startsWith('data:image/webp') && w.length < out.length) out = w;
+      }
+      return out;
+    },
+
+    /** オーバーレイ（画像・重ねるシーン・隅の文字）の欄。設定の中身は読み込みなどで入れ替わるので、毎回 settings から読む */
+    initOverlay() {
+      const s = panel.app.settings;
+      const apply = () => panel.applyShow(true);
+      const pct = (x) => Math.round(x * 100) + '%';
+      $('ov-on').addEventListener('change', () => { s.overlayOn = $('ov-on').checked; apply(); });
+      $('ov-file').addEventListener('change', panel.loadOverlayImage);
+      $('btn-ov-clear').addEventListener('click', () => { s.overlay.image = ''; $('ov-file').value = ''; panel.syncOverlay(); apply(); });
+      for (const [id, key] of [['ov-fit', 'imageFit'], ['ov-imgblend', 'imageBlend'], ['ov-scene', 'scene'], ['ov-sceneblend', 'sceneBlend'], ['ov-corner', 'corner']]) {
+        $(id).addEventListener('change', () => { s.overlay[key] = $(id).value; apply(); });
+      }
+      for (const [id, key] of [['ov-clock', 'clock'], ['ov-band', 'band'], ['ov-song', 'song']]) {
+        $(id).addEventListener('change', () => { s.overlay[key] = $(id).checked; apply(); });
+      }
+      $('ov-text').addEventListener('input', () => { s.overlay.text = $('ov-text').value; panel.applyShow(); });
+      for (const [id, key] of [['ov-imgop', 'imageOpacity'], ['ov-sceneop', 'sceneOpacity'], ['ov-textop', 'textOpacity'], ['ov-textsize', 'textSize']]) {
+        $(id).addEventListener('input', () => { s.overlay[key] = +$(id).value; $(id + '-v').textContent = pct(+$(id).value); apply(); });
+      }
+      // 透過ウィンドウ（ほかの画面の上に重ねる）は単体アプリだけ
+      const inApp = VJ.params.app === '1';
+      $('glass-row').hidden = !inApp;
+      $('glass-hint').hidden = inApp;
+      $('btn-glass').addEventListener('click', () => VJ.link.openOutput(panel.app, { glass: true }));
+      panel.syncOverlay();
+    },
+
+    /** オーバーレイの欄を設定に合わせる（シーンの選択肢は表示の言語で作り直す） */
+    syncOverlay() {
+      const s = panel.app.settings, o = s.overlay;
+      const pct = (x) => Math.round(x * 100) + '%';
+      $('ov-on').checked = !!s.overlayOn;
+      const sel = $('ov-scene');
+      sel.innerHTML = `<option value="">${esc(t('重ねない'))}</option>` + VJ.scenes.list.filter((d) => !d.hidden && d.id !== 'title')
+        .map((d) => `<option value="${d.id}">${esc(d.key.replace('s', 'Shift+'))} ${esc(VJ.sceneName(d))}</option>`).join('');
+      sel.value = o.scene;
+      if (sel.selectedIndex < 0) sel.value = '';
+      for (const [id, key] of [['ov-fit', 'imageFit'], ['ov-imgblend', 'imageBlend'], ['ov-sceneblend', 'sceneBlend'], ['ov-corner', 'corner']]) $(id).value = o[key];
+      for (const [id, key] of [['ov-clock', 'clock'], ['ov-band', 'band'], ['ov-song', 'song']]) $(id).checked = !!o[key];
+      if ($('ov-text').value !== o.text) $('ov-text').value = o.text;
+      for (const [id, key] of [['ov-imgop', 'imageOpacity'], ['ov-sceneop', 'sceneOpacity'], ['ov-textop', 'textOpacity'], ['ov-textsize', 'textSize']]) {
+        $(id).value = o[key];
+        $(id + '-v').textContent = pct(o[key]);
+      }
+      const img = $('ov-preview');
+      img.hidden = !o.image;
+      if (o.image) img.src = o.image; else img.removeAttribute('src');
+    },
+
+    /** オーバーレイの画像を読み込む（長辺 1920px 以下・900KB 程度まで） */
+    async loadOverlayImage(e) {
+      const f = e.target.files[0];
+      if (!f) return;
+      try {
+        panel.app.settings.overlay.image = await panel._readImage(f, 1920, 9e5);
+        panel.app.settings.overlayOn = true;
+        panel.syncOverlay();
+        panel.applyShow(true);
+      } catch (err) {
+        panel.app.ui.toast(t('画像を読み込めませんでした：') + err.message, 'warn');
       }
     },
 
@@ -721,7 +799,8 @@
       $('opt-profile').value = VJ.profileById(s.profile).id;
       panel.renderProfile();
       for (const [id, key] of [['opt-auto', 'auto'], ['opt-autoflash', 'autoFlash'], ['opt-noflash', 'noFlash'], ['opt-toast', 'toast'],
-        ['opt-latsq', 'latencySquare'], ['opt-autostart', 'autoStart'], ['opt-desync', 'desynchronized'], ['opt-speechtitle', 'speechTitle']]) $(id).checked = !!s[key];
+        ['opt-latsq', 'latencySquare'], ['opt-autostart', 'autoStart'], ['opt-desync', 'desynchronized'], ['opt-speechtitle', 'speechTitle'],
+        ['opt-palauto', 'paletteAuto']]) $(id).checked = !!s[key];
       $('opt-xfade').value = String(s.crossfade);
       if ($('opt-xfade').selectedIndex < 0) $('opt-xfade').value = '-1';
       panel.syncFlashLimit();
@@ -742,6 +821,7 @@
       panel.renderCustom();
       panel.renderAutoScenes();
       panel.renderSceneParams(true);
+      panel.syncOverlay();
       VJ.sections.render();
       if ($('midi-map-box').open) panel.renderMidiMap();
       for (const [id, o, k] of [['net-on', 'net', 'enabled'], ['net-url', 'net', 'url'], ['osc-on', 'osc', 'enabled'], ['osc-host', 'osc', 'host'], ['osc-port', 'osc', 'port'], ['osc-rate', 'osc', 'rate'],
@@ -764,6 +844,7 @@
         if (+$(id).value !== +s[key]) { $(id).value = s[key]; $(id + '-v').textContent = key === 'master' ? Math.round(s[key] * 100) + '%' : (s[key] > 0 ? '+' : '') + s[key]; }
       }
       $('opt-auto').checked = !!s.auto;
+      $('ov-on').checked = !!s.overlayOn;
     },
   };
 
