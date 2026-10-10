@@ -128,7 +128,7 @@
           break;
         case 'test': show.toggleTestPattern(); break;
         // オーバーレイ：引数なしで切替、0 / 1 で OFF / ON
-        case 'media': if (typeof a0 !== 'boolean' || a0 !== !!app.settings.overlayOn) show.toggleOverlay(); break;
+        case 'media': if (typeof a0 === 'boolean') show.setOverlay(a0); else show.toggleOverlay(); break;
         case 'ovscene': if (typeof a0 !== 'boolean' || a0 !== !!app.settings.ovSceneOn) show.toggleSceneOverlay(); break;
         // キュー：1 から始まる番号
         case 'cue': if (Number.isInteger(a0) && a0 >= 1 && a0 <= 9 && app.cue) app.cue(a0 - 1); else return false; break;

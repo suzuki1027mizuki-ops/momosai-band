@@ -79,6 +79,8 @@
       if (VJ.cues.applySettings(s, c)) { VJ.panel.syncOverlay(); VJ.panel.applyShow(true); }
       // 一覧のメディアを選ぶキューは、曲の m:… より優先（次の曲で曲の指定に戻る）
       if (c.media && c.media !== 'on' && c.media !== 'off') app.show.overrideSongMedia();
+      // 「メディア：出す」は、曲の指定が「出さない」（m:off）でも出す
+      if (c.media === 'on') app.show.setOverlay(true);
       if (c.scene) app.show.selectScene(c.scene, { immediate: true, quiet: true });
       if (c.palette >= 0) app.show.setPalette(c.palette);
       app.ui.toast(t('キュー {0}：{1}', i + 1, c.name || VJ.cues.describe(s, c)));

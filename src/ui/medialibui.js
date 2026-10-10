@@ -199,7 +199,13 @@
       it.name = name;
       // 曲の指定（m:古い名前）を新しい名前に：出ているバンドと、ほかのバンドのセットリスト
       s.setlistText = VJ.mediaLib.renameRefs(s.setlistText, old, name);
-      for (const b of Array.isArray(s.bands) ? s.bands : []) if (b && typeof b.setlistText === 'string') b.setlistText = VJ.mediaLib.renameRefs(b.setlistText, old, name);
+      let bandsChanged = false;
+      for (const b of Array.isArray(s.bands) ? s.bands : []) {
+        if (!b || typeof b.setlistText !== 'string') continue;
+        const nt = VJ.mediaLib.renameRefs(b.setlistText, old, name);
+        if (nt !== b.setlistText) { b.setlistText = nt; bandsChanged = true; }
+      }
+      if (bandsChanged) VJ.bands.touch(); // ほかのバンドの一覧も保存・出力ウィンドウへ送り直す
       if ($('setlist').value !== s.setlistText) $('setlist').value = s.setlistText;
       ui.changed();
     },
@@ -212,7 +218,7 @@
       if (s.overlay.mediaKind === 'lib' && s.overlay.libId === id) s.overlay.libId = '';
       ui._del = '';
       if (it.key && ui._thumbs.has(it.key)) { URL.revokeObjectURL(ui._thumbs.get(it.key)); ui._thumbs.delete(it.key); }
-      VJ.panel.pruneMedia();
+      VJ.panel.releaseMediaKey(it.key);
       ui.changed();
     },
   };

@@ -7,6 +7,8 @@
 
   const KINDS = ['image', 'video', 'web', 'camera'];
   const MAX = 40;
+  /** 名前の比べ方：セットリストを読むときと同じに全角の数字・空白・記号をそろえ、大文字小文字・前後の空白は無視 */
+  const norm = (x) => (VJ.setlist ? VJ.setlist.normalize(String(x || '')) : String(x || '')).trim().toLowerCase();
 
   /** 1 件の形を確かめる（壊れた設定ファイル・古い版でも動くように）。使えなければ null */
   function clean(x) {
@@ -39,13 +41,12 @@
     byId(s, id) { return id ? mediaLib.list(s).find((x) => x.id === id) || null : null; },
     /** セットリストの「m:…」の指定 → 一覧の 1 件。番号（1 から）・名前（大文字小文字・前後の空白は無視）・id。'off' は { off: true } */
     find(s, token) {
-      const t = String(token || '').trim();
+      const raw = String(token || '').trim(), t = norm(raw);
       if (!t) return null;
       if (/^(off|none|なし)$/i.test(t)) return { off: true };
       const list = mediaLib.list(s);
       if (/^\d{1,3}$/.test(t)) return list[+t - 1] || null;
-      const low = t.toLowerCase();
-      return list.find((x) => x.name.trim().toLowerCase() === low) || list.find((x) => x.id === t) || null;
+      return list.find((x) => norm(x.name) === t) || list.find((x) => x.id === raw) || null;
     },
     /** 表示用の番号（m1, m2 …） */
     label(s, id) {
@@ -58,24 +59,24 @@
     token(s, id) {
       const list = mediaLib.list(s), i = list.findIndex((x) => x.id === id);
       if (i < 0) return '';
-      const n = list[i].name.trim(), low = n.toLowerCase();
-      const ok = n && !/^\d{1,3}$/.test(n) && !/^(off|none|なし)$/i.test(n) && !/[|｜￨│\r\n]/.test(n)
-        && list.filter((x) => x.name.trim().toLowerCase() === low).length === 1;
+      const n = list[i].name.trim(), low = norm(n);
+      const ok = low && !/^\d{1,3}$/.test(low) && !/^(off|none|なし)$/i.test(low) && !/[|\r\n]/.test(low)
+        && list.filter((x) => norm(x.name) === low).length === 1;
       return ok ? n : String(i + 1);
     },
-    /** ほかと重ならない名前（「画像」がもうあれば「画像 2」） */
+    /** ほかと重ならない名前（「画像」がもうあれば「画像 2」。全角・半角の違いだけの名前も重なりとみなす） */
     uniqueName(s, base, exceptId) {
       const b = String(base || '').trim().slice(0, 56) || 'media';
-      const used = new Set(mediaLib.list(s).filter((x) => x.id !== exceptId).map((x) => x.name.trim().toLowerCase()));
-      if (!used.has(b.toLowerCase())) return b;
-      for (let k = 2; ; k++) if (!used.has(`${b} ${k}`.toLowerCase())) return `${b} ${k}`;
+      const used = new Set(mediaLib.list(s).filter((x) => x.id !== exceptId).map((x) => norm(x.name)));
+      if (!used.has(norm(b))) return b;
+      for (let k = 2; ; k++) if (!used.has(norm(`${b} ${k}`))) return `${b} ${k}`;
     },
     /** セットリストの文字の中の「m:古い名前」を「m:新しい名前」に（名前を変えたとき。ほかの行・指定はそのまま） */
     renameRefs(text, from, to) {
-      const f = String(from || '').trim().toLowerCase();
+      const f = norm(from);
       if (!f || !to) return text;
       return String(text || '').replace(/([|｜￨│][ \t　]*(?:m|media|メディア)[ \t　]*[:：][ \t　]*)([^|｜￨│\r\n]*?)(?=[ \t　]*(?:[|｜￨│]|\r?$))/gim,
-        (all, head, name) => (name.trim().toLowerCase() === f ? head + to : all));
+        (all, head, name) => (norm(name) === f ? head + to : all));
     },
   };
 

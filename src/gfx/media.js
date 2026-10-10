@@ -121,7 +121,8 @@
     _img: null, // { key, url }
     async _imageFromKey(key) {
       const r = media.app.renderer;
-      if (media._img && media._img.key === key) { r.setOverlayImage(media._img.url); media.status = 'ready'; return; }
+      // 読み込み中のほかの画像があれば、その結果は使わない（番号を進める）
+      if (media._img && media._img.key === key) { media._imgSeq++; r.setOverlayImage(media._img.url); media.status = 'ready'; return; }
       const seq = ++media._imgSeq;
       media.status = 'loading';
       const blob = await VJ.mediaStore.get(key);
@@ -147,56 +148,67 @@
       media.startCamera(want, true).catch(() => {});
     },
 
-    /** カメラを開く（id が空なら既定のカメラ。auto = メディアを出すときに自動で）。開いている途中なら、その結果を待つ */
+    /** カメラを開く（id が空なら既定のカメラ）。開いている途中なら、その結果を待つ。
+     *  auto = メディアを出すとき・外れたあとに自動で：選んだカメラが無くても、ほかのカメラ（操作者を映す PC のカメラなど）は開かない。
+     *  「カメラを開く」（auto でない）だけ、選んだカメラが無ければほかのカメラで開いて知らせ、選んだカメラがつながったら戻す */
     startCamera(id, auto) {
       id = typeof id === 'string' ? id : '';
       if (!auto) { media._camHold = false; media._camRetryAt = 0; }
-      if (media.cam && media.cam.id === id) return Promise.resolve({ label: media.cam.label, fallback: !!media.camFallback });
+      if (media.cam && media.cam.id === id) return Promise.resolve({ label: media.cam.label, fallback: !!media.cam.fallback });
       if (media._camStarting === id && media._camPromise) return media._camPromise;
-      return (media._camPromise = media._openCamera(id));
+      return (media._camPromise = media._openCamera(id, { fallback: !auto }));
     },
 
-    /** 選んだカメラが無いときは、ほかのカメラで開いて知らせる */
-    async _openCamera(id) {
+    /** opts.fallback：選んだカメラが無ければほかのカメラで。opts.upgrade：ほかのカメラで出している間に、選んだカメラに戻せるか試す（失敗しても表示は変えない） */
+    async _openCamera(id, opts) {
+      opts = opts || {};
       const md = navigator.mediaDevices;
       if (!md || !md.getUserMedia) { media.status = 'camerror'; media.error = VJ.t('この環境ではカメラを使えません'); throw new Error(media.error); }
       const seq = ++media._camSeq;
       media._camStarting = id || '';
-      media.status = 'loading';
+      if (!opts.upgrade) media.status = 'loading';
       const want = { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } };
       let stream, fallback = false;
       try {
         try {
           stream = await md.getUserMedia({ video: Object.assign({}, want, id ? { deviceId: { exact: id } } : {}), audio: false });
         } catch (e) {
-          if (!id || (e.name !== 'OverconstrainedError' && e.name !== 'NotFoundError')) throw e;
+          if (!opts.fallback || !id || (e.name !== 'OverconstrainedError' && e.name !== 'NotFoundError')) throw e;
           stream = await md.getUserMedia({ video: want, audio: false });
           fallback = true;
         }
       } catch (e) {
         if (seq === media._camSeq) {
           media._camStarting = null;
-          media.status = 'camerror';
-          media.error = e && e.name === 'NotAllowedError' ? VJ.t('カメラの使用が許可されていません（アドレスバー左のアイコンから許可）') : (e && e.message) || String(e);
-          // 許可されなかったときは聞き直さない。見つからない・使用中のときは少し待って開き直す
-          media._camRetryAt = e && e.name === 'NotAllowedError' ? Infinity : performance.now() + 3000;
+          if (!opts.upgrade) {
+            const missing = id && e && (e.name === 'OverconstrainedError' || e.name === 'NotFoundError');
+            media.status = 'camerror';
+            media.error = e && e.name === 'NotAllowedError' ? VJ.t('カメラの使用が許可されていません（アドレスバー左のアイコンから許可）')
+              : missing ? VJ.t('選んだカメラが見つかりません（つないでから「↻」、またはほかのカメラを選んで「カメラを開く」）') : (e && e.message) || String(e);
+            // 許可されなかったときは聞き直さない。見つからない・使用中のときは少し待って開き直す
+            media._camRetryAt = e && e.name === 'NotAllowedError' ? Infinity : performance.now() + 3000;
+          }
         }
         throw e;
       }
       const s = media.app && media.app.settings;
       const stillWanted = seq === media._camSeq && media.effKind === 'camera';
-      if (!stillWanted) { for (const t of stream.getTracks()) t.stop(); return null; }
+      if (!stillWanted) {
+        for (const t of stream.getTracks()) t.stop();
+        if (seq === media._camSeq) media._camStarting = null; // 開いている途中で別のメディアに替わった：次に出すときにまた開けるように
+        return null;
+      }
       media.stopCamera(true);
       const v = media._hiddenVideo();
       v.srcObject = stream;
       const track = stream.getVideoTracks()[0];
-      media.cam = { id: id || '', stream, video: v, label: (track && track.label) || '' };
+      const cam = (media.cam = { id: id || '', stream, video: v, label: (track && track.label) || '', fallback });
       media._camStarting = null;
-      media.camFallback = fallback;
+      media._camUpgradeAt = performance.now() + 5000;
       media.error = fallback ? VJ.t('選んだカメラが見つからないので、ほかのカメラを使っています') : '';
       if (track) {
         track.addEventListener('ended', () => {
-          if (!media.cam || media.cam.stream !== stream) return;
+          if (media.cam !== cam) return;
           media.stopCamera(true);
           media.status = 'lost';
           media._camRetryAt = performance.now() + 2000; // 抜けたら 2 秒ごとに開き直す
@@ -204,10 +216,12 @@
         });
       }
       await v.play().catch(() => {});
+      if (media.cam !== cam) return null; // 再生を待つ間に止めた・替えた
       media.status = 'playing';
       media.kind = 'camera';
       if (media.app) { media.app.renderer.setOverlayVideo(v); if (s) media.sync(media.app); }
-      return { label: media.cam.label, fallback };
+      if (opts.upgrade && media.app) media.app.show._toast(VJ.t('選んだカメラに戻しました'));
+      return { label: cam.label, fallback };
     },
 
     stopCamera(quiet) {
@@ -422,6 +436,12 @@
       if (!!app.settings.overlayOn !== media._lastOn || media._sig(media._eff(app)) !== media._effSig) media.sync(app);
       // カメラが外れた・見つからなかったときは、少し待って開き直す
       if (media.effKind === 'camera' && app.settings.overlayOn && !media.cam && !media._camHold && media._camStarting == null && performance.now() > media._camRetryAt) { media._camRetryAt = performance.now() + 3000; media.sync(app); }
+      // 選んだカメラが無くてほかのカメラで出しているときは、5 秒ごとに選んだカメラがつながったか試す
+      const c0 = media.cam;
+      if (c0 && c0.fallback && c0.id && media._camStarting == null && performance.now() > (media._camUpgradeAt || 0)) {
+        media._camUpgradeAt = performance.now() + 5000;
+        media._openCamera(c0.id, { upgrade: true }).catch(() => {});
+      }
       const w = media.web;
       if (!w) return;
       const r = app.renderer, c = r.canvas, s = app.settings, o = s.overlay;

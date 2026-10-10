@@ -9,7 +9,7 @@
 
   const SHOW_METHODS = ['selectScene', 'nextSong', 'prevSong', 'flash', 'setStrobe', 'toggleBlackout', 'setBlackout', 'cyclePalette',
     'nudgeSensitivity', 'nudgeMaster', 'toggleAuto', 'lock', 'unlock', 'showSongTitle', 'tap', 'toggleMessage', 'showMessage',
-    'toggleTestPattern', 'restoreSession', 'setMaster', 'setSensitivity', 'setPalette', 'resetShow', 'toggleOverlay', 'toggleSceneOverlay', 'overrideSongMedia'];
+    'toggleTestPattern', 'restoreSession', 'setMaster', 'setSensitivity', 'setPalette', 'resetShow', 'toggleOverlay', 'setOverlay', 'toggleSceneOverlay', 'overrideSongMedia'];
   // 出力側から操作側へ反映してよい設定（型も確認する）
   const PATCH_KEYS = { paletteIdx: 'number', sensitivity: 'number', master: 'number', auto: 'boolean', overlayOn: 'boolean', ovSceneOn: 'boolean' };
 

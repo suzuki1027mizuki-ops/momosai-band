@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { loadVJ } from '../helpers/load-src.mjs';
 import { oscToCommand } from '../../bridge/server.mjs';
 
-const VJ = loadVJ([...['src/core/', 'src/dsp/', 'src/audio/synth.js', 'src/audio/voicesynth.js', 'src/show/', 'src/scenes/', 'src/ui/midi.js', 'src/ui/keys.js'], 'src/io/']);
+const VJ = loadVJ([...['src/core/', 'src/dsp/', 'src/audio/synth.js', 'src/audio/voicesynth.js', 'src/show/', 'src/scenes/', 'src/ui/midi.js', 'src/ui/keys.js'], 'src/io/', 'src/gfx/media.js']);
 const fresh = (over) => Object.assign(VJ.storage.merge(VJ.defaultSettings, {}), { auto: false }, over || {});
 const fakeFeatures = (over) => Object.assign({ active: true, silenceSec: 0, onsetFlags: 0, kick: 0, snare: 0, hat: 0, accent: 0, level: 0.5, intensity: 0.5, kickN: 0, snareN: 0 }, over || {});
 const LIB = [
@@ -183,4 +183,116 @@ test('キュー：Alt+1〜9（Ctrl・⌘ と一緒・入力欄・ロック中は
   } finally {
     delete globalThis.window;
   }
+});
+
+test('メディアの一覧：全角の数字・空白の名前もセットリストから見つかる。全角数字だけの名前は番号で書く', () => {
+  const s = fresh({ mediaLib: [
+    { id: 'A', name: '背景１', kind: 'camera' }, { id: 'B', name: 'ロゴ　夜', kind: 'camera' }, { id: 'C', name: '０２', kind: 'camera' },
+  ] });
+  const songs = VJ.setlist.parse('X | | | m:背景１\nY | | | m:ロゴ　夜\nZ | | | m:' + VJ.mediaLib.token(s, 'C')).songs;
+  assert.deepEqual(songs.map((x) => (VJ.mediaLib.find(s, x.media) || {}).id), ['A', 'B', 'C']);
+  assert.equal(VJ.mediaLib.token(s, 'C'), '3');
+  assert.equal(VJ.mediaLib.uniqueName(s, '背景1'), '背景1 2', '全角・半角の違いだけは重なりとみなす');
+  assert.equal(VJ.mediaLib.renameRefs('1. X | | | m:背景1', '背景１', '海'), '1. X | | | m:海');
+});
+
+test('曲のメディア：再開（restoreSession）のあとも、設定を変えたら曲の指定より優先。スマホ・キューの「出す」は m:off の曲でも出す', () => {
+  const s = fresh({ mediaLib: LIB.map((x) => Object.assign({}, x)), setlistText: 'A | 1 | | m:ロゴ\nB | 1 | | m:off' });
+  s.overlay.image = 'data:image/png;base64,AAAA';
+  const c = new VJ.ShowController(s);
+  c.restoreSession({ songIdx: 0, sceneId: 'ripple' });
+  assert.equal(c.effectiveMedia().key, 'k1');
+  s.overlay.mediaKind = 'lib'; s.overlay.libId = 'Lmv';
+  assert.equal(c.effectiveMedia().key, 'k2', '再開のあとに一覧から選んだもの');
+  // 設定の画像が無く、動画だけがあるとき、画像の種類で動画を読まない
+  s.overlay.mediaKind = 'image'; s.overlay.image = ''; s.overlay.videoKey = 'kv';
+  assert.equal(c.effectiveMedia().key, '');
+  c.nextSong();
+  assert.equal(c.effectiveMedia().kind, '');
+  s.overlay.image = 'data:image/png;base64,AAAA';
+  c._mediaSigAt = c._mediaSig(); c._mediaManual = false;
+  c.setOverlay(true);
+  assert.equal(c.effectiveMedia().kind, 'image', 'すでに ON でも、m:off の曲で「出す」なら出す');
+  c.setOverlay(false);
+  assert.equal(s.overlayOn, false);
+});
+
+test('カメラ：開いている途中でほかのメディアに替わっても、次に出すときに開ける。自動ではほかのカメラを開かない。選んだカメラに戻す', async () => {
+  const M = VJ.media;
+  const pending = [];
+  const calls = [];
+  const present = new Set(['cam-a']);
+  const mkStream = (label) => { const tr = { label, stop() { tr.stopped = true; }, addEventListener() {} }; return { getTracks: () => [tr], getVideoTracks: () => [tr], tr }; };
+  let hold = false;
+  const md = {
+    getUserMedia(c) {
+      calls.push(c);
+      const id = c.video.deviceId && c.video.deviceId.exact;
+      const run = (res, rej) => (id && !present.has(id) ? rej(Object.assign(new Error('nf'), { name: 'OverconstrainedError' })) : res(mkStream(id || 'default')));
+      return new Promise((res, rej) => (hold ? pending.push(() => run(res, rej)) : run(res, rej)));
+    },
+  };
+  const navDesc = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  Object.defineProperty(globalThis, 'navigator', { value: { mediaDevices: md }, configurable: true, writable: true });
+  globalThis.document = { createElement: () => ({ style: {}, setAttribute() {}, play: () => Promise.resolve(), remove() {}, srcObject: null }), body: { appendChild() {} } };
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+  try {
+    const app = {
+      settings: { overlayOn: true, overlay: {} },
+      renderer: { ovVideo: null, setOverlayVideo(v) { this.ovVideo = v; }, setOverlayImage() {} },
+      show: { eff: { kind: 'camera', cameraId: 'cam-a' }, effectiveMedia() { return this.eff; }, _toast() {} },
+    };
+    M.app = app;
+    // 1) 開いている途中で画像に替わる → 捨てる → またカメラに戻すと開き直す
+    hold = true;
+    M.sync(app);
+    assert.equal(calls.length, 1);
+    app.show.eff = { kind: 'image', image: 'data:x' };
+    M.sync(app);
+    pending.shift()();
+    await tick(); await tick();
+    assert.equal(M.cam, null);
+    hold = false;
+    app.show.eff = { kind: 'camera', cameraId: 'cam-a' };
+    M.sync(app);
+    await tick(); await tick();
+    assert.ok(M.cam && M.cam.id === 'cam-a', '固まらずに開く');
+    // 2) 自動（曲・外れたあと）では、選んだカメラが無くてもほかのカメラを開かない
+    M.stopCamera(true);
+    app.show.eff = { kind: 'camera', cameraId: 'cam-b' };
+    calls.length = 0;
+    M.sync(app);
+    await tick(); await tick();
+    assert.equal(M.cam, null);
+    assert.equal(calls.length, 1, 'ほかのカメラは試さない');
+    assert.equal(M.status, 'camerror');
+    // 3) 「カメラを開く」ならほかのカメラで開き、選んだカメラがつながったら戻す
+    const r = await M.startCamera('cam-b');
+    assert.equal(r.fallback, true);
+    assert.equal(M.cam.fallback, true);
+    present.add('cam-b');
+    M._camUpgradeAt = 0;
+    M.frame(null);
+    await tick(); await tick();
+    assert.ok(M.cam && M.cam.id === 'cam-b' && !M.cam.fallback, '選んだカメラに戻す');
+    // 4) 止めたあとは、メディアを出し直すまで開かない
+    M.stopCamera();
+    calls.length = 0;
+    M.sync(app);
+    await tick();
+    assert.equal(calls.length, 0);
+  } finally {
+    M.stopCamera(true);
+    M.app = null;
+    if (navDesc) Object.defineProperty(globalThis, 'navigator', navDesc);
+    delete globalThis.document;
+  }
+});
+
+test('保存場所：1 つだけ消す（ほかの中身は残す）', async () => {
+  VJ.mediaStore.hold('a', 'A');
+  VJ.mediaStore.hold('b', 'B');
+  await VJ.mediaStore.remove('a');
+  assert.equal(await VJ.mediaStore.get('a'), null);
+  assert.equal(await VJ.mediaStore.get('b'), 'B');
 });

@@ -649,8 +649,9 @@
       $('btn-ov-clear').addEventListener('click', () => { s.overlay.image = ''; $('ov-file').value = ''; panel.syncOverlay(); apply(); });
       $('ov-vfile').addEventListener('change', (e) => { if (e.target.files[0]) panel.setOverlayVideoFile(e.target.files[0]); });
       $('btn-ov-vclear').addEventListener('click', () => {
+        const old = s.overlay.videoKey;
         s.overlay.videoKey = ''; s.overlay.videoName = ''; $('ov-vfile').value = '';
-        panel.pruneMedia();
+        panel.releaseMediaKey(old);
         panel.syncOverlay(); apply();
       });
       $('ov-vloop').addEventListener('change', () => { s.overlay.videoLoop = $('ov-vloop').checked; apply(); });
@@ -822,11 +823,12 @@
       const key = VJ.mediaStore.newKey();
       const saved = await VJ.mediaStore.put(key, f);
       VJ.link.send({ t: 'media', key, blob: f });
+      const old = s.overlay.videoKey;
       s.overlay.videoKey = key;
       s.overlay.videoName = String(f.name || t('動画')).slice(0, 200);
       s.overlay.mediaKind = 'video';
       s.overlayOn = true;
-      panel.pruneMedia();
+      panel.releaseMediaKey(old);
       panel.syncOverlay();
       panel.applyShow(true);
       panel.app.ui.toast(saved ? t('メディアに動画を入れました（O で表示・非表示）') : t('動画を保存できませんでした。このウィンドウを閉じるまで使えます'), saved ? undefined : 'warn');
@@ -919,6 +921,7 @@
       panel.syncOverlay();
       panel.applyShow(true);
       if (VJ.link.role === 'control') panel.app.ui.toast(t('カメラの使用の許可は、出力ウィンドウで聞かれます'));
+      panel.app.show.overrideSongMedia(); // 曲の m:… より、いま開いたカメラを出す（次の曲まで）
       try {
         const r = await panel.app.mediaCall('startCamera', s.overlay.cameraId || '');
         if (r && r.fallback) panel.app.ui.toast(t('選んだカメラが見つからないので、ほかのカメラを使っています'), 'warn');
@@ -933,10 +936,11 @@
       panel.renderMediaStatus(true);
     },
 
-    /** 保存場所の掃除：いまの動画と、一覧の画像・動画は残す */
-    pruneMedia() {
+    /** 使わなくなった中身（動画を入れ替えた・一覧から消した）を保存場所から消す。いまの動画・一覧のどれかが使っていれば残す */
+    releaseMediaKey(key) {
       const s = panel.app.settings;
-      return VJ.mediaStore.prune([s.overlay.videoKey, ...VJ.mediaLib.keys(s)]);
+      if (!key || s.overlay.videoKey === key || VJ.mediaLib.keys(s).includes(key)) return Promise.resolve();
+      return VJ.mediaStore.remove(key);
     },
 
     syncOutputUi() {

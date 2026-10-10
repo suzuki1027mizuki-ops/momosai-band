@@ -701,6 +701,8 @@
     "カメラの使用が許可されていません（アドレスバー左のアイコンから許可）": "Camera access is not allowed (allow it from the icon at the left of the address bar)",
     "選んだカメラが見つからないので、ほかのカメラを使っています": "The selected camera was not found, so another camera is being used",
     "カメラが外れました。つなぎ直すと戻ります": "The camera was disconnected. It comes back when you reconnect it",
+    "選んだカメラが見つかりません（つないでから「↻」、またはほかのカメラを選んで「カメラを開く」）": "The selected camera was not found (connect it and press \"↻\", or choose another camera and press \"Open camera\")",
+    "選んだカメラに戻しました": "Switched back to the selected camera",
     "カメラの使用の許可は、出力ウィンドウで聞かれます": "You will be asked to allow the camera in the output window",
     "カメラの名前は、一度「カメラを開く」で許可すると出ます": "Camera names appear after you allow access once with \"Open camera\"",
     "カメラが {0} 台あります。使うカメラを選べます": "{0} cameras found. You can choose which one to use",

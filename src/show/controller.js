@@ -233,6 +233,9 @@
       this.state.endState = !!x.endState || this.state.songIdx >= songs.length;
       if (typeof x.paletteIdx === 'number') this.setPalette(x.paletteIdx);
       this._applyScene(VJ.scenes.byId[x.sceneId] && this.sceneAvailable(x.sceneId) ? x.sceneId : 'title');
+      // 曲のメディア（m:…）は、ここからの設定の変更で「操作者が選んだ」と見る
+      this._mediaManual = false;
+      this._mediaSigAt = this._mediaSig();
       const song = this.currentSong();
       this._toast(song ? t('M{0} {1} から再開', this.state.songIdx + 1, song.title) : t('再開しました'));
       return true;
@@ -407,7 +410,8 @@
       if (!it && o.mediaKind === 'lib') it = VJ.mediaLib.byId(s, o.libId);
       if (it) return { kind: it.kind, image: '', key: it.key || '', url: it.url || '', cameraId: it.cameraId || '', mirror: !!it.mirror, name: it.name, song: fromSong };
       if (o.mediaKind === 'lib') return { kind: '' }; // 一覧から消えた
-      return { kind: o.mediaKind || 'image', image: o.image || '', key: o.videoKey || '', url: o.webUrl || '', cameraId: o.cameraId || '', mirror: !!o.cameraMirror, name: '', song: false };
+      const kind = o.mediaKind || 'image';
+      return { kind, image: o.image || '', key: kind === 'video' ? o.videoKey || '' : '', url: o.webUrl || '', cameraId: o.cameraId || '', mirror: !!o.cameraMirror, name: '', song: false };
     }
     /** 設定のメディア（どれを出すか）の目印。出す・消す（overlayOn）は含めない */
     _mediaSig() {
@@ -417,11 +421,17 @@
     /** 操作者がメディアを選んだ（一覧の ▶・キュー）：この曲の m:… より優先する（次の曲で戻る） */
     overrideSongMedia() { this._mediaManual = true; }
     /** メディアのオーバーレイ（画像・動画・画面の取り込み・YouTube / ニコニコ）を出す・消す（O） */
-    toggleOverlay() {
-      this.settings.overlayOn = !this.settings.overlayOn;
-      // 曲の指定が「出さない」（m:off）でも、O で出したら設定のメディアを出す
-      if (this.settings.overlayOn && this.effectiveMedia().song && !this.effectiveMedia().kind) this._mediaManual = true;
-      this._toast(this.settings.overlayOn ? t('メディア: ON') : t('メディア: OFF'));
+    toggleOverlay() { this.setOverlay(!this.settings.overlayOn); }
+    /** メディアを出す / 消す（スマホ・OSC・キューの「出す」から）。曲の指定が「出さない」（m:off）でも、出すときは設定のメディアを出す */
+    setOverlay(on) {
+      on = !!on;
+      if (on) {
+        const e = this.effectiveMedia();
+        if (e.song && !e.kind) this._mediaManual = true;
+      }
+      if (on === !!this.settings.overlayOn) return;
+      this.settings.overlayOn = on;
+      this._toast(on ? t('メディア: ON') : t('メディア: OFF'));
     }
     /** シーンのオーバーレイ（別のシーンを重ねる）を出す・消す（Shift+O） */
     toggleSceneOverlay() {
