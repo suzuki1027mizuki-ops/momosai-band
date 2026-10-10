@@ -489,7 +489,8 @@
           const wide = a > A;
           if ((oi.fit === 'cover') === wide) w = a / A; else h = A / a;
         }
-        q.set('u_ovImgRect', [0.5 - w / 2, 0.5 - h / 2, w, h]);
+        // 左右反転（カメラの鏡）：幅を負にすると、枠の中の読み取りが左右逆になる
+        q.set('u_ovImgRect', oi.mirror ? [0.5 + w / 2, 0.5 - h / 2, -w, h] : [0.5 - w / 2, 0.5 - h / 2, w, h]);
       }
       // オーバーレイ：隅の文字（時計・曲名など）。左右は文字の端をそろえ、画面の端から少し離す
       const t3 = fr.text3 && fr.text3.tex ? fr.text3 : null;

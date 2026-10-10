@@ -115,7 +115,12 @@ export function oscToCommand(msg) {
     case '/vj/band': return isFinite(num(v)) && num(v) >= 1 ? { name: 'band', args: [Math.round(num(v))] } : null;
     case '/vj/band/next': return pressed ? { name: 'band', args: ['next'] } : null;
     case '/vj/band/prev': return pressed ? { name: 'band', args: ['prev'] } : null;
-    default: return null;
+    case '/vj/cue': return isFinite(num(v)) && num(v) >= 1 && num(v) <= 9 ? { name: 'cue', args: [Math.round(num(v))] } : null;
+    default: {
+      // /vj/cue/3（ボタンを 1 つずつ割り当てる照明卓・TouchOSC 向け）
+      const m = /^\/vj\/cue\/([1-9])$/.exec(a);
+      return m && pressed ? { name: 'cue', args: [+m[1]] } : null;
+    }
   }
 }
 

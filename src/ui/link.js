@@ -9,7 +9,7 @@
 
   const SHOW_METHODS = ['selectScene', 'nextSong', 'prevSong', 'flash', 'setStrobe', 'toggleBlackout', 'setBlackout', 'cyclePalette',
     'nudgeSensitivity', 'nudgeMaster', 'toggleAuto', 'lock', 'unlock', 'showSongTitle', 'tap', 'toggleMessage', 'showMessage',
-    'toggleTestPattern', 'restoreSession', 'setMaster', 'setSensitivity', 'setPalette', 'resetShow', 'toggleOverlay', 'toggleSceneOverlay'];
+    'toggleTestPattern', 'restoreSession', 'setMaster', 'setSensitivity', 'setPalette', 'resetShow', 'toggleOverlay', 'toggleSceneOverlay', 'overrideSongMedia'];
   // 出力側から操作側へ反映してよい設定（型も確認する）
   const PATCH_KEYS = { paletteIdx: 'number', sensitivity: 'number', master: 'number', auto: 'boolean', overlayOn: 'boolean', ovSceneOn: 'boolean' };
 
@@ -208,9 +208,11 @@
         link._bandsSent = { ref: app.settings.bands, ver: VJ.bands.version };
         link._logoSent = app.settings.logo;
         link._ovImgSent = app.settings.overlay && app.settings.overlay.image;
-        // メディアの動画ファイル（保存場所を共有できない環境でも出せるように、中身も渡す）
+        // メディアの動画ファイル・一覧の画像と動画（保存場所を共有できない環境でも出せるように、中身も渡す）
         const vk = app.settings.overlay && app.settings.overlay.videoKey;
-        if (vk) VJ.mediaStore.get(vk).then((b) => { if (b) link.send({ t: 'media', key: vk, blob: b }); });
+        for (const k of new Set([vk, ...VJ.mediaLib.keys(app.settings)].filter(Boolean))) {
+          VJ.mediaStore.get(k).then((b) => { if (b) link.send({ t: 'media', key: k, blob: b }); });
+        }
         link._previewOn();
         const first = link.local.fresh;
         link.local.fresh = false;
@@ -262,6 +264,9 @@
         // 出力ウィンドウで受けたバンドの切替（スマホ・OSC・キー）。設定はこちらが持っているのでこちらで
         if (typeof d.i === 'number') VJ.bandsUI.switchTo(d.i);
         else if (d.d === 1 || d.d === -1) VJ.bandsUI.step(d.d, { force: !!d.force });
+      } else if (d.t === 'cue' && VJ.cuesUI) {
+        // 出力ウィンドウで受けたキュー（キー・MIDI・スマホ・OSC）。設定はこちらが持っているのでこちらで
+        if (Number.isInteger(d.i)) VJ.cuesUI.recall(d.i);
       } else if (d.t === 'res') {
         const p = link.pending.get(d.id);
         if (p) { link.pending.delete(d.id); if (d.error) p.reject(Object.assign(new Error(d.error), { name: d.errorName })); else p.resolve(d.value); }
@@ -382,10 +387,10 @@
         return;
       }
       if (d.t === 'media') {
-        // 操作ウィンドウで選んだ動画ファイル。保存場所から読めなかった（見つからない）ときは読み直す
+        // 操作ウィンドウで選んだ動画ファイル・一覧の画像。保存場所から読めなかった（見つからない）ときは読み直す
         if (typeof d.key === 'string' && d.blob instanceof Blob) {
           VJ.mediaStore.hold(d.key, d.blob);
-          if (VJ.media.videoKey === d.key && VJ.media.status === 'missing') { VJ.media.videoKey = ''; VJ.media.sync(app); }
+          if (VJ.media.status === 'missing' && VJ.media._sig(VJ.media._eff(app)).split('|')[1] === d.key) { VJ.media.videoKey = ''; VJ.media.sync(app); }
         }
         return;
       }

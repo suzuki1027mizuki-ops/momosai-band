@@ -1,5 +1,5 @@
 /* セットリストの解析。1 行 1 曲：
- *   曲名 | シーン(番号か名前、カンマ区切りで複数) | パレット | notitle
+ *   曲名 | シーン(番号か名前、カンマ区切りで複数) | パレット | notitle | m:メディア（一覧の名前か番号。m:off で出さない）
  *   @band バンド名   @end 終演の文字   # コメント
  * 全角の「｜」「、」「１」などもそのまま受け付ける。 */
 (function (VJ) {
@@ -29,7 +29,7 @@
       // 行頭の曲番号（「1.」「01)」「3 」など）を外す。「22才の別れ」のような曲名は残す
       const title = parts[0].replace(/^\d{1,3}\s*[.)．:：]\s*|^\d{1,3}\s+/, '').trim();
       if (!title) { out.errors.push({ line: lineNo, msg: VJ.t('曲名がありません') }); return; }
-      const song = { title, scenes: [], palette: null, notitle: false, line: lineNo };
+      const song = { title, scenes: [], palette: null, notitle: false, media: '', line: lineNo };
       if (parts[1]) {
         for (const tok of parts[1].split(',')) {
           if (!tok.trim()) continue;
@@ -44,7 +44,9 @@
         else song.palette = p;
       }
       for (const flag of parts.slice(3)) {
+        const mm = /^(?:m|media|メディア)\s*[:：]\s*(.+)$/i.exec(flag);
         if (/^notitle$/i.test(flag)) song.notitle = true;
+        else if (mm) song.media = mm[1].trim().slice(0, 60);
         else if (flag) out.errors.push({ line: lineNo, msg: VJ.t('不明なオプション「{0}」', flag) });
       }
       out.songs.push(song);
@@ -80,11 +82,14 @@
     const title = String(s.title || '').replace(/[|｜￨│]/g, '/').replace(/[\r\n]+/g, ' ').trim() || '?';
     const sc = (s.scenes || []).map((id) => (VJ.scenes.byId[id] ? VJ.scenes.byId[id].key : id)).join(',');
     const pal = s.palette !== null && s.palette !== undefined && VJ.palettes[s.palette] ? VJ.palettes[s.palette].id : '';
+    const media = String(s.media || '').replace(/[|｜￨│\r\n]/g, ' ').trim();
+    const opts = [];
+    if (s.notitle) opts.push('notitle');
+    if (media) opts.push('m:' + media);
     const parts = [`${k + 1}. ${title}`];
-    if (sc || pal || s.notitle) parts.push(sc);
-    if (pal || s.notitle) parts.push(pal);
-    if (s.notitle) parts.push('notitle');
-    return parts.join(' | ');
+    if (sc || pal || opts.length) parts.push(sc);
+    if (pal || opts.length) parts.push(pal);
+    return parts.concat(opts).join(' | ');
   }
 
   /**

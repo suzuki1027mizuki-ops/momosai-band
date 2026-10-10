@@ -58,11 +58,12 @@
       if (b instanceof Blob) { mem.set(key, b); return b; }
       return null;
     },
-    /** keep 以外を消す（動画を入れ替えたときに古いものを残さない） */
+    /** keep（鍵 1 つか鍵の配列）以外を消す（動画を入れ替えた・一覧から消したときに古いものを残さない） */
     async prune(keep) {
-      for (const k of [...mem.keys()]) if (k !== keep) mem.delete(k);
+      const ks = new Set((Array.isArray(keep) ? keep : [keep]).filter(Boolean));
+      for (const k of [...mem.keys()]) if (!ks.has(k)) mem.delete(k);
       const keys = (await tx('readonly', (st) => st.getAllKeys())) || [];
-      for (const k of keys) if (k !== keep) await tx('readwrite', (st) => st.delete(k));
+      for (const k of keys) if (!ks.has(k)) await tx('readwrite', (st) => st.delete(k));
     },
   };
 

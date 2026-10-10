@@ -19,7 +19,7 @@
       const bv = base[k], sv = src[k];
       if (Array.isArray(bv)) {
         // 出演バンドの一覧は長さが変わる（中身は sanitize で確かめる）
-        if (Array.isArray(sv) && (sv.length === bv.length || k === 'bands')) out[k] = clone(sv);
+        if (Array.isArray(sv) && (sv.length === bv.length || k === 'bands' || k === 'mediaLib' || k === 'cues')) out[k] = clone(sv);
       } else if (isObj(bv)) {
         if (isObj(sv)) out[k] = clone(sv);
       } else if (typeof bv === typeof sv && (typeof sv !== 'number' || isFinite(sv))) {
@@ -59,7 +59,10 @@
     const pick = (v, list, d) => (list.includes(v) ? v : d);
     ov.imageFit = pick(ov.imageFit, ['contain', 'cover', 'stretch'], od.imageFit);
     ov.imageBlend = pick(ov.imageBlend, ['normal', 'add', 'screen'], od.imageBlend);
-    ov.mediaKind = pick(ov.mediaKind, ['image', 'video', 'capture', 'web'], od.mediaKind);
+    ov.mediaKind = pick(ov.mediaKind, ['image', 'video', 'capture', 'web', 'camera', 'lib'], od.mediaKind);
+    ov.libId = /^[\w-]{0,40}$/.test(ov.libId) ? ov.libId : '';
+    ov.cameraId = ov.cameraId.slice(0, 200);
+    ov.cameraLabel = ov.cameraLabel.slice(0, 200);
     ov.videoKey = /^[\w-]{1,64}$/.test(ov.videoKey) ? ov.videoKey : '';
     ov.videoName = ov.videoName.slice(0, 200);
     ov.webUrl = /^https:\/\//.test(ov.webUrl) ? ov.webUrl.slice(0, 500) : '';
@@ -71,6 +74,12 @@
     ov.textSize = Math.max(0.5, Math.min(2, ov.textSize));
     if (!/^data:image\//.test(ov.image)) ov.image = '';
     s.overlay = ov;
+    // メディアの一覧・キュー
+    if (VJ.mediaLib) {
+      const seen = new Set();
+      s.mediaLib = (Array.isArray(s.mediaLib) ? s.mediaLib : []).map(VJ.mediaLib.clean).filter((x) => x && !seen.has(x.id) && seen.add(x.id)).slice(0, VJ.mediaLib.MAX);
+    }
+    if (VJ.cues) s.cues = (Array.isArray(s.cues) ? s.cues : []).map(VJ.cues.clean).filter(Boolean).slice(0, VJ.cues.MAX);
     if (VJ.bands) VJ.bands.ensure(s);
     return s;
   }

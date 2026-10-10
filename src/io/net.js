@@ -130,6 +130,8 @@
         // オーバーレイ：引数なしで切替、0 / 1 で OFF / ON
         case 'media': if (typeof a0 !== 'boolean' || a0 !== !!app.settings.overlayOn) show.toggleOverlay(); break;
         case 'ovscene': if (typeof a0 !== 'boolean' || a0 !== !!app.settings.ovSceneOn) show.toggleSceneOverlay(); break;
+        // キュー：1 から始まる番号
+        case 'cue': if (Number.isInteger(a0) && a0 >= 1 && a0 <= 9 && app.cue) app.cue(a0 - 1); else return false; break;
         case 'band': {
           // 'next' / 'prev' か、1 から始まる番号（スマホは確認してから送る）
           if (!VJ.bandsUI) return false;
@@ -163,6 +165,7 @@
             scenes: (VJ.scenePick ? VJ.scenePick.list() : VJ.scenes.list.filter((d) => !d.hidden)).map((d) => ({ id: d.id, key: d.key.replace('s', '⇧'), name: VJ.sceneName(d) })),
             lang: VJ.i18n.lang,
             band: VJ.bandsUI ? VJ.bandsUI.state(app.settings) : null,
+            cues: (Array.isArray(app.settings.cues) ? app.settings.cues : []).slice(0, 9).map((c, i) => ({ i: i + 1, name: String(c.name || VJ.t('キュー {0}', i + 1)) })),
           },
         });
       }

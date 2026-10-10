@@ -40,6 +40,7 @@
       { id: 'sens', name: '感度（つまみ）', kind: 'value' },
     );
     for (const a of list) if (!a.id.startsWith('scene:')) a.name = VJ.t(a.name);
+    for (let i = 1; i <= 9; i++) list.push({ id: 'cue' + i, name: VJ.t('キュー {0}', i), kind: 'trigger' });
     return list;
   }
 
@@ -78,8 +79,8 @@
       return m;
     },
 
-    /** MIDI メッセージを ShowController の操作に変換（テストからも呼べる）。settings は割り当て用 */
-    handle(show, data, settings) {
+    /** MIDI メッセージを ShowController の操作に変換（テストからも呼べる）。settings は割り当て用、cue(i) はキューを出す関数 */
+    handle(show, data, settings, cue) {
       const st = data[0] & 0xf0, d1 = data[1], d2 = data[2];
       const noteOn = st === 0x90 && d2 > 0, noteOff = st === 0x80 || (st === 0x90 && d2 === 0), cc = st === 0xb0;
       if (!noteOn && !noteOff && !cc) return false;
@@ -127,6 +128,7 @@
       else if (action === 'test') show.toggleTestPattern();
       else if (action === 'media') show.toggleOverlay();
       else if (action === 'ovscene') show.toggleSceneOverlay();
+      else if (/^cue[1-9]$/.test(action) && cue) cue(+action.slice(3) - 1);
       else return false;
       return true;
     },
@@ -143,7 +145,7 @@
         midi.inputs = [];
         midi.access.inputs.forEach((inp) => {
           inp.onmidimessage = (ev) => {
-            const r = midi.handle(app.show, ev.data, app.settings);
+            const r = midi.handle(app.show, ev.data, app.settings, app.cue);
             if (r) { midi.last = inp.name; if (app.onAction) app.onAction('midi'); }
           };
           midi.inputs.push(inp.name);

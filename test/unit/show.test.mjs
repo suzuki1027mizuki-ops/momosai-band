@@ -20,7 +20,7 @@ test('セットリスト：全角記号・番号・コメント・未知の指�
   assert.equal(p.band, 'ももさいバンド');
   assert.equal(p.end, 'ありがとう！');
   assert.equal(p.songs.length, 4);
-  assert.deepEqual(p.songs[0], { title: '夜に駆ける', scenes: ['tunnel', 'glitch'], palette: 0, notitle: false, line: 4 });
+  assert.deepEqual(p.songs[0], { title: '夜に駆ける', scenes: ['tunnel', 'glitch'], palette: 0, notitle: false, media: '', line: 4 });
   assert.equal(p.songs[1].title, 'ドライフラワー');
   assert.deepEqual(p.songs[1].scenes, ['aurora']);
   assert.equal(p.songs[1].palette, 6);
