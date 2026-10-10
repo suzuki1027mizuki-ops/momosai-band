@@ -39,7 +39,8 @@
       ],
       "category": "public.app-category.entertainment",
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "音に合わせて映像を動かすためにマイク（ライン入力）を使います。"
+        "NSMicrophoneUsageDescription": "音に合わせて映像を動かすためにマイク（ライン入力）を使います。",
+        "NSCameraUsageDescription": "カメラ（Web カメラ・キャプチャーボード）の映像を VJ の映像に重ねるために使います。"
       }
     },
     "linux": {
