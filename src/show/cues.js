@@ -60,7 +60,7 @@
       }
       if (c.ovScene === 'off') out.push(t('重ね OFF'));
       else if (c.ovScene && VJ.scenes.byId[c.ovScene]) out.push(t('重ね：{0}', VJ.sceneName(VJ.scenes.byId[c.ovScene])));
-      return out.join('・') || t('（何も変えない）');
+      return out.join(t('・')) || t('（何も変えない）');
     },
   };
 
