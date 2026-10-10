@@ -67,7 +67,9 @@ test('フラッシュの上限：設定で 2 / 4 / 6 / 10 回・制限なしに�
   assert.ok(VJ.safety.overSafe(4) && VJ.safety.overSafe(0));
   // 設定の値は 0〜30 の整数に
   assert.equal(VJ.storage.fromJSON(JSON.stringify({ flashLimit: 6.4, intensity: 9 })).flashLimit, 6);
-  assert.equal(VJ.storage.fromJSON(JSON.stringify({ flashLimit: -2, intensity: -1 })).intensity, 0);
+  // 激しさは 0〜3 と -1（自動）
+  assert.equal(VJ.storage.fromJSON(JSON.stringify({ flashLimit: -2, intensity: -1 })).intensity, -1);
+  assert.equal(VJ.storage.fromJSON(JSON.stringify({ intensity: -7 })).intensity, -1);
   assert.equal(VJ.storage.fromJSON(JSON.stringify({ flashLimit: 'x' })).flashLimit, 3);
 });
 
@@ -199,6 +201,150 @@ test('激しさ：激しい・最大ではキックで寄る・スネアで揺�
   c2.update(fakeFeatures({ onsetFlags: 8, accent: 1 }), 1 / 60, 2);
   const fr3 = c2.frame(fakeFeatures(), 1 / 60, null);
   assert.equal(fr3.punch + fr3.shakeX + fr3.shakeY + fr3.rgb, 0, 'テストパターンは動かさない');
+});
+
+test('激しさの自動：盛り上がりを追って 控えめ〜最大 の間を動く。上がるのは速く、下がるのはゆっくり。話し声・無音では控えめ', () => {
+  const s = Object.assign({}, VJ.defaultSettings, { auto: false, autoFlash: true, intensity: -1 });
+  const c = new VJ.ShowController(s);
+  c._applyScene('ripple');
+  let t = 0;
+  const run = (sec, over) => { for (let i = 0; i < sec * 60; i++) { t += 1 / 60; c.update(fakeFeatures(over), 1 / 60, t); } };
+  run(20, { intensity: 0.1 });
+  assert.equal(c.state.intLv, 0, '静かなところは控えめ');
+  assert.ok(Math.abs(c.react() - 0.8) < 0.02 && c.punchAmount() === 0 && c.intensity().beat === 0, '控えめと同じ強さ');
+  // サビに入ったら数秒で最大へ
+  run(4, { intensity: 0.9 });
+  assert.equal(c.state.intLv, 3, '盛り上がったら最大 ' + c.autoLv);
+  assert.ok(c.react() > 1.4 && c.punchAmount() > 1.4 && c.intensity().beat === 2);
+  assert.ok(c.switchK() < 0.6, 'オートの切替も速く');
+  // 下がるのはゆっくり：2 秒ではまだ激しい側。十分たてば中くらいの盛り上がり → ふつう〜激しいの間
+  run(2, { intensity: 0.45 });
+  assert.ok(c.state.intLv >= 2, 'すぐには下がらない ' + c.autoLv);
+  run(20, { intensity: 0.45 });
+  assert.ok(c.autoLv > 1.2 && c.autoLv < 1.5, '中くらい ' + c.autoLv);
+  assert.ok(c.react() > 1.0 && c.react() < 1.25, '段階の間はなめらかに ' + c.react());
+  // 話し声・無音では控えめへ
+  run(20, { intensity: 0.9, speech: true });
+  assert.equal(c.state.intLv, 0);
+  // 手動に戻すと設定どおり
+  s.intensity = 3;
+  run(0.1, { intensity: 0.1 });
+  assert.equal(c.state.intLv, 3);
+  assert.ok(c.punchAmount() > 1.5);
+});
+
+test('パレットの自動：曲の区切りで盛り上がりに合った色へゆっくり移る。曲に色の指定があるとき・無音・話し声では変えない', () => {
+  const s = Object.assign({}, VJ.defaultSettings, { auto: false, autoFlash: false, paletteAuto: true, intensity: 1, paletteIdx: 0, setlistText: 'A | 1 | ocean\nB | 2' });
+  const c = new VJ.ShowController(s);
+  c._applyScene('ripple');
+  let t = 0;
+  const step = (over) => { t += 1 / 60; c.update(fakeFeatures(over), 1 / 60, t); };
+  const run = (sec, over) => { for (let i = 0; i < sec * 60; i++) step(over); };
+  const id = () => VJ.palettes[c.state.paletteIdx].id;
+  // 26 秒たつまではキメが来ても変えない
+  run(20, { intensity: 0.9 });
+  step({ onsetFlags: 8, accent: 1, intensity: 0.9 });
+  assert.equal(id(), 'neon');
+  run(7, { intensity: 0.9 });
+  const before = Array.from(c.palFloat);
+  step({ onsetFlags: 8, accent: 1, intensity: 0.9 });
+  assert.ok(['fire', 'acid', 'sunset'].includes(id()), '盛り上がっているときの色 ' + id());
+  assert.equal(s.paletteIdx, c.state.paletteIdx, '設定にも反映');
+  // その場では色は跳ばず、1.5 秒かけて移る
+  assert.ok(c.palFloat.every((v, i) => Math.abs(v - before[i]) < 0.02), 'すぐには変わらない');
+  run(1.6, { intensity: 0.9 });
+  const want = VJ.paletteFloat(VJ.paletteColors(c.state.paletteIdx));
+  assert.ok(c.palFloat.every((v, i) => Math.abs(v - want[i]) < 1e-3), '移り終わる');
+  // 静かなところでは落ち着いた色。キメが無くても小節の頭で変わる。モノクロ・カスタムは使わない
+  const seen = new Set();
+  for (let k = 0; k < 12; k++) {
+    run(32, { intensity: 0.2 });
+    step({ onsetFlags: 64, beatConf: 0.8, intensity: 0.2 });
+    seen.add(id());
+  }
+  assert.ok([...seen].every((x) => ['ocean', 'sakura', 'sunset'].includes(x)), [...seen].join());
+  assert.ok(seen.size >= 2, '同じ色にとどまらない');
+  // 無音・話し声の間は変えない
+  const cur = id();
+  run(40, { intensity: 0.2, active: false });
+  step({ onsetFlags: 8, active: false });
+  run(40, { intensity: 0.9, speech: true });
+  step({ onsetFlags: 8, speech: true, intensity: 0.9 });
+  assert.equal(id(), cur);
+  // 曲に色の指定がある（1 曲目 = ocean）：その曲の間は変えない。指定の無い 2 曲目ではまた変わる
+  c.nextSong();
+  assert.equal(id(), 'ocean');
+  run(40, { intensity: 0.9 });
+  step({ onsetFlags: 8, accent: 1, intensity: 0.9 });
+  assert.equal(id(), 'ocean');
+  c.nextSong();
+  run(40, { intensity: 0.9 });
+  step({ onsetFlags: 8, accent: 1, intensity: 0.9 });
+  assert.notEqual(id(), 'ocean');
+  // 手で選んだら、そこからまた 26 秒は変えない
+  c.setPalette(5);
+  step({ onsetFlags: 8, accent: 1, intensity: 0.9 });
+  assert.equal(id(), 'mono');
+});
+
+test('オーバーレイ：重ねるシーン・画像・隅の文字をフレームに載せる。O で切替、テストパターン中は出さない', () => {
+  const overlay = Object.assign({}, VJ.defaultSettings.overlay, { scene: 'stars', sceneOpacity: 0.4, sceneBlend: 'add', image: 'data:image/png;base64,AAAA', imageFit: 'cover', imageBlend: 'screen', imageOpacity: 0.7, clock: true, band: true, song: true, text: '#fes', corner: 'bl', textSize: 1.5, textOpacity: 0.8 });
+  const s = Object.assign({}, VJ.defaultSettings, { auto: false, overlay, overlayOn: true, bandName: 'BAND', setlistText: 'A | 1\nB | 2' });
+  const c = new VJ.ShowController(s);
+  c._applyScene('ripple');
+  const texts = [];
+  const getText = (main, sub, align) => { texts.push([main, sub, align]); return { tex: {} }; };
+  const step = (t) => { c.update(fakeFeatures(), 1 / 60, t); return c.frame(fakeFeatures(), 1 / 60, getText); };
+  let fr = step(1);
+  // 重ねるシーン：自分の状態を持って毎フレーム動く（星空の u_fly が進む）
+  assert.equal(fr.overlay.scene.id, 'stars');
+  assert.ok(Math.abs(fr.overlay.mix - 0.4 * 0.6) < 1e-9, '重ねる強さは濃さ × 0.6 まで（光過敏対策） ' + fr.overlay.mix);
+  assert.equal(fr.overlay.mode, 'add');
+  // フラッシュの上限を自分で上げているときは、そのままの濃さ
+  s.flashLimit = 6;
+  assert.ok(Math.abs(step(1.5).overlay.mix - 0.4) < 1e-9);
+  s.flashLimit = 3;
+  const fly0 = fr.overlay.uniforms.u_fly;
+  fr = step(2);
+  assert.ok(fr.overlay.uniforms.u_fly > fly0, '重ねたシーンも進む');
+  assert.equal(fr.scene.id, 'ripple', 'いまのシーンはそのまま');
+  // 画像
+  assert.deepEqual([fr.ovImage.alpha, fr.ovImage.fit, fr.ovImage.mode], [0.7, 'cover', 'screen']);
+  // 文字：曲が始まる前は 時計・バンド名 が上、自由な文字が下。左の隅なら左にそろえる
+  assert.equal(c.overlayText(new Date(2026, 9, 9, 7, 5))[0], '#fes');
+  assert.equal(c.overlayText(new Date(2026, 9, 9, 7, 5))[1], '07:05　BAND');
+  assert.deepEqual([fr.text3.corner, fr.text3.alpha, fr.text3.size], ['bl', 0.8, 1.5]);
+  assert.equal(texts[texts.length - 1][2], 'left');
+  c.nextSong();
+  assert.equal(c.overlayText(new Date(2026, 9, 9, 19, 30))[0], 'M1 A　#fes');
+  // 下の行が無ければ、上の行を大きく出す
+  overlay.song = false; overlay.text = '';
+  assert.deepEqual(c.overlayText(new Date(2026, 9, 9, 19, 30)), ['19:30　BAND', '']);
+  // いまのシーンと同じシーンは重ねない
+  c._applyScene('stars');
+  assert.equal(step(3).overlay, null);
+  c._applyScene('ripple');
+  assert.ok(step(4).overlay);
+  // O（toggleOverlay）でまとめて消す・出す
+  c.toggleOverlay();
+  fr = step(5);
+  assert.equal(s.overlayOn, false);
+  assert.deepEqual([fr.overlay, fr.ovImage, fr.text3], [null, null, null]);
+  c.toggleOverlay();
+  fr = step(6);
+  assert.ok(fr.overlay && fr.ovImage && fr.text3);
+  // テストパターン（位置合わせ）の間は出さない
+  c.toggleTestPattern();
+  fr = step(7);
+  assert.deepEqual([fr.overlay, fr.ovImage, fr.text3], [null, null, null]);
+  c.toggleTestPattern();
+  // 濃さ 0・シーンなしでは描かない
+  overlay.sceneOpacity = 0; overlay.imageOpacity = 0; overlay.textOpacity = 0;
+  fr = step(8);
+  assert.deepEqual([fr.overlay, fr.ovImage, fr.text3], [null, null, null]);
+  // 設定の読み込み：無い項目・おかしな値は既定に
+  const ld = VJ.storage.fromJSON(JSON.stringify({ overlay: { scene: 'eq', sceneOpacity: 7, imageFit: 'zoom', image: 'javascript:alert(1)', corner: 'xx', textSize: 'big' } })).overlay;
+  assert.deepEqual([ld.scene, ld.sceneOpacity, ld.imageFit, ld.image, ld.corner, ld.textSize, ld.sceneBlend], ['eq', 1, 'contain', '', 'tr', 1, 'screen']);
 });
 
 test('オート：一定時間後のアクセントで切替・無音でタイトル・強打で復帰', () => {

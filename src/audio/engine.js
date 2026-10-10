@@ -48,7 +48,7 @@
       for (const fn of this.listeners) { try { fn(status, this.message); } catch (e) { /* noop */ } }
     }
 
-    get sampleRate() { return this.ctx ? this.ctx.sampleRate : 48000; }
+    get sampleRate() { return this._tap ? this._tap.sr : this.ctx ? this.ctx.sampleRate : 48000; }
     get running() { return this.status === 'running'; }
 
     /** AudioContext と固定のグラフ（解析・メーター・出力先）を用意 */
@@ -77,6 +77,54 @@
       return ctx;
     }
 
+    /** トラックの音を、AudioContext を通さずにそのまま読む（「PC で再生中の音」用。理由は _startDisplay）。
+     *  届いた分は tap.pend にためておき、pull() が描画フレームごとに取り出す */
+    _startTap(track, sampleRate) {
+      // 描画が止まっても取りこぼさないよう、N サンプルぶん（約 0.68 秒）まではブラウザ側にためられるようにする
+      const proc = new MediaStreamTrackProcessor({ track, maxBufferSize: 96 });
+      const reader = proc.readable.getReader();
+      const tap = (this._tap = {
+        reader, sr: sampleRate || 48000, ch: 2, stop: false, gap: false,
+        pend: new Float32Array(N), pn: 0,
+        l: new Float32Array(4096), r: new Float32Array(4096),
+        ml: new Float32Array(1024), mr: new Float32Array(1024),
+      });
+      (async () => {
+        try {
+          for (;;) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            try { if (!tap.stop) this._tapFrame(tap, value); } finally { value.close(); }
+            if (tap.stop) break;
+          }
+        } catch (e) { /* トラックが止まった：track.onended が知らせる */ }
+      })();
+    }
+
+    /** 届いた 1 かたまり（AudioData）を、チャンネルの選択に合わせて 1 本にして pend へ。メーター用に左右も残す */
+    _tapFrame(tap, d) {
+      const n = d.numberOfFrames, ch = d.numberOfChannels;
+      if (!n) return;
+      tap.sr = d.sampleRate;
+      tap.ch = ch;
+      if (ch !== this.channels) { this.channels = ch; this.meter.mono = ch < 2; }
+      if (tap.l.length < n) { tap.l = new Float32Array(n); tap.r = new Float32Array(n); }
+      const l = tap.l.subarray(0, n), r = tap.r.subarray(0, n);
+      d.copyTo(l, { planeIndex: 0, format: 'f32-planar' });
+      if (ch > 1) d.copyTo(r, { planeIndex: 1, format: 'f32-planar' });
+      const keep = (dst, src) => { const k = Math.min(n, dst.length); dst.copyWithin(0, k); dst.set(src.subarray(n - k), dst.length - k); };
+      keep(tap.ml, l);
+      if (ch > 1) keep(tap.mr, r);
+      // あふれたら（描画が 0.68 秒以上止まった）古い分を捨てて、解析をやり直してもらう
+      const pend = tap.pend, m = Math.min(n, pend.length);
+      if (tap.pn + m > pend.length) { const drop = tap.pn + m - pend.length; pend.copyWithin(0, drop, tap.pn); tap.pn -= drop; tap.gap = true; }
+      const sel = ch > 1 ? this.opts.channel : 'left', o = tap.pn, s = n - m;
+      if (sel === 'left') for (let i = 0; i < m; i++) pend[o + i] = l[s + i];
+      else if (sel === 'right') for (let i = 0; i < m; i++) pend[o + i] = r[s + i];
+      else for (let i = 0; i < m; i++) pend[o + i] = 0.5 * (l[s + i] + r[s + i]);
+      tap.pn += m;
+    }
+
     _resume() {
       const now = performance.now();
       if (!this.ctx || now - this._watch.lastResume < 500) return;
@@ -91,8 +139,10 @@
       this._playToken = (this._playToken || 0) + 1;
       this._nextDecoded = null;
       this._stopSource();
-      const ctx = this._ensureContext();
-      try { await ctx.resume(); } catch (e) { /* noop */ }
+      // 「PC で再生中の音」は AudioContext を使わない（作らない）。理由は _startDisplay
+      const tapMode = this.opts.source === 'display' && typeof globalThis.MediaStreamTrackProcessor === 'function';
+      const ctx = tapMode ? null : this._ensureContext();
+      if (ctx) { try { await ctx.resume(); } catch (e) { /* noop */ } }
       try {
         if (this.opts.source === 'mic') {
           await this._startMic(this.opts.deviceId);
@@ -110,7 +160,7 @@
           await this._playFile(0);
           return 0;
         } else if (this.opts.source === 'display') {
-          await this._startDisplay();
+          await this._startDisplay(tapMode);
         } else if (this.opts.source === 'buffer') {
           return this._startBuffer(this.opts.audioBuffer, !!this.opts.loop, this.opts.when);
         }
@@ -188,20 +238,31 @@
       return true;
     }
 
-    /** PC で再生中の音（画面共有の音声）。映像は使わないが、止めると共有自体が終わる環境があるので最小設定で残す */
-    async _startDisplay() {
+    /** PC で再生中の音（画面共有の音声）。映像は使わないが、止めると共有自体が終わる環境があるので最小設定で残す。
+     *
+     *  tap = true（Chrome / Edge）：AudioContext を通さず、トラックから直接サンプルを読む。
+     *  実機（Windows 11・Chrome 154・既定の再生デバイスが内蔵スピーカー）では、同じ Chrome が先に音の出力
+     *  デバイスを開いていると、システム音声の取り込みが無音になった（トラックが muted のまま。出力を閉じて
+     *  30 秒待っても戻らない。ヘッドホン端子が既定のときは起きなかった）。AudioContext は動かすだけで出力
+     *  デバイスを開くので、この入力では使わない。「出力先なし」の AudioContext（sinkId: none）は出力を
+     *  開かないが、描画で忙しいページでは時計が実時間の 65% ほどでしか進まず、音が間引かれてテンポがずれる
+     *  （実測）ので使えない */
+    async _startDisplay(tap) {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
         throw new Error(VJ.t('この環境では「PC で再生中の音」を使えません（Chrome / Edge で開いてください）'));
       }
+      // Windows は PC 全体の音を取り込めるので、共有の画面を「画面全体」から開く（Mac はタブの音だけなので既定のまま）
+      const video = { frameRate: 1, width: { max: 320 }, height: { max: 240 } };
+      if (VJ.compat && VJ.compat.windows) video.displaySurface = 'monitor';
       const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: 1, width: { max: 320 }, height: { max: 240 } },
+        video,
         audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
         systemAudio: 'include', selfBrowserSurface: 'exclude', surfaceSwitching: 'include',
       });
       const track = stream.getAudioTracks()[0];
       if (!track) {
         for (const t of stream.getTracks()) t.stop();
-        const e = new Error(VJ.t('音声が共有されていません。共有の画面で「システム音声を共有」（タブの場合は「タブの音声も共有」）をオンにしてから選び直してください。'));
+        const e = new Error(VJ.t('音声が共有されていません。共有の画面で「システムの音声を含めて共有する」（タブの場合は「タブの音声を含めて共有する」）をオンにしてから選び直してください。'));
         e.name = 'NoAudioShared';
         throw e;
       }
@@ -211,8 +272,22 @@
       this.trackSettings = st;
       this.opts.deviceLabel = track.label || VJ.t('画面共有の音声');
       track.onended = () => this._displayEnded();
-      this.srcNode = this.ctx.createMediaStreamSource(stream);
+      // PC 全体の音（システム音声）が止められている（muted）ときは、原因と直し方を出す
+      if (/loopback/i.test(String(st.deviceId || ''))) {
+        const tell = () => {
+          if (this.stream !== stream || this.status !== 'running') return;
+          const msg = track.muted ? VJ.t('PC の音が届いていません。VJ をすべて閉じて開き直し、最初に「PC で再生中の音」を始めてください（先にほかの入力を始めていると、取り込めないことがあります）。') : '';
+          if (msg !== this.message) this._set('running', msg);
+        };
+        track.onmute = tell;
+        track.onunmute = tell;
+        setTimeout(tell, 1500);
+      }
       this.channels = st.channelCount || 2;
+      this.meter.mono = this.channels < 2;
+      this.hasTail = false;
+      if (tap) { this._startTap(track, st.sampleRate); return; }
+      this.srcNode = this.ctx.createMediaStreamSource(stream);
       this._route(this.srcNode, false);
     }
 
@@ -278,7 +353,9 @@
       this.bufferSrc = null;
       if (this.srcNode) { try { this.srcNode.disconnect(); } catch (e) { /* noop */ } }
       this.srcNode = null;
-      if (this.stream) for (const t of this.stream.getTracks()) { t.onended = null; t.stop(); }
+      if (this._tap) { this._tap.stop = true; try { this._tap.reader.cancel().catch(() => {}); } catch (e) { /* noop */ } }
+      this._tap = null;
+      if (this.stream) for (const t of this.stream.getTracks()) { t.onended = t.onmute = t.onunmute = null; t.stop(); }
       this.stream = null;
       for (const n of [this.splitter, this.mixGain, this.selL, this.selR]) { if (n) try { n.disconnect(); } catch (e) { /* noop */ } }
       this.splitter = this.mixGain = this.selL = this.selR = null;
@@ -337,6 +414,23 @@
      */
     pull() {
       const out = this._pullOut || (this._pullOut = { samples: this._empty, gapped: false });
+      const tap = this._tap;
+      if (tap) {
+        // トラックから直接読んでいるとき：たまっている分をそのまま渡す（位置合わせは要らない）
+        if (this.status !== 'running') { out.samples = this._empty; out.gapped = false; this.hasTail = false; tap.pn = 0; return out; }
+        const n = tap.pn, buf = this.buf;
+        const gapped = tap.gap || !this.hasTail;
+        buf.copyWithin(0, n);
+        buf.set(tap.pend.subarray(0, n), N - n);
+        tap.pn = 0;
+        tap.gap = false;
+        if (gapped && this.hasTail) this.diag.gaps++;
+        this.hasTail = true;
+        if (n > 0) { this.diag.chunk = n; if (n > this.diag.chunkMax) this.diag.chunkMax = n; }
+        out.samples = gapped ? this._empty : buf.subarray(N - n);
+        out.gapped = gapped;
+        return out;
+      }
       const ctx = this.ctx, an = this.analyser;
       if (!ctx || !an || !this.status || (this.status !== 'running' && this.status !== 'lost' && this.status !== 'reconnecting')) {
         out.samples = this._empty; out.gapped = false; this.hasTail = false;
@@ -394,19 +488,22 @@
 
     /** メーター更新（30Hz 程度で呼ぶ） */
     updateMeters() {
-      if (!this.anL || !(this.srcNode || this.bufferSrc)) {
+      const tap = this._tap;
+      if (!tap && (!this.anL || !(this.srcNode || this.bufferSrc))) {
         this.meter.l = this.meter.r = -120;
         return this.meter;
       }
-      const m = this.meter, b = this.meterBuf;
-      const calc = (an) => {
-        an.getFloatTimeDomainData(b);
+      const m = this.meter;
+      let b = this.meterBuf;
+      // src：AnalyserNode か、トラックから読んだ直近のサンプル（Float32Array）
+      const calc = (src) => {
+        if (tap) b = src; else src.getFloatTimeDomainData(b);
         let s = 0, p = 0;
         for (let i = 0; i < b.length; i++) { const v = b[i]; s += v * v; const a = v < 0 ? -v : v; if (a > p) p = a; }
         return [VJ.util.powToDb(s / b.length), p];
       };
-      const [l, lp] = calc(this.anL);
-      const [r, rp] = this.meter.mono ? [-120, 0] : calc(this.anR);
+      const [l, lp] = calc(tap ? tap.ml : this.anL);
+      const [r, rp] = this.meter.mono ? [-120, 0] : calc(tap ? tap.mr : this.anR);
       m.l = l; m.r = r;
       m.lPeak = Math.max(VJ.util.linToDb(lp), m.lPeak - 1.5);
       m.rPeak = Math.max(VJ.util.linToDb(rp), m.rPeak - 1.5);
@@ -417,7 +514,8 @@
     /** 毎フレーム呼ぶ見張り：停止したら resume、時間が進まなければ作り直す */
     watchdog(perfNow) {
       const ctx = this.ctx;
-      if (!ctx || this.status === 'idle' || this.status === 'error' || this.status === 'starting') return;
+      // トラックから直接読んでいるとき（PC で再生中の音）は AudioContext を使っていない
+      if (!ctx || this._tap || this.status === 'idle' || this.status === 'error' || this.status === 'starting') return;
       if (ctx.state === 'suspended' || ctx.state === 'interrupted') { this._resume(); return; }
       if (ctx.state !== 'running') return;
       const w = this._watch;
@@ -450,7 +548,7 @@
       const ctx = this.ctx;
       return {
         status: this.status,
-        sampleRate: ctx ? ctx.sampleRate : 0,
+        sampleRate: this._tap ? this._tap.sr : ctx ? ctx.sampleRate : 0,
         baseLatency: ctx && ctx.baseLatency !== undefined ? ctx.baseLatency : null,
         outputLatency: ctx && ctx.outputLatency !== undefined ? ctx.outputLatency : null,
         trackLatency: this.trackSettings && this.trackSettings.latency !== undefined ? this.trackSettings.latency : null,

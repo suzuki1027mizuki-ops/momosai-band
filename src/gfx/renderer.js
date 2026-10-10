@@ -10,7 +10,8 @@
   class Renderer {
     constructor(canvas, opts) {
       this.canvas = canvas;
-      this.opts = Object.assign({ desynchronized: true, fixedScale: 0, maxScale: 1, minScale: 0.35, pixelRatio: 0 }, opts || {});
+      // transparent：透過ウィンドウ用（単体アプリ）。キャンバスに透明度を持たせ、暗いところを透明にして出す
+      this.opts = Object.assign({ desynchronized: true, fixedScale: 0, maxScale: 1, minScale: 0.35, pixelRatio: 0, transparent: false }, opts || {});
       this.scale = this.opts.fixedScale || Math.min(0.75, this.opts.maxScale);
       this.failed = {};
       this.lost = false;
@@ -31,6 +32,9 @@
       this.output = { rotate: 0, flipH: false, flipV: false, size: 1, x: 0, y: 0 };
       this.logo = null; // { tex, aspect }
       this.logoUrl = '';
+      this.ovImg = null; // オーバーレイの画像 { tex, aspect }
+      this.ovImgUrl = '';
+      this.ovSlot = null; // 重ねるシーンの描画先（使うときに作る）
       canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); this.lost = true; this.lostCount = (this.lostCount || 0) + 1; }, false);
       canvas.addEventListener('webglcontextrestored', () => {
         try { this._initGL(); this.lost = false; } catch (e) { this.initError = e.message; }
@@ -39,9 +43,10 @@
     }
 
     _initGL() {
+      const tr = !!this.opts.transparent;
       const attrs = {
-        alpha: false, antialias: false, depth: false, stencil: false,
-        preserveDrawingBuffer: false, premultipliedAlpha: false,
+        alpha: tr, antialias: false, depth: false, stencil: false,
+        preserveDrawingBuffer: false, premultipliedAlpha: tr,
         powerPreference: 'high-performance', desynchronized: !!this.opts.desynchronized,
       };
       const gl = this.canvas.getContext('webgl2', attrs);
@@ -66,7 +71,10 @@
       if (this.text) this.text.reset(gl); else this.text = new G.TextLayer(gl);
       this.logo = null;
       if (this.logoUrl) { const u = this.logoUrl; this.logoUrl = ''; this.setLogo(u); }
+      this.ovImg = null;
+      if (this.ovImgUrl) { const u = this.ovImgUrl; this.ovImgUrl = ''; this.setOverlayImage(u); }
       this.slots = null;
+      this.ovSlot = null;
       this.tw = 0; this.th = 0;
       this._compileAll();
     }
@@ -142,6 +150,7 @@
       if (!this.slots || tw !== this.tw || th !== this.th) {
         const gl = this.gl;
         if (this.slots) for (const sl of this.slots) for (const t of sl.targets) G.disposeTarget(gl, t);
+        if (this.ovSlot) { for (const t of this.ovSlot.targets) G.disposeTarget(gl, t); this.ovSlot = null; }
         // 描画先 2 組（それぞれ前フレーム用と 2 枚）。切替のクロスフェード中は、今のシーンと前のシーンが別の組を使う
         this.slots = [0, 1].map(() => ({ targets: [G.target(gl, tw, th, this.hdr), G.target(gl, tw, th, this.hdr)], ping: 0, id: null, last: -9 }));
         this.tw = tw; this.th = th;
@@ -149,15 +158,20 @@
     }
 
     /** ロゴ画像（data URL）。空なら消す */
-    setLogo(url) {
-      if (url === this.logoUrl) return;
-      this.logoUrl = url || '';
+    setLogo(url) { this._setImage('logo', 'logoUrl', url); }
+    /** オーバーレイの画像（data URL）。空なら消す */
+    setOverlayImage(url) { this._setImage('ovImg', 'ovImgUrl', url); }
+
+    /** 画像（data URL）をテクスチャにして this[slot] = { tex, aspect } に入れる。空なら消す */
+    _setImage(slot, urlKey, url) {
+      if (url === this[urlKey]) return;
+      this[urlKey] = url || '';
       const gl = this.gl;
-      if (this.logo) { gl.deleteTexture(this.logo.tex); this.logo = null; }
+      if (this[slot]) { gl.deleteTexture(this[slot].tex); this[slot] = null; }
       if (!url) return;
       const img = new Image();
       img.onload = () => {
-        if (this.logoUrl !== url || this.lost) return;
+        if (this[urlKey] !== url || this.lost) return;
         const tex = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, tex);
         gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
@@ -168,7 +182,7 @@
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        this.logo = { tex, aspect: img.naturalWidth / Math.max(1, img.naturalHeight) };
+        this[slot] = { tex, aspect: img.naturalWidth / Math.max(1, img.naturalHeight) };
       };
       img.src = url;
     }
@@ -278,6 +292,13 @@
         const other = this._slot(x.scene, def.id);
         dst2 = this._drawScene(other, x.scene, fr, x.uniforms, x.param, x.sceneTime, x.titleLogo);
       }
+      // オーバーレイ：いまのシーンの上に重ねるシーン（専用の描画先に描く）
+      const ov = fr.overlay && fr.overlay.mix > 0.001 && this.programs[fr.overlay.scene.id] ? fr.overlay : null;
+      let dst3 = null;
+      if (ov) {
+        const sl = this._ovSlot(ov.scene);
+        dst3 = this._drawScene(sl, ov.scene, fr, ov.uniforms, ov.param, ov.sceneTime, false);
+      }
 
       // 仕上げ
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -285,7 +306,24 @@
       const q = this.post.use();
       q.tex('u_scene2', dst2 ? dst2.tex : this.texBlank);
       q.set('u_mix', dst2 ? x.mix : 0);
+      q.tex('u_scene3', dst3 ? dst3.tex : this.texBlank);
+      q.set('u_ovMix', dst3 ? ov.mix : 0);
+      q.set('u_ovMode', ov && ov.mode === 'add' ? 1 : 0);
       return this._post(q, dst, fr);
+    }
+
+    /** 重ねるシーンの描画先（使うときに作る）。前フレーム再利用のシーンは、シーンが変わったとき・続けて描いて
+     *  いなかったときに残像を消す */
+    _ovSlot(def) {
+      const gl = this.gl;
+      let sl = this.ovSlot;
+      if (!sl) sl = this.ovSlot = { targets: [G.target(gl, this.tw, this.th, this.hdr), G.target(gl, this.tw, this.th, this.hdr)], ping: 0, id: null, last: -9 };
+      if (def.feedback && (sl.id !== def.id || sl.last !== this.frame - 1)) {
+        for (const t of sl.targets) { gl.bindFramebuffer(gl.FRAMEBUFFER, t.fb); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT); }
+      }
+      sl.id = def.id;
+      sl.last = this.frame;
+      return sl;
     }
 
     /** シーンの描画先の組（同じシーンが使っていた組か、avoid でない方）。前フレーム再利用のシーンは、
@@ -382,6 +420,33 @@
         r[1] = corner[0] === 'b' ? m : 1 - r[3] - m;
         q.set('u_logoRect', r);
       }
+      // オーバーレイ：画像（合わせ方 contain 全体が入る / cover 画面を埋める / stretch 引き伸ばす）
+      const oi = fr.ovImage && this.ovImg ? fr.ovImage : null;
+      q.tex('u_ovImg', oi ? this.ovImg.tex : this.texBlank);
+      q.set('u_ovImgAlpha', oi ? oi.alpha : 0);
+      if (oi) {
+        q.set('u_ovImgMode', oi.mode === 'add' ? 1 : oi.mode === 'screen' ? 2 : 0);
+        const A = this.lw / this.lh, a = this.ovImg.aspect;
+        // 画面の幅・高さに対する割合。cover は、はみ出す側が 1 を超える
+        let w = 1, h = 1;
+        if (oi.fit !== 'stretch') {
+          const wide = a > A;
+          if ((oi.fit === 'cover') === wide) w = a / A; else h = A / a;
+        }
+        q.set('u_ovImgRect', [0.5 - w / 2, 0.5 - h / 2, w, h]);
+      }
+      // オーバーレイ：隅の文字（時計・曲名など）。左右は文字の端をそろえ、画面の端から少し離す
+      const t3 = fr.text3 && fr.text3.tex ? fr.text3 : null;
+      q.tex('u_text3', t3 ? t3.tex : this.texBlank);
+      q.set('u_text3Alpha', t3 ? t3.alpha : 0);
+      if (t3) {
+        const r = this.fitRect(G.TextLayer.ASPECT, Math.min(0.9, 0.36 * t3.size), 0.4, 0.5, 0.5);
+        const m = 0.025, c = t3.corner || 'tr';
+        r[0] = c[1] === 'l' ? m * (this.lh / this.lw) : 1 - r[2] - m * (this.lh / this.lw);
+        r[1] = c[0] === 'b' ? m : 1 - r[3] - m;
+        q.set('u_text3Rect', r);
+      }
+      q.set('u_alphaOut', this.opts.transparent ? 1 : 0);
       q.set('u_flash', fr.flash || 0);
       q.set('u_flashColor', fr.flashColor || [1, 1, 1]);
       q.set('u_black', fr.black || 0);

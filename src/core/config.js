@@ -33,7 +33,8 @@
     gateDb: -70, // これより小さい音は無音とみなす（dBFS）。ざわざわした会場では上げる
     noFlash: false, // フラッシュ類を一切使わない（光に配慮が必要な会場）
     flashLimit: 3, // 1 秒あたりのフラッシュの上限（3 = 推奨：光過敏対策のガイドライン。0 = 制限なし）
-    intensity: 2, // 激しさ 0 控えめ / 1 ふつう（以前の動き）/ 2 激しい / 3 最大
+    intensity: 2, // 激しさ 0 控えめ / 1 ふつう（以前の動き）/ 2 激しい / 3 最大 / -1 自動（曲の盛り上がりに合わせる）
+    paletteAuto: false, // パレットを曲の区切りごとに自動で変える
     react: 1.0, // 動きの大きさ 0.3〜1.5
     autoScenes: {}, // オートで使うシーン（false のものは使わない）
     fpsCap: 0, // 0 = 制限なし / 30 = 30fps（非力な PC 向け）
@@ -57,6 +58,15 @@
     bands: [], // 出演バンド（bands.js）。いま出ているバンドの値は上の bandName・setlistText などにある
     bandIdx: 0, // いま出ているバンドの番号
     bandPalette: -1, // いま出ているバンドの色（パネルで選んだもの。-1 = 決めていない）
+    overlayOn: true, // オーバーレイ全体の表示（O キー）
+    overlay: {
+      // 画像（透過 PNG の枠・イラストなど。data URL）を全シーンの上に。fit: contain 全体が入る / cover 画面を埋める / stretch 引き伸ばす
+      image: '', imageFit: 'contain', imageBlend: 'normal', imageOpacity: 1, // blend: normal そのまま / add 光を足す / screen
+      // いまのシーンの上に、別のシーンを重ねる（'' = 重ねない）
+      scene: '', sceneBlend: 'screen', sceneOpacity: 0.7, // blend: screen / add。濃さ 1 でも足す強さは 0.6 まで（光過敏対策）
+      // 文字（時計・バンド名・曲名・自由な文字）を隅にずっと出す
+      clock: false, band: false, song: false, text: '', corner: 'tr', textSize: 1, textOpacity: 0.9,
+    },
     guide: true, // パネルの上に「はじめてのガイド」を出す
     panelFold: {}, // パネルの閉じている見出し { '3': true, ... }（①〜⑦）
   };

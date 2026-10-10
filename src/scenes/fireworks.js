@@ -1,210 +1,126 @@
-/* Shift+3: 花火 — キックやキメで夜空に花火が開く
- * キックごとに 1 発（位置と色はヒットの番号で決まる）、キメ（アクセント）は大きな二重の多色の玉。
- * 火花は抵抗で減速しながら重力で垂れ、尾を引いて消える（終わりぎわは瞬く）。
- * ドラムの無い歌・話し声では、音程の変わり目で小さな花火（間隔を空ける）。
- * 光過敏対策：1 発の面積と明るさは控えめ、開く位置は毎回ずらす（同じ場所で続けて光らない）。
- * 玉ごとの値（位置・広がり・落下・色）は JS 側で計算して渡す（ソフト描画でも軽く）。 */
+/* Shift+3: 花火 — 線香花火。こよりの先で揺れる火球から、枝分かれする火花（松葉）が四方に散る。
+ * 音量で火花が増えて長くなり（静かなときは小さな火花がぽつぽつ）、キックで一斉に散り、キメでは大きく長い火花が
+ * はじける。スネアでも少し散る。ドラムの無い歌・話し声では、音程の変わり目で散る。
+ * 火花は細い線なので光る面積が小さく、キックごとに散っても広い範囲の明るさは変わらない（光過敏対策）。
+ * 火花ごとの値（向き・経過秒・長さ・乱数）は JS 側で持って渡し、シェーダは火球から見て火花の近くにある画素だけ計算する。 */
 (function (VJ) {
   'use strict';
-  const MAXB = 8;
-  const K = 1.9; // 空気抵抗（大きいほど早く止まる）
-  // 0..1 の擬似乱数（ヒットの番号から決まる）
-  const rnd = (n, s) => { const x = Math.sin(n * 12.9898 + s * 78.233) * 43758.5453; return x - Math.floor(x); };
+  const MAXS = 56; // 同時に出せる火花の数
+  const TAU = Math.PI * 2;
 
   VJ.scenes.register({
-    id: 'fireworks', key: 's3', name: 'Fireworks', nameJa: '花火', aliases: ['はなび'], cost: 1.5,
+    id: 'fireworks', key: 's3', name: 'Fireworks', nameJa: '花火', aliases: ['はなび', '線香花火'], cost: 1.5,
     params: [
       { id: 'amount', name: '量', min: 0.5, max: 1.5, def: 1 },
       { id: 'size', name: '大きさ', min: 0.6, max: 1.4, def: 1 },
       { id: 'life', name: '残り時間', min: 0.5, max: 2, def: 1 },
     ],
     init(st) {
-      st.b = []; st.n = 0; st.t = 0; st.lastKick = -9; st.lastSpawn = -9;
-      st.A = new Float32Array(MAXB * 4); st.B = new Float32Array(MAXB * 4); st.C = new Float32Array(MAXB * 4);
-      st.CA = new Float32Array(MAXB * 4); st.CB = new Float32Array(MAXB * 4);
+      st.sp = new Float32Array(MAXS * 4);
+      for (let i = 0; i < MAXS; i++) st.sp[i * 4 + 1] = 99;
+      st.next = 0; st.acc = 0; st.heat = 0; st.t = 0; st.n = 0; st.lastKick = -9;
     },
-    update(st, f, dt) {
+    update(st, f, dt, fx) {
       st.t += dt;
-      for (const b of st.b) b.age += dt;
-      const fl = f.onsetFlags | 0;
-      const spawn = (kind, str) => {
-        const n = st.n;
-        st.n = (st.n + 1) % 4096;
-        str = Math.max(0.3, Math.min(1, str));
-        // 横位置は黄金比でずらしていく（続けて同じ場所に開かない）
-        const b = { age: 0, n, kind, x: ((n * 0.618034 + 0.31) % 1) * 2 - 1, y: -0.02 + 0.22 * rnd(n, 1), str };
-        // 玉の種類：菊（尾が長い）・牡丹（点で開いて瞬く）・柳（金色で長く垂れる）
-        const ty = rnd(n, 2);
-        b.trail = ty < 0.4 ? 0.22 : ty < 0.75 ? 0.1 : 0.3;     // 尾の長さ（秒）
-        b.trailK = ty < 0.4 ? 0.3 : ty < 0.75 ? 0.05 : 0.5;    // 経過とともに尾が伸びる割合
-        b.grav = (ty < 0.75 ? 0.18 : 0.42) + 0.08 * rnd(n, 3); // 垂れ方
-        b.glit = ty >= 0.4 && ty < 0.75 ? 1 : 0;                 // 終わりぎわに瞬く
-        b.gold = ty >= 0.75 ? 1 : 0;
-        b.ci = Math.floor(rnd(n, 5) * 4); b.cf = rnd(n, 6) * 0.6;
-        b.cj = (b.ci + 2) % 4;
-        st.b.unshift(b);
-        if (st.b.length > MAXB) st.b.pop();
-        st.lastSpawn = st.t;
-        return b;
+      const sp = st.sp;
+      for (let i = 0; i < MAXS; i++) sp[i * 4 + 1] += dt;
+      st.heat += (f.level - st.heat) * Math.min(1, dt / 0.35);
+      const amt = fx.param[0], size = fx.param[1];
+      // 0..1 の擬似乱数（出した順で決まる。テストで再現できるように Math.random は使わない）
+      const rnd = () => { st.n = (st.n + 1) % 65536; const x = Math.sin(st.n * 12.9898) * 43758.5453; return x - Math.floor(x); };
+      // 火花を k 本出す。経過秒を少し負にして、同じフレームに全部は現れないようにする
+      const emit = (k, lenK) => {
+        for (let j = 0; j < k; j++) {
+          const o = st.next * 4;
+          st.next = (st.next + 1) % MAXS;
+          sp[o] = rnd() * TAU;
+          sp[o + 1] = -rnd() * 0.04;
+          sp[o + 2] = (0.09 + 0.2 * rnd()) * lenK * size;
+          sp[o + 3] = rnd();
+        }
       };
-      const big = (b) => { b.kind = 1; b.str = 1; b.glit = 1; b.gold = 0; b.trail = 0.2; b.trailK = 0.25; b.grav = 0.2; };
-      const top = st.b[0];
-      if (fl & 8) {
-        // キメ：直前に開いたばかりのキックの玉は大玉に格上げ（2 発重ねない）。新しく開くときは中央寄り
-        if (top && top.kind === 0 && top.age < 0.12) big(top);
-        else { const b = spawn(1, 1); big(b); b.x *= 0.5; b.y = 0.06 + 0.1 * rnd(b.n, 1); }
-      } else if (fl & 1) {
-        spawn(0, f.kickEv[1] || 0.7);
-      }
+      // ふだんの火花：音量で増える・長くなる（無音でも少しだけ）
+      st.acc += (2 + 44 * st.heat * st.heat) * amt * dt * (f.active ? 1 : 0.5);
+      const k = Math.min(6, Math.floor(st.acc));
+      st.acc -= Math.floor(st.acc);
+      if (k) emit(k, 0.55 + 0.6 * st.heat);
+      const fl = f.onsetFlags | 0;
+      if (fl & 8) emit(Math.round(16 * amt), 1.7); // キメ：大きく長い火花
+      else if (fl & 1) emit(Math.round((4 + 8 * (f.kickEv[1] || 0.6)) * amt), 1.25);
+      else if (fl & 2) emit(Math.round(4 * amt), 1.0);
+      // ドラムが無いとき：歌・話し声の音程の変わり目で
+      if ((fl & 128) && f.voiced > 0.4 && st.t - st.lastKick > 1.5) emit(Math.round(5 * amt), 1.0);
       if (fl & 1) st.lastKick = st.t;
-      // ドラムが無いとき：歌・話し声の音程の変わり目で小さな花火（間隔は 0.45 秒以上）
-      if (st.t - st.lastKick > 1.5 && st.t - st.lastSpawn > 0.45) {
-        if ((fl & 128) && f.voiced > 0.4) spawn(2, 0.5 + 0.5 * f.level);
-        else if (f.level > 0.1 && st.t - st.lastSpawn > 1.8) spawn(2, 0.5);
-      }
-      const { A, B, C, CA, CB } = st;
-      for (let i = 0; i < MAXB; i++) {
-        const b = st.b[i], o = i * 4;
-        if (!b) { A[o + 3] = 99; continue; }
-        const age = b.age, t1 = Math.max(age - b.trail - b.trailK * age, 0);
-        const E0 = 1 - Math.exp(-K * age), E1 = 1 - Math.exp(-K * t1);
-        // 広がる半径（基準）。キメは大きく、声は小さく
-        const R = b.kind === 1 ? 0.27 : b.kind === 2 ? 0.1 + 0.04 * b.str : 0.12 + 0.07 * b.str;
-        A[o] = b.x; A[o + 1] = b.y; A[o + 2] = R; A[o + 3] = age;
-        // 抵抗と重力：全火花で共通なので輪は円のまま垂れる
-        B[o] = E0; B[o + 1] = E1; B[o + 2] = -(b.grav / K) * (age - E0 / K); B[o + 3] = -(b.grav / K) * (t1 - E1 / K);
-        C[o] = b.n; C[o + 1] = b.kind; C[o + 2] = b.kind === 1 ? 56 : b.kind === 2 ? 24 : 44; C[o + 3] = b.glit + 2 * b.gold;
-        // 色：パレット 4 色の重み（隣どうしを混ぜる）。キメは 2 色
-        CA.fill(0, o, o + 4); CB.fill(0, o, o + 4);
-        CA[o + b.ci] += 1 - b.cf; CA[o + ((b.ci + 1) % 4)] += b.cf;
-        if (b.kind === 1) CB[o + b.cj] = 1; else { CB[o + b.ci] += 1 - b.cf; CB[o + ((b.ci + 1) % 4)] += b.cf; }
-      }
-      return { u_fwA: A, u_fwB: B, u_fwC: C, u_fwCA: CA, u_fwCB: CB };
+      return { u_sp: sp, u_heat: st.heat };
     },
     frag: `
-uniform vec4 u_fwA[8];  // 新しい順：(横 -1..1, 縦, 半径, 経過秒)
-uniform vec4 u_fwB[8];  // (広がり 今, 広がり 尾, 落下 今, 落下 尾)
-uniform vec4 u_fwC[8];  // (番号, 種類 0 = キック・1 = キメ・2 = 声, 火花の数, 瞬き + 2 × 金色)
-uniform vec4 u_fwCA[8]; // 色 A（パレット 4 色の重み）
-uniform vec4 u_fwCB[8]; // 色 B
+uniform vec4 u_sp[${MAXS}];  // 火花：(向き, 経過秒（負 = まだ出ていない）, 長さ, 乱数)
+uniform float u_heat;        // 音量（ゆっくり追従）
 
-// 火花の色：最大成分を 1 にそろえる（パレットの暗い色でも沈まないように）
-vec3 sparkCol(vec4 w) {
-  vec3 c = w.x * u_pal[0] + w.y * u_pal[1] + w.z * u_pal[2] + w.w * u_pal[3];
-  return c / max(max(c.r, max(c.g, c.b)), 0.25);
-}
-
-// 火花の輪 1 つ。画素の角度から近い 2 本の火花だけを調べる（火花の数によらず一定の負荷）。
-// ソフト描画では if で処理を飛ばせないので、輪の外の画素は「回数 0 のループ」で飛ばす
-vec3 shell(vec2 p, vec2 c, float age, float life, float R, float N, float seed, vec3 cA, vec3 cB, vec4 E, float glit) {
-  vec2 D0 = vec2(0.0, E.z), D1 = vec2(0.0, E.w);
-  vec2 q = p - c - 0.5 * (D0 + D1);
-  float rb = R * E.x + (E.w - E.z) + 0.03;
-  vec3 acc = vec3(0.0);
-  int cnt = dot(q, q) < rb * rb ? 1 : 0;
-  for (int z = 0; z < cnt; z++) {
-    float sec = TAU / N;
-    float a = atan(q.y, q.x) / sec;
-    float j0 = floor(a);
-    float side = fract(a) < 0.5 ? -1.0 : 1.0;
-    vec2 qn = q / max(length(q), 1e-5);
-    float hot = exp(-age * 5.0);
-    float w = max(0.0028, 1.2 / u_res.y);
-    float late = smoothstep(0.3, 0.75, age / life);
-    int M = u_quality > 0.3 ? 2 : 1;
-    for (int m = 0; m < 2; m++) {
-      if (m >= M) break;
-      float jj = j0 + (m == 0 ? 0.0 : side);
-      float j = mod(jj, N);
-      float h = hash12(vec2(j, seed));
-      float hy = fract(h * 13.71), hz = fract(h * 71.37);
-      // 火花の向き：画素の向きからの角度差を多項式で回す（cos・sin を省く）
-      float x = (jj + 0.5 + (h - 0.5) * 0.6 - a) * sec;
-      float x2 = x * x;
-      float cs = 1.0 - x2 * (0.5 - x2 / 24.0), sn = x * (1.0 - x2 * (1.0 / 6.0 - x2 / 120.0));
-      vec2 dir = vec2(qn.x * cs - qn.y * sn, qn.x * sn + qn.y * cs);
-      float sp = R * (0.82 + 0.18 * hy);
-      vec2 H = c + dir * sp * E.x + D0;
-      vec2 T = c + dir * sp * E.y + D1;
-      vec2 pa = p - T, ba = H - T;
-      float hh = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-8), 0.0, 1.0);
-      float d = length(pa - ba * hh);
-      vec2 dh = p - H;
-      float I = exp(-d * d / (w * w)) * (0.1 + 0.9 * hh * hh) + 0.4 * exp(-dot(dh, dh) / (6.0 * w * w));
-      // 終わりぎわの瞬き（細かい火花なので面積は小さい）
-      float tw = mix(1.0, step(0.45, fract(u_time * (4.0 + 5.0 * hz) + h * 7.0)), glit * late);
-      vec3 cc = mix(cA, cB, step(0.5, hz));
-      cc = mix(cc, cc * vec3(1.0, 0.6, 0.4) + vec3(0.08, 0.02, 0.0), 0.35 * late);   // 冷えて赤みがかる
-      acc += mix(cc, vec3(1.0), 0.55 * hot) * I * tw * (0.6 + 0.4 * hy);
-    }
-  }
-  return acc * (1.0 - smoothstep(0.4 * life, life, age));
+float segD(vec2 p, vec2 a, vec2 b) {
+  vec2 pa = p - a, ba = b - a;
+  return length(pa - ba * clamp(dot(pa, ba) / max(dot(ba, ba), 1e-8), 0.0, 1.0));
 }
 
 void main() {
   vec2 p = uvc();
-  float aspect = u_res.x / u_res.y;
-  float y01 = p.y + 0.5;
+  float life = 0.3 * u_param.z;
+  vec3 gold = vec3(1.0, 0.72, 0.36);
+  // 火球：こよりの先でゆっくり揺れる
+  float sw = 0.035 * sin(u_time * 1.1) + 0.012 * sin(u_time * 2.7);
+  vec2 top = vec2(0.0, 0.62);
+  vec2 c = vec2(sw, 0.07 - 0.5 * sw * sw);
+  vec2 dc = p - c;
+  float rc = length(dc);
 
-  // 夜空：上は深い紺、地平線はパレットの暗い色でほんのり明るく
-  vec3 hor = mix(vec3(0.11, 0.06, 0.17), u_pal[2] * 0.4, 0.5);
-  vec3 col = mix(hor, vec3(0.01, 0.014, 0.045), smoothstep(0.0, 0.75, y01));
-  // 星（ゆっくり瞬く）
-  vec2 sg = p * 60.0;
-  vec2 sid = floor(sg);
-  float sh = hash12(sid + 17.0);
-  vec2 so = hash22(sid) * 0.6 + 0.2;
-  float star = smoothstep(0.12, 0.0, length(fract(sg) - so)) * step(sh, 0.09);
-  col += vec3(0.7, 0.75, 1.0) * star * (0.12 + 0.12 * sin(u_time * (0.7 + sh * 20.0) + sh * 90.0)) * smoothstep(0.15, 0.5, y01);
+  // 夜の暗がり：下ほどわずかに明るい＋火球のまわりの暖かい光（広く・弱く）
+  vec3 col = mix(vec3(0.012, 0.012, 0.03), vec3(0.002, 0.002, 0.008), smoothstep(-0.5, 0.5, p.y)) + u_pal[2] * 0.02;
+  col += gold * ((0.03 + 0.05 * u_heat) * exp(-rc * rc * 9.0) + 0.012 * exp(-rc * 2.0)) * (0.9 + 0.1 * idle());
+  // こより
+  col += vec3(0.2, 0.14, 0.08) * smoothstep(0.004, 0.0015, segD(p, top, c + vec2(0.0, 0.012))) * (0.5 + 0.5 * smoothstep(0.6, 0.1, p.y));
 
-  // 花火（新しい順。最長の寿命より古い玉が来たら打ち切り）
-  float amt = u_param.x, size = u_param.y, lifeK = u_param.z;
-  float hx = max(0.5 * aspect - 0.3, 0.1);
-  for (int i = 0; i < 8; i++) {
-    vec4 A = u_fwA[i], C = u_fwC[i];
-    float age = A.w;
-    if (age > 2.8 * lifeK) break;   // キメ（2.8）・柳（2.1 × 1.25）より古い
-    float big = step(0.5, C.y) * step(C.y, 1.5), voice = step(1.5, C.y);
-    float gold = step(1.5, C.w);
-    float life = lifeK * (voice > 0.5 ? 1.5 : (big > 0.5 ? 2.8 : 2.1)) * (1.0 + 0.25 * gold);
-    if (age > life) continue;
-    vec2 c = vec2(A.x * hx, A.y);
-    float R = A.z * size;
-    float N = floor(C.z * amt);
-    // 柳は金色寄り
-    vec3 cA = mix(sparkCol(u_fwCA[i]), vec3(1.0, 0.72, 0.35), 0.6 * gold);
-    vec3 cB = mix(sparkCol(u_fwCB[i]), vec3(1.0, 0.72, 0.35), 0.6 * gold);
-    vec3 fw = shell(p, c, age, life, R, N, C.x, cA, cB, u_fwB[i], C.w - 2.0 * gold);
-    // キメ：内側にもう一重（白い瞬き混じり）
-    int nb = big > 0.5 ? 1 : 0;
-    for (int z = 0; z < nb; z++) {
-      float t1 = max(age - 0.08, 0.0);
-      float E0 = 1.0 - exp(-1.9 * age), E1 = 1.0 - exp(-1.9 * t1);
-      vec4 E = vec4(E0, E1, -(0.2 / 1.9) * (age - E0 / 1.9), -(0.2 / 1.9) * (t1 - E1 / 1.9));
-      fw += shell(p, c, age, life * 0.8, R * 0.5, floor(N * 0.55), C.x + 101.0, mix(cA, cB, 0.5), vec3(1.0), E, 1.0) * 0.8;
+  // 火花
+  float w = max(0.002, 1.2 / u_res.y);
+  float g = 0.35;                                  // 重力で少し垂れる
+  vec3 acc = vec3(0.0);
+  for (int i = 0; i < ${MAXS}; i++) {
+    vec4 s = u_sp[i];
+    float age = s.y, len = s.z;
+    if (age < 0.0 || age > life) continue;
+    vec2 d = vec2(cos(s.x), sin(s.x));
+    float al = dot(dc, d), ac = dot(dc, vec2(-d.y, d.x));
+    // 火球から見てこの火花（と枝）の近くにある画素だけ
+    if (al < -0.02 || al > len * 1.5 + 0.03 || abs(ac) > len * 0.6 + 0.05) continue;
+    float k = age / life;
+    float head = len * (1.0 - exp(-age * 45.0));    // すぐ伸びきる
+    float tail = len * 0.9 * smoothstep(0.15, 1.0, k); // 根元から消えていく
+    float fade = 1.0 - smoothstep(0.55, 1.0, k);
+    float u = clamp(al, tail, head);
+    float I = exp(-dot(vec2(al - u, ac + g * u * u * d.x), vec2(al - u, ac + g * u * u * d.x)) / (w * w)) * (0.35 + 0.65 * u / max(len, 1e-4));
+    // 松葉：先のほうで 3 本に枝分かれ
+    float ub = len * (0.5 + 0.3 * fract(s.w * 7.13));
+    vec2 pb = c + d * ub - vec2(0.0, g * ub * ub);
+    float tb = clamp((age - 0.03) * 30.0, 0.0, 1.0) * step(ub, head + 1e-4);
+    for (int j = 0; j < 3; j++) {
+      float fj = float(j);
+      float ang = s.x + (fj - 1.0) * (0.5 + 0.35 * fract(s.w * 31.7 + fj * 0.37)) + (fract(s.w * 53.1 + fj * 0.19) - 0.5) * 0.3;
+      float bl = len * (0.28 + 0.2 * fract(s.w * 17.3 + fj * 0.61)) * tb;
+      vec2 bd = vec2(cos(ang), sin(ang));
+      float db = segD(p, pb + bd * bl * 0.8 * smoothstep(0.3, 1.0, k), pb + bd * bl);
+      I += exp(-db * db / (w * w)) * 0.8 * tb;
     }
-    col += fw * (voice > 0.5 ? 0.9 : 1.25);
-    // 夜空がほんのり照らされる（ゆっくり立ち上がる・ごく弱い）
-    vec2 dc = p - c;
-    col += cA * 0.1 * (1.0 - exp(-age * 3.0)) * (1.0 - smoothstep(0.3 * life, life, age)) * exp(-dot(dc, dc) / (R * R * 1.5));
-    // 打ち上げの名残：開いた直後だけ下に細い光の筋
-    float ly = clamp((c.y - p.y) / 0.22, 0.0, 1.0);
-    float lx = p.x - c.x;
-    col += mix(cA, vec3(1.0), 0.5) * exp(-lx * lx / 0.000012 - age * 9.0) * (1.0 - ly) * step(p.y, c.y - 0.015) * 0.35;
+    // 色：出た瞬間は白に近く、冷えると金色（パレットの色をわずかに混ぜる）
+    vec3 sc = mix(gold, pal(s.w * 3.0), 0.22);
+    acc += mix(sc, vec3(1.0, 0.95, 0.85), 0.5 * (1.0 - k)) * I * fade;
   }
+  col += acc * 1.4;
 
-  // 町のシルエット（遠い層は少し明るく霞む）＋窓の明かり
-  float bx1 = floor(p.x * 7.0 + 11.0);
-  float far = -0.5 + 0.1 + 0.09 * hash11(bx1 * 1.7) * step(0.25, hash11(bx1 + 0.5));
-  float bx2 = floor(p.x * 4.5 + 3.0);
-  float near = -0.5 + 0.05 + 0.07 * hash11(bx2 * 2.3) + 0.06 * step(0.85, hash11(bx2 + 9.1));
-  col = mix(col, hor * 0.55, step(p.y, far));
-  vec2 wg = vec2(p.x * 80.0, p.y * 70.0);
-  vec2 wid = floor(wg), wf = fract(wg);
-  float win = step(hash12(wid + bx2), 0.13) * step(0.3, wf.x) * step(wf.x, 0.7) * step(0.25, wf.y) * step(wf.y, 0.75) * step(p.y, near - 0.012);
-  vec3 nearC = vec3(0.004, 0.004, 0.012) + vec3(1.0, 0.75, 0.45) * win * 0.3 * (0.7 + 0.3 * hash12(wid));
-  col = mix(col, nearC, step(p.y, near));
-
+  // 火球（ふつふつと煮える）
+  float rb = (0.011 + 0.007 * u_heat) * u_param.y * (1.0 + 0.06 * sin(u_time * 31.0) + 0.05 * sin(u_time * 47.0));
+  float boil = 0.8 + 0.2 * vnoise(dc * 300.0 + u_time * 6.0);
+  col += vec3(1.0, 0.55, 0.2) * smoothstep(rb, rb * 0.5, rc) * boil * (0.7 + 0.3 * u_heat);
+  col += vec3(1.0, 0.9, 0.7) * smoothstep(rb * 0.6, 0.0, rc) * 0.6;
+  col += vec3(1.0, 0.5, 0.2) * exp(-rc * rc / (rb * rb * 6.0)) * 0.35;
   outColor = vec4(col, 1.0);
 }`,
   });

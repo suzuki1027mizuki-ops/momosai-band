@@ -1,6 +1,6 @@
 /* Shift+8: 花びら — 花びらが舞う。キックで風が吹く
  * 奥・中・手前の 3 層の桜の花びら（先に小さな切れ込みのある丸い花びら）が、回りながら
- * ひらひら裏返り、左右に揺れて落ちる。音量で落ちる速さ（u_travel）、キックで横に突風
+ * ひらひら裏返り、左右に大きく揺れて落ちる。音量で落ちる速さ、キックで横に突風
  * （動きだけで明るさは変えない）、突風の間は回転も速く。背景はやわらかいグラデーションと玉ボケ。 */
 (function (VJ) {
   'use strict';
@@ -11,16 +11,18 @@
       { id: 'wind', name: '風', min: 0, max: 1.5, def: 1 },
       { id: 'size', name: '大きさ', min: 0.6, max: 1.4, def: 1 },
     ],
-    init(st) { st.fall = 0; st.gx = 0; st.gv = 0; st.spin = 0; },
+    init(st) { st.fall = 0; st.gx = 0; st.gv = 0; st.spin = 0; st.lvl = 0; },
     update(st, f, dt) {
       const fl = f.onsetFlags | 0;
       // キック・キメで横向きの突風（速度に足す → 位置はなめらかに動く）
-      if (fl & 1) st.gv += 0.2 * (f.kickEv[1] || 0.6);
-      if (fl & 8) st.gv += 0.25;
-      st.gv = Math.min(st.gv * Math.exp(-dt / 0.5), 0.8);
-      st.fall += 0.04 * dt;
-      st.gx += (0.015 + st.gv) * dt;
-      st.spin += 1.6 * st.gv * dt;
+      if (fl & 1) st.gv += 0.32 * (f.kickEv[1] || 0.6);
+      if (fl & 8) st.gv += 0.4;
+      st.gv = Math.min(st.gv * Math.exp(-dt / 0.45), 1.0);
+      st.lvl += (f.level - st.lvl) * Math.min(1, dt / 0.4);
+      // 落ちる速さは音量で。突風の間は横に流されて落ちるのが遅くなる
+      st.fall += (0.13 + 0.12 * st.lvl) * (1 - 0.5 * Math.min(1, st.gv * 2)) * dt;
+      st.gx += (0.05 + st.gv) * dt;
+      st.spin += 2.2 * st.gv * dt;
       return { u_fall: st.fall % 1000, u_gust: st.gx % 1000, u_spin: st.spin % 1000 };
     },
     frag: `
@@ -38,16 +40,16 @@ float petalD(vec2 lp) {
 vec4 layer(vec2 p, float scale, float par, float seed, float dens, float sz, float blur, float dim) {
   float wind = u_param.y;
   // 風向きの傾き（落ちる道筋を斜めに）＋ 揺れ。どちらも有界なので「風」を動かしても飛ばない
-  float a1 = p.y * 5.0 + p.x * 1.7 + u_time * 1.1 + seed, a2 = p.y * 11.0 - u_time * 1.7 + seed * 2.0;
-  vec2 g = vec2(p.x + 0.35 * wind * p.y + wind * (0.045 * sin(a1) + 0.02 * sin(a2)), p.y);
+  float a1 = p.y * 5.0 + p.x * 1.7 + u_time * 1.9 + seed, a2 = p.y * 11.0 - u_time * 2.7 + seed * 2.0;
+  vec2 g = vec2(p.x + 0.35 * wind * p.y + wind * (0.075 * sin(a1) + 0.028 * sin(a2)), p.y);
   // この変形の傾き（花びらの形はゆがめずに画面の座標で描くため）
-  float jx = 1.0 + wind * 0.0765 * cos(a1);
-  float jy = wind * (0.35 + 0.225 * cos(a1) + 0.22 * cos(a2));
-  g += vec2(-u_gust, u_fall + u_travel * 0.1) * par;
+  float jx = 1.0 + wind * 0.1275 * cos(a1);
+  float jy = wind * (0.35 + 0.375 * cos(a1) + 0.308 * cos(a2));
+  g += vec2(-u_gust, u_fall) * par;
   vec2 gc = g * scale;
   // 列ごとに落ちる速さを少し変える（格子の並びを崩す）
   float colI = floor(gc.x);
-  gc.y += (u_fall + u_travel * 0.1) * par * scale * 0.35 * hash11(colI * 1.37 + seed);
+  gc.y += u_fall * par * scale * 0.35 * hash11(colI * 1.37 + seed);
   vec2 id = floor(gc);
   vec2 f = fract(gc) - 0.5;
   float h = hash12(id + seed);
@@ -56,8 +58,8 @@ vec4 layer(vec2 p, float scale, float par, float seed, float dens, float sz, flo
   vec2 o = (h2 - 0.5) * 0.3;
   float s = sz * (0.17 + 0.07 * h);                                   // 花びらの長さ（マスの単位・半分）
   // 回転とひらひら（裏返り）。突風の間は速く
-  float ang = h * TAU + (u_time * (0.25 + 0.5 * h2.x) + u_spin) * (h2.y < 0.5 ? -1.0 : 1.0);
-  float flip = cos(u_time * (1.2 + 1.8 * h2.y) + h * 20.0 + u_spin * 1.5);
+  float ang = h * TAU + (u_time * (0.8 + 1.5 * h2.x) + u_spin) * (h2.y < 0.5 ? -1.0 : 1.0);
+  float flip = cos(u_time * (2.0 + 2.6 * h2.y) + h * 20.0 + u_spin * 1.5);
   float fw = 0.22 + 0.78 * abs(flip);
   vec2 dg = f - o;
   vec2 lp = rot(ang) * vec2((dg.x - jy * dg.y) / jx, dg.y) / s;

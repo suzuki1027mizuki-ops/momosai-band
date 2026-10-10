@@ -91,6 +91,16 @@ test('光過敏：激しさ「最大」（寄る・揺れる・拍ごとのフ�
   }
 });
 
+test('光過敏：オーバーレイでシーンを重ねても（激しいシーンどうし・濃さ 100%）、どの領域も 1 秒に 3 フラッシュ以下', async () => {
+  // 重ねる強さに上限が無いと、トンネル + 万華鏡・グリッチ + 万華鏡で 3.5 回になる（実測）
+  const ov = (scene, sceneBlend) => ({ image: '', imageFit: 'contain', imageBlend: 'normal', imageOpacity: 1, scene, sceneBlend, sceneOpacity: 1, clock: false, band: false, song: false, text: '', corner: 'tr', textSize: 1, textOpacity: 0.9 });
+  for (const [id, scene, blend] of [['tunnel', 'kaleido', 'add'], ['glitch', 'kaleido', 'screen'], ['kaleido', 'glitch', 'add']]) {
+    const r = await run({ song: BAND, seconds: 30, sceneId: id, settings: { auto: false, autoFlash: true, overlayOn: true, overlay: ov(scene, blend) }, grid: [4, 3] });
+    const rf = regionFlashes(r.luma, 60);
+    assert.ok(Math.max(...rf) <= 3, `${id} + ${scene}: ${rf.join(' ')}`);
+  }
+});
+
 test('激しさ：キックで画面が寄る（同じ音・同じ動きの大きさでも「ふつう」と「激しい」で絵が変わる）', async () => {
   const song = { bpm: 120, seed: 1, humanize: 0, lead: 1.0, sections: [{ bars: 2, drums: 'click' }] };
   // 動きの大きさ（react × 激しさの倍率）はそろえて、寄り・揺れ・色ずれだけを比べる

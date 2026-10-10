@@ -47,6 +47,53 @@ test('ロゴ：タイトルでバンド名の代わり・隅の透かし', async
   assert.ok(l2[40] < 0.2, 'no logo at top-left ' + l2[40]);
 });
 
+test('オーバーレイ：画像・重ねるシーン・隅の文字が描かれる。O キーとパネルで切り替えられる', async () => {
+  // 左半分が不透明な白、右半分が透明の画像
+  const image = await page.evaluate(() => { const c = document.createElement('canvas'); c.width = 200; c.height = 100; const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, 100, 100); return c.toDataURL(); });
+  const ov = (o, on) => Object.assign({}, BASE, { overlayOn: on !== false, overlay: Object.assign({ image: '', imageFit: 'contain', imageBlend: 'normal', imageOpacity: 1, scene: '', sceneBlend: 'screen', sceneOpacity: 0.5, clock: false, band: false, song: false, text: '', corner: 'tr', textSize: 1, textOpacity: 0.9 }, o) });
+  const last = async (settings) => { const r = await run({ samples: 'demo', seconds: 0.6, sceneId: 'stars', settings, grid: [8, 4], logoWait: 300 }); return r.luma[r.luma.length - 1]; };
+  const base = await last(ov({}));
+  // 画像：画面に合わせて引き伸ばすと左半分が白、右半分（透明）はシーンのまま。行 0 = 画面下
+  const a = await last(ov({ image, imageFit: 'stretch' }));
+  assert.ok(a[8] > 0.8 && a[19] > 0.8, '左半分は画像 ' + a[8]);
+  assert.ok(a[15] < 0.2 && a[20] < 0.2, '右半分は透ける ' + a[15]);
+  // 濃さを半分にすると薄くなる。まとめて消す（overlayOn = false）と出ない
+  const half = await last(ov({ image, imageFit: 'stretch', imageOpacity: 0.5 }));
+  assert.ok(half[8] > base[8] + 0.05 && half[8] < 0.6, '半分の濃さ ' + half[8]);
+  const off = await last(ov({ image, imageFit: 'stretch' }, false));
+  assert.ok(off[8] < 0.2, '消しているときは出ない ' + off[8]);
+  // 「光として足す」は黒が透明：白い左半分は明るく、透明な右半分はそのまま
+  const add = await last(ov({ image, imageFit: 'stretch', imageBlend: 'add' }));
+  assert.ok(add[8] > 0.8 && add[15] < 0.2);
+  // シーンを重ねる：星空の上にイコライザー（全体が明るくなる）。濃さ 0 では変わらない
+  const sc = await last(ov({ scene: 'eq', sceneOpacity: 1, sceneBlend: 'add' }));
+  assert.ok(mean(sc) > mean(base) * 1.5 + 0.003, `重ねると明るい ${mean(sc)} / ${mean(base)}`);
+  const sc0 = await last(ov({ scene: 'eq', sceneOpacity: 0 }));
+  assert.ok(Math.abs(mean(sc0) - mean(base)) < 0.002);
+  // 隅の文字：右上（行 3・列 7）に出る。左下にすると左下（行 0・列 0）に出て、右上には出ない
+  const tr = await last(ov({ text: '■■■■■■■■', corner: 'tr', textSize: 2, textOpacity: 1 }));
+  assert.ok(tr[31] > base[31] + 0.1 && tr[0] < base[0] + 0.05, `右上の文字 ${tr[31]} / ${base[31]}`);
+  const bl = await last(ov({ text: '■■■■■■■■', corner: 'bl', textSize: 2, textOpacity: 1 }));
+  assert.ok(bl[0] > base[0] + 0.1 && bl[31] < base[31] + 0.05, `左下の文字 ${bl[0]} / ${base[0]}`);
+  // O キーでまとめて切替。パネルの欄が設定に入る
+  await page.evaluate(() => { VJ.panel.toggle(false); VJ.app.settings.overlayOn = true; });
+  await page.keyboard.press('KeyO');
+  assert.equal(await page.evaluate(() => VJ.app.settings.overlayOn), false);
+  await page.keyboard.press('KeyO');
+  assert.equal(await page.evaluate(() => VJ.app.settings.overlayOn), true);
+  await page.evaluate(() => { VJ.panel.toggle(true); document.querySelectorAll('#panel details').forEach((d) => { d.open = true; }); });
+  await page.selectOption('#ov-scene', 'waves');
+  await page.check('#ov-clock');
+  await page.fill('#ov-text', 'HELLO');
+  const st = await page.evaluate(() => ({ o: VJ.app.settings.overlay, text: VJ.app.show.overlayText(new Date(2026, 9, 9, 8, 3)), glass: document.getElementById('glass-row').hidden }));
+  assert.deepEqual([st.o.scene, st.o.clock, st.o.text], ['waves', true, 'HELLO']);
+  assert.deepEqual(st.text, ['HELLO', '08:03']);
+  assert.equal(st.glass, true, '透過ウィンドウのボタンは単体アプリだけ');
+  await page.selectOption('#ov-scene', '');
+  await page.uncheck('#ov-clock');
+  await page.fill('#ov-text', '');
+});
+
 test('テロップ：Q で表示・もう一度で消える／空のテロップは表示しない', async () => {
   const actions = { 20: [['toggleMessage', 0]], 80: [['toggleMessage', 0]], 120: [['toggleMessage', 1]] };
   const r = await run({ samples: 'demo', seconds: 2.5, sceneId: 'stars', settings: Object.assign({}, BASE, { messages: ['テスト', '', ''] }), grid: [1, 3], actions });
@@ -137,7 +184,56 @@ test('PC で再生中の音：音声が共有されなかったときは手順�
   await page.check('input[name=src][value=display]');
   await page.click('#btn-start');
   await page.waitForFunction(() => VJ.app.engine.status === 'error', null, { timeout: 15000 });
-  assert.match(await page.textContent('#audio-status'), /システム音声を共有/);
+  assert.match(await page.textContent('#audio-status'), /システムの音声を含めて共有する/);
+});
+
+test('PC で再生中の音：AudioContext を使わずにトラックから直接読む（出力デバイスを開かない）。止められていたら直し方を表示', async () => {
+  // Windows の Chrome は、同じ Chrome が音の出力デバイスを開いたあとはシステム音声を取り込めない（実機で確認）。
+  // AudioContext は動かすだけで出力デバイスを開くので、この入力では作らない
+  const p = await openApp(browser, DIST, 'test=1', { width: 320, height: 180 });
+  const pg = p.page;
+  // 共有の代わり：左だけ 440Hz の音声つき。getSettings は本物のシステム音声と同じ deviceId
+  await pg.evaluate(() => {
+    window.__muted = false;
+    navigator.mediaDevices.getDisplayMedia = async () => {
+      const ac = new AudioContext(), dst = ac.createMediaStreamDestination(), osc = ac.createOscillator(), g = ac.createGain(), mg = ac.createChannelMerger(2);
+      osc.frequency.value = 440; g.gain.value = 0.25;
+      osc.connect(g); g.connect(mg, 0, 0); mg.connect(dst); osc.start();
+      const s = document.createElement('canvas').captureStream(1);
+      const tr = dst.stream.getAudioTracks()[0];
+      Object.defineProperty(tr, 'muted', { get: () => window.__muted });
+      tr.getSettings = () => ({ deviceId: 'loopback', channelCount: 2, sampleRate: ac.sampleRate });
+      s.addTrack(tr);
+      return s;
+    };
+    VJ.panel.toggle(true);
+  });
+  await pg.check('input[name=src][value=display]');
+  await pg.click('#btn-start');
+  await pg.waitForFunction(() => VJ.app.engine.status === 'running', null, { timeout: 15000 });
+  assert.equal(await pg.evaluate(() => VJ.app.engine.ctx), null, 'AudioContext を作らない');
+  // 音が解析まで届く：左のメーターだけ振れる。サンプルは実時間どおりに進む（間引かれない・途切れない）
+  await pg.waitForFunction(() => VJ.app.engine.updateMeters().l > -30, null, { timeout: 10000 });
+  const r = await pg.evaluate(async () => {
+    const fx = VJ.app.extractor, e = VJ.app.engine, s0 = fx.sampleCount, t0 = performance.now(), g0 = e.diag.gaps;
+    await new Promise((res) => setTimeout(res, 2000));
+    const m = e.updateMeters();
+    return { rate: (fx.sampleCount - s0) / e.sampleRate / ((performance.now() - t0) / 1000), l: m.l, r: m.r, gaps: e.diag.gaps - g0, level: VJ.app.lastFeatures.level, sr: e.sampleRate };
+  });
+  assert.ok(r.rate > 0.97 && r.rate < 1.03 && r.gaps === 0, 'サンプルが実時間どおりに届く ' + JSON.stringify(r));
+  assert.ok(r.l > -20 && r.r < -60 && r.level > 0, '左だけ音がある ' + JSON.stringify(r));
+  // 「右だけ」を選ぶと解析には無音が渡る（メーターは左右とも元の音のまま）
+  await pg.evaluate(() => VJ.app.engine.setChannel('right'));
+  await pg.waitForFunction(() => VJ.app.lastFeatures.level < 0.02, null, { timeout: 10000 });
+  await pg.evaluate(() => VJ.app.engine.setChannel('mix'));
+  // システム音声のトラックが muted のまま → 原因と直し方
+  await pg.evaluate(() => { window.__muted = true; VJ.app.engine.stream.getAudioTracks()[0].onmute(); });
+  await pg.waitForFunction(() => /PC の音が届いていません/.test(document.getElementById('audio-status').textContent), null, { timeout: 10000 });
+  assert.match(await pg.getAttribute('#audio-status', 'class'), /warn/);
+  // ほかの入力に切り替えると、いつもの AudioContext の経路に戻る
+  await pg.evaluate(() => VJ.app.startAudio({ source: 'demo', monitor: false }));
+  assert.equal(await pg.evaluate(() => !!VJ.app.engine.ctx && VJ.app.engine._tap === null && VJ.app.engine.status), 'running');
+  await pg.close();
 });
 
 test('フレームレート上限 30fps で描画が間引かれる（解析は毎フレーム）', async () => {

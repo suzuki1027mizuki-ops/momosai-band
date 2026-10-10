@@ -47,7 +47,21 @@
     for (const [k, v] of Object.entries(s.panelFold || {})) if (/^[1-9]$/.test(k) && v === true) pf[k] = true;
     s.panelFold = pf;
     s.flashLimit = Math.max(0, Math.min(30, Math.round(s.flashLimit)));
-    s.intensity = Math.max(0, Math.min(3, Math.round(s.intensity)));
+    s.intensity = Math.max(-1, Math.min(3, Math.round(s.intensity))); // -1 = 自動
+    // オーバーレイ：無い項目・型の違う項目は既定値に（あとから増えた項目が古い設定に無くても動くように）
+    const od = VJ.defaultSettings.overlay, ov = {};
+    for (const k of Object.keys(od)) ov[k] = isObj(s.overlay) && typeof s.overlay[k] === typeof od[k] && (typeof od[k] !== 'number' || isFinite(s.overlay[k])) ? s.overlay[k] : od[k];
+    const pick = (v, list, d) => (list.includes(v) ? v : d);
+    ov.imageFit = pick(ov.imageFit, ['contain', 'cover', 'stretch'], od.imageFit);
+    ov.imageBlend = pick(ov.imageBlend, ['normal', 'add', 'screen'], od.imageBlend);
+    ov.sceneBlend = pick(ov.sceneBlend, ['screen', 'add'], od.sceneBlend);
+    ov.corner = pick(ov.corner, ['tl', 'tr', 'bl', 'br'], od.corner);
+    ov.imageOpacity = Math.max(0, Math.min(1, ov.imageOpacity));
+    ov.sceneOpacity = Math.max(0, Math.min(1, ov.sceneOpacity));
+    ov.textOpacity = Math.max(0, Math.min(1, ov.textOpacity));
+    ov.textSize = Math.max(0.5, Math.min(2, ov.textSize));
+    if (!/^data:image\//.test(ov.image)) ov.image = '';
+    s.overlay = ov;
     if (VJ.bands) VJ.bands.ensure(s);
     return s;
   }
