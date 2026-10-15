@@ -273,8 +273,9 @@ export function lanAddresses() {
 
 /**
  * ブリッジを起動する。
- * @param {{port?: number, oscPort?: number|false, host?: string, oscHost?: string, pin?: string, log?: (msg: string) => void}} opts
+ * @param {{port?: number, oscPort?: number|false, host?: string, oscHost?: string, pin?: string, lockMs?: number, log?: (msg: string) => void}} opts
  *   oscHost：OSC を受ける相手。既定 127.0.0.1（この PC のソフトからだけ）。LAN の照明卓から受けるときは '0.0.0.0'
+ *   lockMs：暗証番号を 10 回続けて間違えたときに受け付けない時間（既定 1 分。テスト用に短くできる）
  *   port / oscPort に 0 を渡すと空いている番号を使う（テスト用）。oscPort: false で OSC 受信なし
  * @returns Promise<{ port, oscPort, pin, urls, close(), stats }>
  */
@@ -287,7 +288,13 @@ export async function startBridge(opts = {}) {
   // VJ 本体の鍵：/vj?k=… でつないだ VJ 本体にだけ暗証番号と QR を渡す（Origin: null は、ファイルから開いた VJ 本体だけでなく
   // ほかのサイトの「サンドボックスの枠」からも来るので、Origin だけでは見分けられない）
   const vjKey = String(opts.vjKey || crypto.randomBytes(12).toString('hex'));
-  const keyOk = (k) => typeof k === 'string' && k.length === vjKey.length && crypto.timingSafeEqual(Buffer.from(k), Buffer.from(vjKey));
+  // 長さはバイト数で比べる（文字数が同じでも、全角などが入るとバイト数が違い、timingSafeEqual が例外を投げる）
+  const vjKeyBuf = Buffer.from(vjKey);
+  const keyOk = (k) => {
+    if (typeof k !== 'string') return false;
+    const b = Buffer.from(k);
+    return b.length === vjKeyBuf.length && crypto.timingSafeEqual(b, vjKeyBuf);
+  };
   const log = opts.log || (() => {});
   const remoteHtml = fs.readFileSync(path.join(HERE, 'remote.html'));
   const vjs = new Set(), phones = new Set();
@@ -297,7 +304,10 @@ export async function startBridge(opts = {}) {
   let boundPort = port, boundOsc = oscPort;
   let oscOut = null; // { host, port }
   let art = null; // { host, universe }
-  const fails = new Map(); // IP → 失敗回数（総当たり対策）
+  // 総当たり対策：同じ IP から 10 回続けて間違えたら、しばらく受け付けない（1 分。くり返すたびに倍、最長 15 分）。
+  // 時間がたてば戻る（本番中にブリッジ＝単体アプリを起動し直さなくてよいように）。正しい番号で入れたら数え直す
+  const LOCK_TRIES = 10, lockMs = opts.lockMs ?? 60000, LOCK_MAX = 15;
+  const fails = new Map(); // IP → { n: 続けて間違えた回数, until: この時刻まで受け付けない, locks: 止めた回数 }
 
   const udp = dgram.createSocket({ type: 'udp4', reuseAddr: true });
   udp.on('error', (e) => log('UDP エラー: ' + e.message));
@@ -320,7 +330,7 @@ export async function startBridge(opts = {}) {
       await new Promise((res, rej) => { udp.once('error', rej); udp.bind(oscPort, oscHost, () => { udp.off('error', rej); res(); }); });
     } catch (e) {
       cleanup();
-      throw new Error(`OSC の受信ポート ${oscPort} を使えません（ほかのソフトが使っている？）: ${e.message}`);
+      throw new Error(`OSC の受信ポート ${oscPort} を使えません（ほかのソフトが使っている？）: ${e.message}`, { cause: e });
     }
     boundOsc = udp.address().port;
   }
@@ -371,7 +381,11 @@ ${list.length ? list.map((u) => `<figure style="display:inline-block;margin:10px
     }
   });
 
+  // 1 本のおかしな接続で、ブリッジ全体が落ちないように（例外は、その接続を切るだけにする）
   server.on('upgrade', (req, socket) => {
+    try { onUpgrade(req, socket); } catch (e) { log('接続を処理できませんでした: ' + e.message); try { socket.destroy(); } catch (e2) { /* noop */ } }
+  });
+  function onUpgrade(req, socket) {
     // 断る前に相手が切っても（RST）ブリッジが落ちないように、最初にエラーを受ける
     socket.on('error', () => {});
     const [url, query] = (req.url || '').split('?');
@@ -432,8 +446,10 @@ ${list.length ? list.map((u) => `<figure style="display:inline-block;margin:10px
       ws.onmessage = (m) => {
         if (!ws.authed) {
           if (m.t !== 'auth') return;
-          if ((fails.get(addr) || 0) >= 10) { ws.send({ t: 'auth', ok: false, locked: true }); ws.close(1008); return; }
+          const now = Date.now(), f = fails.get(addr) || { n: 0, until: 0, locks: 0 };
+          if (f.until > now) { ws.send({ t: 'auth', ok: false, locked: true, wait: Math.ceil((f.until - now) / 1000) }); ws.close(1008); return; }
           if (String(m.pin) === pin) {
+            fails.delete(addr);
             ws.authed = true;
             ws.send({ t: 'auth', ok: true });
             if (lastThumbs) ws.send({ t: 'thumbs', d: lastThumbs });
@@ -441,9 +457,15 @@ ${list.length ? list.map((u) => `<figure style="display:inline-block;margin:10px
             log(`スマホが接続しました（${addr}）`);
             broadcastInfo();
           } else {
-            fails.set(addr, (fails.get(addr) || 0) + 1);
             stats.authFail++;
-            ws.send({ t: 'auth', ok: false });
+            f.n++;
+            if (f.n >= LOCK_TRIES) {
+              f.n = 0;
+              f.until = now + lockMs * Math.min(LOCK_MAX, 2 ** f.locks);
+              f.locks++;
+            }
+            fails.set(addr, f);
+            if (f.until > now) { ws.send({ t: 'auth', ok: false, locked: true, wait: Math.ceil((f.until - now) / 1000) }); ws.close(1008); } else ws.send({ t: 'auth', ok: false });
           }
           return;
         }
@@ -460,13 +482,13 @@ ${list.length ? list.map((u) => `<figure style="display:inline-block;margin:10px
         broadcastInfo();
       };
     }
-  });
+  }
 
   try {
     await new Promise((res, rej) => { server.once('error', rej); server.listen(port, host, () => { server.off('error', rej); res(); }); });
   } catch (e) {
     cleanup();
-    throw new Error(`ポート ${port} を使えません（ブリッジが二重に起動している？）: ${e.message}`);
+    throw new Error(`ポート ${port} を使えません（ブリッジが二重に起動している？）: ${e.message}`, { cause: e });
   }
   boundPort = server.address().port;
   const ka = setInterval(() => { const now = Date.now(); for (const c of [...vjs, ...phones]) c.keepAlive(now, IDLE_MS); }, 2000);
