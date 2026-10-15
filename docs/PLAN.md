@@ -348,3 +348,22 @@
 | カメラ映像をメディアに | `src/gfx/media.js` に `camera`：`getUserMedia`（映像だけ・1280×720・30fps を希望）を、動画・取り込みと同じ `<video>` → テクスチャの道で。左右反転は仕上げパスの貼る範囲の幅を負にする（シェーダは変えない）。カメラの一覧・開く・止めるは描画しているウィンドウで（2 画面のときは `app.mediaCall` で出力ウィンドウに頼む。許可もそちら）。抜けたとき（track の `ended`）は少し待って開き直す |
 | 曲ごとのメディア | メディアの一覧（`src/show/medialib.js`、設定の `mediaLib`）と、セットリストの `m:名前`。どれを出すかは `ShowController.effectiveMedia()` が「曲の指定 → 一覧から選んだもの → 設定のメディア」の順で決め、`media.js` はそれが変わったら用意し直す（設定は書き換えない＝2 画面でも同じ答え）。曲の途中で設定のメディアが変わった（目印の文字列で見る）・一覧の ▶・キューで選んだときは、次の曲まで曲の指定より優先 |
 | キュー | `src/show/cues.js`（形・いまの状態から作る・設定の部分を変える）と `src/ui/cuesui.js`（ボタン・編集・出す）。設定の部分（メディア・重ねるシーン）は設定を持つウィンドウで変え、シーン・色は ShowController へ。2 画面の出力ウィンドウで受けたキー・MIDI・スマホ・OSC のキューは操作ウィンドウへ渡す（`{ t: 'cue' }`） |
+
+## 18. 拡張（レビューで見つけた不具合・使い勝手・開発まわり・パネルの見やすさ）
+
+| 要望 | 対応 |
+|---|---|
+| レビューで見つけた不具合を直す | メディアの保存の成否（`mediastore.js` の `put`）・ブリッジの鍵の比べ方（バイト数で。接続の処理全体も例外で落ちないように）・暗証番号のロック（時間で戻る。くり返すと倍）。ISSUES の E94〜E96 |
+| 曲のメディアの使い勝手 | `ShowController`：`m:off` の曲で何も出ていないときの O は 1 回で出す。消してあったメディアを曲の指定で出したら（`_songOn`）、指定の無い曲・開演前・終演・バンドの切替で消した状態に戻す。その間に操作者が出す・消す・選ぶをしたら戻さない |
+| 設定の保存を軽く | ロゴ・メディアの画像は設定と別の場所（`…/logo`・`…/ovimg`）に、変わったときだけ書く（出演バンドの一覧と同じ考え方）。古い保存はそのまま読めて、次の保存で分ける |
+| 操作パネルが見づらい | 背景を不透明に・画面で読みやすい書体を先に（BIZ UD ゴシック / メイリオ）・①〜⑦ を枠で囲む・つまみの行を 3 列にそろえる・選択肢をボタンの形に・説明の文は左に線を付けて控えめに（「説明を隠す」＝`panelHelp`）。パネルの上に、スクロールしても残る「いまの状態」と目次（`sections.js` の `go`・`mark`、`panel.js` の `renderStrip`）。窓が低い（高さ 620px 未満）ときは、場所を取らないよう一緒に流す |
+| 開発まわり | E2E・ツールは、Playwright の Chromium が無ければインストール済みの Chrome・Edge で（`test/helpers/browser.mjs`。`VJ_BROWSER_CHANNEL` で指定も）。ESLint（`eslint.config.mjs`、`npm run lint`）。GitHub Actions（`.github/workflows/test.yml`） |
+
+## 19. 拡張（運用・安全：プロファイル・単体アプリの許可・設定ファイル）
+
+| 要望 | 対応 |
+|---|---|
+| Chrome のプロファイルがふくらむ・同期される | 場所はフォルダの中のまま（フォルダごとコピーで設定が移る、を残す）。`launcher/` の起動スクリプトに `--disable-extensions`・`--disable-component-update`・`--disable-default-apps`・キャッシュの上限と、`--disable-features` に `OptimizationHints`（端末内のモデルを止めるのはこれ。`--disable-background-networking` では止まらなかった＝実測）。Safe Browsing の更新は止めない。前の版の部品は起動時に消す（Windows は `lockfile`、Mac は `SingletonLock` があれば触らない）。`start-windows.bat --print` で、起動せずに中身を確かめられる。同期されるフォルダの見分けは `VJ.compat.syncedPath` |
+| 単体アプリの許可を絞る | `app/main.cjs`：許可・画面の取り込み・ページの移動・新しいウィンドウを、アプリのページ（`isAppUrl`：URL をファイルの場所に直して比べる）にだけ |
+| YouTube・ニコニコの埋め込みをやめる | 一度は、YouTube のエラー 153（Referer が無い）を、この PC の中の中継ページで入れ子にして回避した。その後、YouTube API の規約（III.I.6 プレーヤーの改変・III.I.7 映像の改変・III.I.4 リンクを効かなくする・III.I.21 規約を回避する入れ子の iframe）に触れるおそれが強いと分かり、埋め込み（`media.js` の web）・中継（`bridge/embed.html`・`/embed`・`launcher/relay.ps1`）・単体アプリの Referer を外した。古い設定の `mediaKind: web`・一覧の web は読み込み時に画像に戻す・外し、`storage.takeNotes()` で一度だけパネルの上に知らせる |
+| 設定ファイルを項目ごとに確かめる | `src/core/storage.js`：`SHAPED`（output・net・osc・dmx）は項目ごとに型を見て重ねる。`sanitize` で数値の範囲・選択肢・ロゴ・色を直す |
