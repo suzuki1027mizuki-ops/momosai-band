@@ -4,7 +4,7 @@
 (function (VJ) {
   'use strict';
   const $ = (id) => document.getElementById(id);
-  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const { html, raw } = VJ.dom; // 値を必ずエスケープする HTML（dom.js）
   const t = (...a) => VJ.t(...a);
   const KIND_TAG = { image: 'IMG', video: 'VIDEO', camera: 'CAM' };
 
@@ -66,22 +66,19 @@
       const sig = JSON.stringify([list, cur, ui._del, VJ.i18n.lang]);
       if (!force && sig === ui._sig) return;
       ui._sig = sig;
-      let html = '';
-      list.forEach((x, i) => {
-        const thumb = x.kind === 'image' ? `<img data-key="${esc(x.key)}" alt="">` : `<span class="ml-thumb" style="display:flex;align-items:center;justify-content:center;font:10px var(--mono);color:var(--muted)">${KIND_TAG[x.kind]}</span>`;
-        html += `<div class="ml-row${cur === x.id ? ' on' : ''}"><span class="ml-no">m${i + 1}</span>${thumb}`
-          + `<input type="text" data-f="name" data-id="${esc(x.id)}" value="${esc(x.name)}" maxlength="60" spellcheck="false" data-i18n-skip aria-label="${esc(t('名前'))}">`
-          + `<span class="ml-kind">${esc(VJ.panel.mediaKindName(x.kind))}</span>`
-          + `<button data-act="show" data-id="${esc(x.id)}" title="${esc(t('出す'))}">▶</button>`
-          + `<button data-act="up" data-id="${esc(x.id)}" title="${esc(t('上へ'))}"${i === 0 ? ' disabled' : ''}>▲</button>`
-          + `<button data-act="down" data-id="${esc(x.id)}" title="${esc(t('下へ'))}"${i === list.length - 1 ? ' disabled' : ''}>▼</button>`
-          + `<button data-act="del" data-id="${esc(x.id)}" title="${esc(t('消す'))}">✕</button></div>`;
-        if (ui._del === x.id) {
-          html += `<div class="row sl-confirm"><span>${esc(t('一覧から消しますか？（曲・キューの指定は「見つからない」になります）'))}</span>`
-            + `<button data-act="del-yes" data-id="${esc(x.id)}">${esc(t('消す'))}</button><button data-act="del-no" data-id="${esc(x.id)}">${esc(t('やめる'))}</button></div>`;
-        }
+      const rows = list.map((x, i) => {
+        const thumb = x.kind === 'image' ? html`<img data-key="${x.key}" alt="">` : html`<span class="ml-thumb" style="display:flex;align-items:center;justify-content:center;font:10px var(--mono);color:var(--muted)">${KIND_TAG[x.kind]}</span>`;
+        return html`<div class="ml-row${cur === x.id ? ' on' : ''}"><span class="ml-no">m${i + 1}</span>${thumb}`
+          + html`<input type="text" data-f="name" data-id="${x.id}" value="${x.name}" maxlength="60" spellcheck="false" data-i18n-skip aria-label="${t('名前')}">`
+          + html`<span class="ml-kind">${VJ.panel.mediaKindName(x.kind)}</span>`
+          + html`<button data-act="show" data-id="${x.id}" title="${t('出す')}">▶</button>`
+          + html`<button data-act="up" data-id="${x.id}" title="${t('上へ')}"${i === 0 ? raw(' disabled') : ''}>▲</button>`
+          + html`<button data-act="down" data-id="${x.id}" title="${t('下へ')}"${i === list.length - 1 ? raw(' disabled') : ''}>▼</button>`
+          + html`<button data-act="del" data-id="${x.id}" title="${t('消す')}">✕</button></div>`
+          + (ui._del !== x.id ? '' : html`<div class="row sl-confirm"><span>${t('一覧から消しますか？（曲・キューの指定は「見つからない」になります）')}</span>`
+            + html`<button data-act="del-yes" data-id="${x.id}">${t('消す')}</button><button data-act="del-no" data-id="${x.id}">${t('やめる')}</button></div>`);
       });
-      el.innerHTML = html || `<div class="hint">${esc(t('まだ登録されていません'))}</div>`;
+      VJ.dom.set(el, rows.length ? rows.map(raw) : html`<div class="hint">${t('まだ登録されていません')}</div>`);
       for (const img of el.querySelectorAll('img[data-key]')) ui._thumb(img.dataset.key).then((u) => { if (u) img.src = u; });
     },
 

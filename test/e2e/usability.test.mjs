@@ -193,7 +193,8 @@ test('パネルの折りたたみ：見出しを押すと開閉・再読み込�
   await page.keyboard.press('Space');
   assert.deepEqual(await page.evaluate(() => window.__fl), ['key'], 'Space でフラッシュ');
   assert.equal(await page.isVisible('#setlist'), false, 'Space で見出しが開かない');
-  await page.waitForTimeout(400); // 保存（0.3 秒後）
+  // 保存（0.3 秒後。PC が重いと遅れるので、決め打ちで待たずに保存されたのを確かめる）
+  await page.waitForFunction(() => (JSON.parse(localStorage.getItem('momosai-vj/v1') || '{}').panelFold || {})['3'] === true);
   await page.reload();
   await page.waitForFunction(() => window.VJ && VJ.app && VJ.panel.app);
   assert.equal(await page.isVisible('#setlist'), false, '再読み込みしても閉じたまま');
@@ -248,7 +249,7 @@ test('パネルの上：目次から飛ぶ（閉じていたら開く・いま�
   assert.equal(await page.isVisible('#output-hint'), false);
   assert.ok(await page.isVisible('#audio-status'), '状態の表示は隠さない');
   assert.match(await page.textContent('#psec-help'), /説明を表示/);
-  await page.waitForTimeout(400); // 保存（0.3 秒後）
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('momosai-vj/v1') || '{}').panelHelp === false); // 保存されてから
   await page.reload();
   await page.waitForFunction(() => window.VJ && VJ.app && VJ.panel.app);
   assert.equal(await page.isVisible('#output-hint'), false, '再読み込みしても隠したまま');
@@ -284,7 +285,7 @@ test('フラッシュの上限：推奨を超えると警告（パネル・本�
   await page.selectOption('#opt-flashlimit', '3');
   assert.equal(await page.isVisible('#flashlimit-warn'), false);
   await page.selectOption('#opt-intensity', '3');
-  await page.waitForTimeout(400);
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('momosai-vj/v1') || '{}').intensity === 3); // 保存されてから
   await page.reload();
   await page.waitForFunction(() => window.VJ && VJ.app && VJ.panel.app);
   assert.equal(await page.inputValue('#opt-intensity'), '3');

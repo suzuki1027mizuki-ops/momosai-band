@@ -4,7 +4,7 @@
 (function (VJ) {
   'use strict';
   const $ = (id) => document.getElementById(id);
-  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const { html, raw } = VJ.dom; // 値を必ずエスケープする HTML（dom.js）
   const t = (...a) => VJ.t(...a);
 
   const ui = {
@@ -96,9 +96,9 @@
       const gsig = JSON.stringify([list, s.mediaLib, VJ.i18n.lang]);
       if (force || gsig !== ui._gridSig) {
         ui._gridSig = gsig;
-        $('cue-grid').innerHTML = list.map((c, i) => `<button data-cue="${i}" title="${esc(VJ.cues.describe(s, c))}"><span class="ck">${i < 9 ? 'Alt+' + (i + 1) : ''}</span>`
-          + `<span class="cn" data-i18n-skip>${esc(c.name || t('キュー {0}', i + 1))}</span><span class="cd">${esc(VJ.cues.describe(s, c))}</span></button>`).join('')
-          || `<div class="hint">${esc(t('まだありません。下の「キューを作る・直す」で、いまの状態を入れます'))}</div>`;
+        VJ.dom.set($('cue-grid'), list.length ? list.map((c, i) => html`<button data-cue="${i}" title="${VJ.cues.describe(s, c)}"><span class="ck">${i < 9 ? 'Alt+' + (i + 1) : ''}</span>`
+          + html`<span class="cn" data-i18n-skip>${c.name || t('キュー {0}', i + 1)}</span><span class="cd">${VJ.cues.describe(s, c)}</span></button>`).map(raw)
+          : html`<div class="hint">${t('まだありません。下の「キューを作る・直す」で、いまの状態を入れます')}</div>`);
       }
       const ed = $('cue-edit'), ae = document.activeElement;
       if (!force && ae && ed.contains(ae) && ae.matches('input, select')) return;
@@ -106,28 +106,26 @@
       if (!force && sig === ui._sig) return;
       ui._sig = sig;
       const scenes = VJ.scenes.list.filter((d) => d.id !== 'test');
-      const sceneOpts = (sel, none) => `<option value="">${esc(none)}</option>` + scenes.map((d) => `<option value="${d.id}"${d.id === sel ? ' selected' : ''}>${esc((d.key ? d.key + ' ' : '') + VJ.sceneName(d))}</option>`).join('');
-      const ovOpts = (sel) => `<option value="">${esc(t('重ね：そのまま'))}</option><option value="off"${sel === 'off' ? ' selected' : ''}>${esc(t('重ね：やめる'))}</option>`
-        + scenes.filter((d) => !d.hidden && d.id !== 'title').map((d) => `<option value="${d.id}"${d.id === sel ? ' selected' : ''}>${esc(t('重ね：{0}', VJ.sceneName(d)))}</option>`).join('');
-      const palOpts = (sel) => `<option value="-1">${esc(t('色：そのまま'))}</option>` + VJ.palettes.map((p, k) => `<option value="${k}"${k === sel ? ' selected' : ''}>${esc(t(p.name))}</option>`).join('');
+      const sel = (on) => (on ? raw(' selected') : '');
+      const sceneOpts = (v, none) => html`<option value="">${none}</option>${scenes.map((d) => html`<option value="${d.id}"${sel(d.id === v)}>${(d.key ? d.key + ' ' : '') + VJ.sceneName(d)}</option>`)}`;
+      const ovOpts = (v) => html`<option value="">${t('重ね：そのまま')}</option><option value="off"${sel(v === 'off')}>${t('重ね：やめる')}</option>`
+        + html`${scenes.filter((d) => !d.hidden && d.id !== 'title').map((d) => html`<option value="${d.id}"${sel(d.id === v)}>${t('重ね：{0}', VJ.sceneName(d))}</option>`)}`;
+      const palOpts = (v) => html`<option value="-1">${t('色：そのまま')}</option>${VJ.palettes.map((p, k) => html`<option value="${k}"${sel(k === v)}>${t(p.name)}</option>`)}`;
       const lib = VJ.mediaLib.list(s);
-      const mediaOpts = (sel) => {
-        let h = `<option value="">${esc(t('メディア：そのまま'))}</option><option value="on"${sel === 'on' ? ' selected' : ''}>${esc(t('メディア：出す'))}</option><option value="off"${sel === 'off' ? ' selected' : ''}>${esc(t('メディア：消す'))}</option>`;
-        h += lib.map((m, k) => `<option value="${esc(m.id)}"${m.id === sel ? ' selected' : ''}>m${k + 1} ${esc(m.name || VJ.panel.mediaKindName(m.kind))}</option>`).join('');
-        if (sel && sel !== 'on' && sel !== 'off' && !VJ.mediaLib.byId(s, sel)) h += `<option value="${esc(sel)}" selected>${esc(t('（消えたメディア）'))}</option>`;
-        return h;
-      };
-      ed.innerHTML = list.map((c, i) => `<div class="cue-ed">`
-        + `<div class="row"><span class="ml-no">${i + 1}</span><input type="text" data-cf="name" data-i="${i}" value="${esc(c.name)}" maxlength="40" spellcheck="false" data-i18n-skip aria-label="${esc(t('キューの名前'))}">`
-        + `<button data-act="go" data-i="${i}" title="${esc(t('出す'))}">▶</button>`
-        + `<button data-act="up" data-i="${i}" title="${esc(t('上へ'))}"${i === 0 ? ' disabled' : ''}>▲</button>`
-        + `<button data-act="down" data-i="${i}" title="${esc(t('下へ'))}"${i === list.length - 1 ? ' disabled' : ''}>▼</button>`
-        + `<button data-act="del" data-i="${i}" title="${esc(t('消す'))}">✕</button></div>`
-        + `<div class="row"><select data-cf="scene" data-i="${i}">${sceneOpts(c.scene, t('シーン：そのまま'))}</select><select data-cf="palette" data-i="${i}">${palOpts(c.palette)}</select></div>`
-        + `<div class="row"><select data-cf="media" data-i="${i}">${mediaOpts(c.media)}</select><select data-cf="ovScene" data-i="${i}">${ovOpts(c.ovScene)}</select></div>`
-        + `<div class="row"><button data-act="capture" data-i="${i}">${esc(t('いまの状態を入れる'))}</button></div>`
-        + (ui._del === i ? `<div class="row sl-confirm"><span>${esc(t('このキューを消しますか？'))}</span><button data-act="del-yes" data-i="${i}">${esc(t('消す'))}</button><button data-act="del-no" data-i="${i}">${esc(t('やめる'))}</button></div>` : '')
-        + '</div>').join('');
+      const mediaOpts = (v) => html`<option value="">${t('メディア：そのまま')}</option><option value="on"${sel(v === 'on')}>${t('メディア：出す')}</option><option value="off"${sel(v === 'off')}>${t('メディア：消す')}</option>`
+        + html`${lib.map((m, k) => html`<option value="${m.id}"${sel(m.id === v)}>m${k + 1} ${m.name || VJ.panel.mediaKindName(m.kind)}</option>`)}`
+        + (v && v !== 'on' && v !== 'off' && !VJ.mediaLib.byId(s, v) ? html`<option value="${v}" selected>${t('（消えたメディア）')}</option>` : '');
+      VJ.dom.set(ed, list.map((c, i) => html`<div class="cue-ed">`
+        + html`<div class="row"><span class="ml-no">${i + 1}</span><input type="text" data-cf="name" data-i="${i}" value="${c.name}" maxlength="40" spellcheck="false" data-i18n-skip aria-label="${t('キューの名前')}">`
+        + html`<button data-act="go" data-i="${i}" title="${t('出す')}">▶</button>`
+        + html`<button data-act="up" data-i="${i}" title="${t('上へ')}"${i === 0 ? raw(' disabled') : ''}>▲</button>`
+        + html`<button data-act="down" data-i="${i}" title="${t('下へ')}"${i === list.length - 1 ? raw(' disabled') : ''}>▼</button>`
+        + html`<button data-act="del" data-i="${i}" title="${t('消す')}">✕</button></div>`
+        + html`<div class="row"><select data-cf="scene" data-i="${i}">${sceneOpts(c.scene, t('シーン：そのまま'))}</select><select data-cf="palette" data-i="${i}">${palOpts(c.palette)}</select></div>`
+        + html`<div class="row"><select data-cf="media" data-i="${i}">${raw(mediaOpts(c.media))}</select><select data-cf="ovScene" data-i="${i}">${raw(ovOpts(c.ovScene))}</select></div>`
+        + html`<div class="row"><button data-act="capture" data-i="${i}">${t('いまの状態を入れる')}</button></div>`
+        + (ui._del === i ? html`<div class="row sl-confirm"><span>${t('このキューを消しますか？')}</span><button data-act="del-yes" data-i="${i}">${t('消す')}</button><button data-act="del-no" data-i="${i}">${t('やめる')}</button></div>` : '')
+        + '</div>').map(raw));
       $('btn-cue-add').disabled = list.length >= VJ.cues.MAX;
     },
   };

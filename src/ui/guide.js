@@ -2,7 +2,7 @@
 (function (VJ) {
   'use strict';
   const $ = (id) => document.getElementById(id);
-  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const { html, raw } = VJ.dom; // 値を必ずエスケープする HTML（dom.js）
   const t = (...a) => VJ.t(...a);
   const ICON = { ok: '✅', info: '💡', warn: '⚠️', bad: '❌' };
 
@@ -64,11 +64,11 @@
       $('btn-guide').classList.toggle('on', !!app.settings.guide);
       if (el.hidden) return;
       const next = guide.done.indexOf(false);
-      el.innerHTML = `<div class="g-head"><b>${esc(t('はじめてのガイド'))}</b><span class="hint">${esc(t('{0} / {1} 完了', guide.done.filter(Boolean).length, STEPS.length))}</span>`
-        + `<button id="guide-close" title="${esc(t('ガイドを閉じる（右上の ? でまた開く）'))}">×</button></div><ol>`
-        + STEPS.map(([title, desc, sec], i) => `<li data-sec="${sec}" class="${guide.done[i] ? 'done' : i === next ? 'next' : ''}">`
-          + `<span class="g-mark">${guide.done[i] ? '✓' : i + 1}</span><span><b>${esc(t(title))}</b><br><span class="hint">${esc(t(desc))}</span></span></li>`).join('')
-        + '</ol>';
+      VJ.dom.set(el, raw(html`<div class="g-head"><b>${t('はじめてのガイド')}</b><span class="hint">${t('{0} / {1} 完了', guide.done.filter(Boolean).length, STEPS.length)}</span>`
+        + html`<button id="guide-close" title="${t('ガイドを閉じる（右上の ? でまた開く）')}">×</button></div><ol>`
+        + html`${STEPS.map(([title, desc, sec], i) => html`<li data-sec="${sec}" class="${guide.done[i] ? 'done' : i === next ? 'next' : ''}">`
+          + html`<span class="g-mark">${guide.done[i] ? '✓' : i + 1}</span><span><b>${t(title)}</b><br><span class="hint">${t(desc)}</span></span></li>`).map(raw)}`
+        + '</ol>'));
       guide._sig = guide.done.join();
     },
 
@@ -180,8 +180,7 @@
       const items = guide.items();
       const bad = items.filter((i) => i.level === 'bad').length, warn = items.filter((i) => i.level === 'warn').length;
       const head = bad ? t('要対応 {0} 件', bad) + (warn ? ' / ' + t('注意 {0} 件', warn) : '') : warn ? t('注意 {0} 件', warn) : t('準備 OK');
-      $('precheck').innerHTML = `<div class="sc-step ${bad ? 'bad' : warn ? 'warn' : 'ok'}">${esc(head)}</div>`
-        + `<ul class="sc-items">${items.map((i) => `<li class="${i.level}"><span>${ICON[i.level]}</span><span>${esc(i.text)}</span></li>`).join('')}</ul>`;
+      VJ.dom.set($('precheck'), html`<div class="sc-step ${bad ? 'bad' : warn ? 'warn' : 'ok'}">${head}</div><ul class="sc-items">${items.map((i) => html`<li class="${i.level}"><span>${ICON[i.level]}</span><span>${i.text}</span></li>`)}</ul>`);
     },
   };
 
