@@ -378,7 +378,13 @@
         const iv = [];
         for (let k = 1; k < recs.length; k++) iv.push(recs[k][0] - recs[k - 1][0]);
         iv.sort((a, b) => a - b);
-        return { n: lat.length, expected: s.onsets.kick.length, median: lat[Math.floor(lat.length / 2)], mean, sd, max: lat[lat.length - 1], frameInterval: iv[Math.floor(iv.length / 2)], diag: engine.diagnostics() };
+        // 描画の間隔の中央値・90% 点・50ms（3 フレーム）を超えた数（PC が重くて描画が詰まっていたかの手がかり。
+        // ヘッドレスのブラウザは 2 フレームに 1 回の間隔（33ms）がふつうに混じるので、それより長いものを数える）
+        return {
+          n: lat.length, expected: s.onsets.kick.length, median: lat[Math.floor(lat.length / 2)], mean, sd, max: lat[lat.length - 1],
+          frameInterval: iv[Math.floor(iv.length / 2)], frameP90: iv[Math.floor(iv.length * 0.9)], longFrames: iv.filter((x) => x > 50).length,
+          diag: engine.diagnostics(),
+        };
       },
     };
     return testing;
