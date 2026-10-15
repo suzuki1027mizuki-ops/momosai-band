@@ -2,7 +2,7 @@
  * すべてこの制限器を通す：1 秒に maxPerSec 回まで、最短 minGap 秒間隔。
  * 参考：NHK・民放連「アニメーション等の映像手法に関するガイドライン」/ WCAG 2.3.1（1 秒に 3 回まで）。
  * 上限は設定（flashLimit）で変えられるが、既定と推奨は 3 回。超える設定にするとパネル・本番前チェックで警告する。 */
-(function (VJ) {
+(function (/** @type {VJNamespace} */ VJ) {
   'use strict';
 
   const SAFE = 3; // ガイドラインの上限（1 秒あたり）
