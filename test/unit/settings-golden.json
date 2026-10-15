@@ -1,0 +1,2641 @@
+[
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ],
+   "overlayOn": false,
+   "ovSceneOn": false
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ],
+   "ovSceneOn": false
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": [
+   "web-removed"
+  ]
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": [
+   "web-removed"
+  ]
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "endText": "Thank you! ",
+   "bands": [
+    {}
+   ]
+  },
+  "notes": [
+   "web-removed"
+  ]
+ },
+ {
+  "diff": {
+   "auto": false,
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "scene": "speech",
+    "text": "enttec"
+   },
+   "panelHelp": false
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "videoName": " "
+   },
+   "mediaLib": [
+    {
+     "id": "L1",
+     "name": "",
+     "kind": "camera",
+     "cameraId": "cam",
+     "mirror": true
+    },
+    {
+     "id": "L2",
+     "name": "MV",
+     "kind": "image",
+     "key": "k1"
+    }
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "textSize": 2
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "autoScenes": {
+    "x": true
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "output": {
+    "flipH": true
+   },
+   "bands": [
+    {}
+   ],
+   "cues": [
+    {
+     "name": "A",
+     "scene": "",
+     "palette": -1,
+     "media": "L1",
+     "ovScene": "off"
+    },
+    {
+     "name": "",
+     "scene": "",
+     "palette": -1,
+     "media": "L1",
+     "ovScene": ""
+    },
+    {
+     "name": "",
+     "scene": "",
+     "palette": -1,
+     "media": "",
+     "ovScene": "orb"
+    }
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "midiMap": {
+    "n36": "scene:orb"
+   },
+   "net": {
+    "url": ""
+   },
+   "bands": [
+    {}
+   ],
+   "bandPalette": 0,
+   "cues": [
+    {
+     "name": "A",
+     "scene": "ripple",
+     "palette": -1,
+     "media": "",
+     "ovScene": ""
+    },
+    {
+     "name": "A",
+     "scene": "",
+     "palette": 2,
+     "media": "off",
+     "ovScene": "title"
+    }
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {},
+    {}
+   ],
+   "overlayOn": false,
+   "ovSceneOn": false
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "autoScenes": {
+    "orb": true
+   },
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "sceneOpacity": 1
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "fpsCap": 30,
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "osc": {
+    "host": "cover"
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "videoSound": true
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {},
+    {
+     "bandName": "B",
+     "setlistText": "a | 1 | neon",
+     "logo": "",
+     "profile": "edm",
+     "bandPalette": -1
+    },
+    {
+     "bandName": "A",
+     "setlistText": "1. x",
+     "messages": [
+      "a",
+      "",
+      ""
+     ]
+    }
+   ],
+   "overlay": {
+    "imageOpacity": 0
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bandName": "x",
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "autoScenes": {
+    "ripple": false
+   },
+   "bands": [
+    {}
+   ],
+   "cues": [
+    {
+     "name": "A",
+     "scene": "",
+     "palette": 2,
+     "media": "off",
+     "ovScene": ""
+    }
+   ],
+   "panelFold": {
+    "1": true
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "endText": "x",
+   "customPalette": [
+    "#00F0FF",
+    "#FF00C8",
+    "#ABCDEF",
+    "#FFFFFF"
+   ],
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "videoSound": true
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "gateDb": -20,
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "textSize": 0.5
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "dmx": {
+    "enabled": true
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "dmx": {
+    "count": 8
+   },
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "cameraLabel": "add"
+   }
+  },
+  "notes": [
+   "web-removed"
+  ]
+ },
+ {
+  "diff": {
+   "customPalette": [
+    "#00F0FF",
+    "#FF00C8",
+    "#7A00FF",
+    "#00ff00"
+   ],
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "midiMap": {
+    "n36": "flash",
+    "c7": "scene:orb"
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "videoName": " "
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "autoScenes": {
+    "x": true
+   },
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "text": "up"
+   },
+   "panelHelp": false
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "setlistText": "@band MOMOSAI BAND\n# 書き方: 曲名 | シーン(番号か名前, カンマ区切りで複数) | パレット\n1. オープニング | 1,2 | neon\n2. 疾走チューン | 2,6 | fire\n3. バラード | 4 | ocean\n4. ラストナンバー | 5,3 | sakura\n@end Thank you! ",
+   "messages": [
+    "a",
+    "",
+    ""
+   ],
+   "countdownTo": "auto",
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "autoScenes": {
+    "ripple": true
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "midiMap": {
+    "n36": ""
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bandName": "x",
+   "countdownTo": "rgb",
+   "dmx": {
+    "max": 0
+   },
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "text": "glitch"
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "desynchronized": false,
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ],
+   "overlayOn": false,
+   "ovSceneOn": false
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "videoName": "rgbw"
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "messages": [
+    "",
+    "",
+    "a"
+   ],
+   "midiMap": {
+    "c7": ""
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": [
+   "web-removed"
+  ]
+ },
+ {
+  "diff": {
+   "sensitivity": 5,
+   "countdownTo": "x",
+   "midiMap": {
+    "n36": "scene:orb"
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "sceneOpacity": 1
+   },
+   "cues": [
+    {
+     "name": "",
+     "scene": "",
+     "palette": -1,
+     "media": "",
+     "ovScene": ""
+    },
+    {
+     "name": "A",
+     "scene": "",
+     "palette": -1,
+     "media": "off",
+     "ovScene": ""
+    }
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "dmx": {
+    "host": "off"
+   },
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "song": true
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "countdownTo": "x",
+   "dmx": {
+    "enabled": true
+   },
+   "bands": [
+    {},
+    {
+     "bandName": "B",
+     "setlistText": "1. x",
+     "profile": "auto",
+     "bandPalette": 3,
+     "messages": [
+      "a",
+      "",
+      ""
+     ]
+    },
+    {
+     "bandName": "A",
+     "setlistText": "1. x",
+     "logo": "",
+     "profile": "edm",
+     "bandPalette": -1,
+     "messages": [
+      "a",
+      "",
+      "c"
+     ]
+    },
+    {
+     "bandName": "B",
+     "setlistText": "1. x",
+     "profile": "auto",
+     "bandPalette": 0,
+     "messages": [
+      "a",
+      "",
+      ""
+     ]
+    }
+   ],
+   "bandPalette": 5
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "autoScenes": {
+    "x": true
+   },
+   "bands": [
+    {}
+   ],
+   "panelFold": {
+    "3": true
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "deviceLabel": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+   "dmx": {
+    "count": 30
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ],
+   "overlayOn": false,
+   "ovSceneOn": false
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "speechTitle": true,
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "midiMap": {
+    "n36": "",
+    "c7": "flash"
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "gateDb": -20,
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ],
+   "ovSceneOn": false
+  },
+  "notes": [
+   "web-removed"
+  ]
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ],
+   "overlayOn": false,
+   "ovSceneOn": false,
+   "overlay": {
+    "song": true
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "toast": false,
+   "autoScenes": {
+    "orb": false
+   },
+   "countdownTo": " ",
+   "osc": {
+    "host": "javascript:alert(1)"
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ],
+   "cues": [
+    {
+     "name": "",
+     "scene": "ripple",
+     "palette": -1,
+     "media": "on",
+     "ovScene": "orb"
+    },
+    {
+     "name": "A",
+     "scene": "ripple",
+     "palette": -1,
+     "media": "off",
+     "ovScene": ""
+    },
+    {
+     "name": "A",
+     "scene": "ripple",
+     "palette": -1,
+     "media": "",
+     "ovScene": "orb"
+    },
+    {
+     "name": "",
+     "scene": "ripple",
+     "palette": 2,
+     "media": "",
+     "ovScene": "title"
+    }
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "fpsCap": 30,
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "osc": {
+    "rate": 60
+   },
+   "bands": [
+    {}
+   ],
+   "bandPalette": 0
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "dmx": {
+    "max": 0
+   },
+   "bands": [
+    {}
+   ],
+   "overlayOn": false,
+   "ovSceneOn": false,
+   "overlay": {
+    "scene": "x"
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ],
+   "overlayOn": false,
+   "ovSceneOn": false
+  },
+  "notes": [
+   "web-removed"
+  ]
+ },
+ {
+  "diff": {
+   "messages": [
+    "a",
+    "a",
+    ""
+   ],
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "v": -70,
+   "bands": [
+    {}
+   ],
+   "mediaLib": [
+    {
+     "id": "L1",
+     "name": "ｍｖ",
+     "kind": "camera",
+     "cameraId": "",
+     "mirror": true
+    }
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "speechTitle": true,
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "v": 4,
+   "dmx": {
+    "pulse": 0
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "cameraId": "x",
+    "cameraMirror": true
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "autoScenes": {
+    "x": true
+   },
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "cameraMirror": true,
+    "textSize": 0.5
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "midiMap": {
+    "c7": "flash"
+   },
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "cameraMirror": true,
+    "scene": "fade"
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "master": 0.2,
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "dmx": {
+    "enabled": true
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "endText": "display",
+   "bands": [
+    {},
+    {
+     "bandName": "",
+     "setlistText": "a | 1 | neon",
+     "logo": "",
+     "profile": "auto",
+     "bandPalette": 3,
+     "messages": [
+      "a",
+      "",
+      ""
+     ]
+    },
+    {
+     "bandName": "A",
+     "setlistText": "a | 1 | neon",
+     "logo": "",
+     "profile": "auto",
+     "bandPalette": -1,
+     "messages": [
+      "a",
+      "",
+      ""
+     ]
+    },
+    {
+     "bandName": "A",
+     "setlistText": "a | 1 | neon",
+     "logo": "",
+     "profile": "auto",
+     "bandPalette": 3
+    }
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {},
+    {
+     "logo": "data:image/png;base64,AA",
+     "profile": "auto",
+     "bandPalette": -1,
+     "messages": [
+      "a",
+      "",
+      ""
+     ]
+    },
+    {
+     "bandName": "B",
+     "setlistText": "1. x",
+     "profile": "edm"
+    },
+    {
+     "bandName": "",
+     "setlistText": "1. x",
+     "logo": "data:image/png;base64,AA",
+     "profile": "edm",
+     "bandPalette": 3,
+     "messages": [
+      "a",
+      "",
+      ""
+     ]
+    }
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "dmx": {
+    "start": 5
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "sceneParams": {
+    "orb1": [],
+    "orb2": [
+     0.5
+    ],
+    "orb3": [
+     1,
+     2,
+     3,
+     4
+    ]
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "cameraId": "edm"
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "customPalette": [
+    "#00F0FF",
+    "#FF00C8",
+    "#00ff00",
+    "#00ff00"
+   ],
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "text": " "
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "noFlash": true,
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "output": {
+    "y": -0.5
+   },
+   "osc": {
+    "rate": 60
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ],
+   "cues": [
+    {
+     "name": "A",
+     "scene": "",
+     "palette": -1,
+     "media": "",
+     "ovScene": ""
+    }
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "v": 101,
+   "bands": [
+    {},
+    {
+     "bandName": "",
+     "setlistText": "a | 1 | neon",
+     "logo": "",
+     "profile": "auto",
+     "bandPalette": -1
+    },
+    {
+     "bandName": "B",
+     "profile": "edm",
+     "bandPalette": -1
+    },
+    {
+     "bandName": "B",
+     "setlistText": "a | 1 | neon",
+     "bandPalette": 3,
+     "messages": [
+      "a",
+      "",
+      "c"
+     ]
+    }
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "noFlash": true,
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "latencySquare": true,
+   "monitor": false,
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "videoKey": "x"
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "cameraMirror": true,
+    "textOn": false
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "flashLimit": 0,
+   "bands": [
+    {}
+   ]
+  },
+  "notes": [
+   "web-removed"
+  ]
+ },
+ {
+  "diff": {
+   "v": -81,
+   "midiMap": {
+    "n36": ""
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "textOn": false
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "autoFlash": false,
+   "osc": {
+    "rate": 31
+   },
+   "dmx": {
+    "start": 101
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "v": 5,
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "autoScenes": {
+    "ripple": false
+   },
+   "output": {
+    "size": 0.3
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "intensity": 0,
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "sceneOpacity": 1
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "fpsCap": 30,
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "videoLoop": false
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "monitor": false,
+   "autoScenes": {
+    "ripple": true
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "sceneParams": {
+    "waves0": [
+     0.5
+    ]
+   },
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "videoLoop": false
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "flashLimit": 30,
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "customPalette": [
+    "#ABCDEF",
+    "#00ff00",
+    "#00ff00",
+    "#00ff00"
+   ],
+   "messages": [
+    "a",
+    "",
+    "a"
+   ],
+   "bands": [
+    {}
+   ]
+  },
+  "notes": [
+   "web-removed"
+  ]
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ],
+   "panelHelp": false
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "endText": "",
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "auto": false,
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "paletteIdx": 1,
+   "autoScenes": {
+    "orb": false
+   },
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "textSize": 1.5
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "dmx": {
+    "flash": false
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "imageOpacity": 0
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "sensitivity": 5,
+   "customPalette": [
+    "#00F0FF",
+    "#FF00C8",
+    "#7A00FF",
+    "#00ff00"
+   ],
+   "output": {
+    "y": 0.4
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bandName": "web",
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "scene": "x"
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "noFlash": true,
+   "midiMap": {
+    "c7": "",
+    "n36": "flash"
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "deviceLabel": "１２",
+   "toast": false,
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "flashLimit": 1,
+   "react": 1.5,
+   "bands": [
+    {}
+   ]
+  },
+  "notes": [
+   "web-removed"
+  ]
+ },
+ {
+  "diff": {
+   "deviceLabel": "javascript:alert(1)",
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "midiMap": {
+    "c7": "flash",
+    "n36": ""
+   },
+   "bands": [
+    {}
+   ],
+   "bandPalette": 0
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "autoFlash": false,
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "sceneParams": {
+    "nope0": [],
+    "nope1": [
+     0.5
+    ],
+    "ripple2": []
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "osc": {
+    "enabled": true
+   },
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "clock": true
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "autoFlash": false,
+   "gateDb": -20,
+   "dmx": {
+    "max": 0.4
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {},
+    {},
+    {
+     "bandName": "",
+     "setlistText": "1. x",
+     "bandPalette": 0,
+     "messages": [
+      "a",
+      "",
+      "c"
+     ]
+    }
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "customPalette": [
+    "#00F0FF",
+    "#FF00C8",
+    "#7A00FF",
+    "#00ff00"
+   ],
+   "output": {
+    "y": 0.5
+   },
+   "bands": [
+    {},
+    {
+     "setlistText": "1. x",
+     "logo": "",
+     "bandPalette": -1,
+     "messages": [
+      "a",
+      "",
+      "c"
+     ]
+    }
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "v": 101,
+   "autoScenes": {
+    "x": true
+   },
+   "dmx": {
+    "host": "drgbw"
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "sceneParams": {
+    "ripple0": [],
+    "nope1": []
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "intensity": -1,
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "midiMap": {
+    "n36": ""
+   },
+   "dmx": {
+    "flash": false
+   },
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "textSize": 2
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "sceneParams": {
+    "nope0": [
+     1,
+     2,
+     3,
+     4
+    ]
+   },
+   "midiMap": {
+    "c7": "scene:orb"
+   },
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "cameraMirror": true
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "imageOpacity": 0.5
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "autoStart": true,
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "output": {
+    "x": -0.5
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "dmx": {
+    "start": 2
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "customPalette": [
+    "#00ff00",
+    "#ABCDEF",
+    "#ABCDEF",
+    "#ABCDEF"
+   ],
+   "bands": [
+    {},
+    {
+     "bandName": "",
+     "setlistText": "1. x",
+     "profile": "edm",
+     "messages": [
+      "a",
+      "",
+      "c"
+     ]
+    }
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "output": {
+    "flipV": true
+   },
+   "net": {
+    "url": "WS://127.0.0.1:8787/VJ"
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "osc": {
+    "enabled": true
+   },
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "videoSound": true
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "output": {
+    "y": 0.5
+   },
+   "bands": [
+    {}
+   ],
+   "ovSceneOn": false,
+   "overlay": {
+    "scene": "x"
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "gateDb": -70.5,
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "flashLimit": 0,
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "textSize": 2
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "sceneParams": {
+    "waves0": [
+     0.5
+    ]
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "customPalette": [
+    "#00F0FF",
+    "#ABCDEF",
+    "#7A00FF",
+    "#00ff00"
+   ],
+   "flashLimit": 30,
+   "osc": {
+    "enabled": true,
+    "host": "#00ff00"
+   },
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "cameraMirror": true
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "paletteIdx": 2,
+   "net": {
+    "enabled": true
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "textOpacity": 1
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "clock": true
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "endText": "x",
+   "paletteIdx": 3,
+   "dmx": {
+    "host": "http://example.com/a.png"
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ],
+   "cues": [
+    {
+     "name": "",
+     "scene": "",
+     "palette": 0,
+     "media": "",
+     "ovScene": "title"
+    },
+    {
+     "name": "",
+     "scene": "",
+     "palette": -1,
+     "media": "on",
+     "ovScene": "off"
+    }
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "paletteAuto": true,
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "midiMap": {
+    "n36": "flash"
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "cameraId": "a b"
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "customPalette": [
+    "#00ff00",
+    "#FF00C8",
+    "#7A00FF",
+    "#ABCDEF"
+   ],
+   "output": {
+    "flipV": true
+   },
+   "bands": [
+    {},
+    {
+     "bandName": "",
+     "logo": "data:image/png;base64,AA",
+     "profile": "edm",
+     "bandPalette": -1,
+     "messages": [
+      "a",
+      "",
+      "c"
+     ]
+    },
+    {
+     "bandName": "B",
+     "bandPalette": -1,
+     "messages": [
+      "a",
+      "",
+      ""
+     ]
+    }
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bandName": "",
+   "bands": [
+    {}
+   ],
+   "ovSceneOn": false
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "customPalette": [
+    "#00F0FF",
+    "#FF00C8",
+    "#ABCDEF",
+    "#00ff00"
+   ],
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "videoName": "x"
+   },
+   "panelFold": {
+    "3": true
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "sceneParams": {
+    "orb3": [
+     1,
+     2,
+     3,
+     4
+    ]
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "paletteAuto": true,
+   "autoScenes": {
+    "x": true,
+    "orb": true
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "autoScenes": {
+    "orb": false
+   },
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "clock": true
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "v": -1000000000,
+   "bands": [
+    {},
+    {
+     "bandName": "",
+     "setlistText": "a | 1 | neon",
+     "profile": "edm",
+     "bandPalette": -1,
+     "messages": [
+      "a",
+      "",
+      "c"
+     ]
+    }
+   ],
+   "ovSceneOn": false
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "sceneParams": {
+    "orb0": [
+     1,
+     2,
+     3,
+     4
+    ]
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "setlistText": "ws://127.0.0.1:8787/vj",
+   "sceneParams": {
+    "orb1": [
+     1,
+     2,
+     3,
+     4
+    ],
+    "ripple2": [
+     1,
+     2,
+     3,
+     4
+    ],
+    "waves3": [
+     0.5
+    ]
+   },
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "sceneOpacity": 0
+   },
+   "cues": [
+    {
+     "name": "A",
+     "scene": "",
+     "palette": -1,
+     "media": "on",
+     "ovScene": "orb"
+    },
+    {
+     "name": "",
+     "scene": "",
+     "palette": 0,
+     "media": "off",
+     "ovScene": "orb"
+    },
+    {
+     "name": "A",
+     "scene": "",
+     "palette": -1,
+     "media": "on",
+     "ovScene": ""
+    }
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "output": {
+    "flipV": true
+   },
+   "bands": [
+    {},
+    {
+     "bandName": "",
+     "logo": "data:image/png;base64,AA",
+     "bandPalette": 3,
+     "messages": [
+      "a",
+      "",
+      "c"
+     ]
+    }
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "deviceId": "x",
+   "customPalette": [
+    "#ABCDEF",
+    "#00ff00",
+    "#ABCDEF",
+    "#FFFFFF"
+   ],
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "sceneParams": {
+    "ripple0": []
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "autoStart": true,
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "videoName": "web"
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "autoScenes": {
+    "orb": false
+   },
+   "bands": [
+    {},
+    {
+     "bandName": "B",
+     "setlistText": "a | 1 | neon",
+     "profile": "auto",
+     "bandPalette": 3,
+     "messages": [
+      "a",
+      "",
+      "c"
+     ]
+    },
+    {
+     "bandName": "B",
+     "bandPalette": 3,
+     "messages": [
+      "a",
+      "",
+      "c"
+     ]
+    },
+    {
+     "bandName": "",
+     "bandPalette": -1,
+     "messages": [
+      "a",
+      "",
+      "c"
+     ]
+    }
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "setlistText": "",
+   "bands": [
+    {}
+   ],
+   "overlay": {
+    "textOn": false
+   }
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ },
+ {
+  "diff": {
+   "setlistText": "x",
+   "autoScenes": {
+    "orb": false
+   },
+   "bands": [
+    {}
+   ]
+  },
+  "notes": []
+ }
+]
