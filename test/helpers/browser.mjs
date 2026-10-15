@@ -1,4 +1,4 @@
-// Playwright（インストール済みの Chromium）を偽マイク付きで起動する。
+// Playwright の Chromium（無ければ、この PC の Chrome・Edge）を偽マイク付きで起動する。
 import path from 'node:path';
 import fs from 'node:fs';
 import { ROOT } from './load-src.mjs';
@@ -8,6 +8,24 @@ async function loadPlaywright() {
     return await import('playwright');
   } catch (e) {
     return await import('/opt/node22/lib/node_modules/playwright/index.mjs');
+  }
+}
+
+/** 使うブラウザを決めて起動する。
+ *  - 環境変数 VJ_BROWSER_CHANNEL（chrome / msedge など）があれば、そのブラウザ
+ *  - 無ければ Playwright の Chromium。入っていない PC（npx playwright install をしていない）では、
+ *    ダウンロードせずに、インストール済みの Chrome → Edge の順に試す */
+async function launchBrowser(chromium, options) {
+  const want = process.env.VJ_BROWSER_CHANNEL;
+  if (want) return chromium.launch(Object.assign({ channel: want }, options));
+  try {
+    return await chromium.launch(options);
+  } catch (e) {
+    if (!/Executable doesn't exist|playwright install/i.test(String(e && e.message))) throw e;
+    for (const channel of ['chrome', 'msedge']) {
+      try { return await chromium.launch(Object.assign({ channel }, options)); } catch (e2) { /* 次を試す */ }
+    }
+    throw e;
   }
 }
 
@@ -32,7 +50,7 @@ export async function launch(opts = {}) {
   else args.push('--deny-permission-prompts');
   if (opts.wav) args.push(`--use-file-for-fake-audio-capture=${opts.wav}`);
   // --allow-file-access-from-files は付けない（file:// 特有の問題を隠さないため）
-  const browser = await chromium.launch({ args, ignoreDefaultArgs: ['--mute-audio'] });
+  const browser = await launchBrowser(chromium, { args, ignoreDefaultArgs: ['--mute-audio'] });
   // テストは日本語の表示で確かめる（表示の言語は「自動」= ブラウザの言語に従うため）
   const ctx0 = browser.newContext.bind(browser), page0 = browser.newPage.bind(browser);
   browser.newContext = (o) => ctx0(Object.assign({ locale: 'ja-JP' }, o || {}));
