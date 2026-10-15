@@ -147,21 +147,46 @@ test('ブリッジ：スマホは暗証番号でつながり、操作が VJ に�
     if (lan) {
       await assert.rejects(open(`ws://${lan}:${b.port}/vj`));
     }
-    // 総当たり：同じ IP から 10 回失敗すると、正しい番号でもつながらない（上で 1 回失敗済み）
-    const ph2 = await open(`ws://127.0.0.1:${b.port}/phone`);
-    let tries = 0, res;
-    do {
-      ph2.send(JSON.stringify({ t: 'auth', pin: String(1000 + tries) }));
-      res = await nextMessage(ph2, (m) => m.t === 'auth');
-      tries++;
-    } while (!res.locked && tries < 20);
-    assert.equal(tries, 10);
-    const ph3 = await open(`ws://127.0.0.1:${b.port}/phone`);
-    ph3.send(JSON.stringify({ t: 'auth', pin: '4321' }));
-    const locked = await nextMessage(ph3, (m) => m.t === 'auth');
-    assert.equal(locked.ok, false);
-    assert.equal(locked.locked, true);
     vj.close(); ph.close();
+  } finally {
+    b.close();
+  }
+});
+
+test('ブリッジ：暗証番号を 10 回続けて間違えると、しばらく正しい番号でも入れない。時間がたてば戻り、入れたら数え直す', async () => {
+  const b = await startBridge({ port: 0, oscPort: false, pin: '4321', host: '127.0.0.1', lockMs: 600 });
+  const auth = async (pin) => {
+    const ws = await open(`ws://127.0.0.1:${b.port}/phone`);
+    ws.send(JSON.stringify({ t: 'auth', pin }));
+    const r = await nextMessage(ws, (m) => m.t === 'auth');
+    ws.close();
+    return r;
+  };
+  try {
+    // 9 回までは「違います」、10 回目で止まる
+    for (let i = 0; i < 9; i++) assert.deepEqual(await auth(String(1000 + i)), { t: 'auth', ok: false });
+    const tenth = await auth('1009');
+    assert.equal(tenth.locked, true);
+    assert.ok(tenth.wait >= 1, '待つ秒数を知らせる');
+    // 止まっている間は、正しい番号でも入れない
+    const locked = await auth('4321');
+    assert.deepEqual([locked.ok, locked.locked], [false, true]);
+    // 時間がたてば、ブリッジを起動し直さなくても入れる
+    await wait(700);
+    assert.equal((await auth('4321')).ok, true);
+    // 入れたら数え直す：そのあと 9 回間違えても止まらない
+    for (let i = 0; i < 9; i++) assert.equal((await auth('0000')).locked, undefined);
+    assert.equal((await auth('4321')).ok, true);
+    // くり返すと、止める時間が倍になる（総当たりを続けにくく）
+    for (let i = 0; i < 10; i++) await auth('0000');
+    await wait(700);
+    for (let i = 0; i < 9; i++) await auth('0000');
+    const again = await auth('0000');
+    assert.equal(again.locked, true);
+    await wait(700);
+    assert.equal((await auth('4321')).locked, true, '2 回目は 2 倍の時間');
+    await wait(650);
+    assert.equal((await auth('4321')).ok, true);
   } finally {
     b.close();
   }
@@ -218,6 +243,15 @@ test('ブリッジ：断られた接続をすぐ切られても・変な設定�
     const po = await rawUpgrade(b.port, '/phone', 'Origin: http://x\r\n'); // Host: x で開いたページ
     assert.match(po.status, /101/);
     po.s.destroy();
+    // 鍵（?k=…）に、文字数は同じでバイト数の違う文字（全角など）が来ても落ちない（鍵なしと同じ扱い）
+    const mb = await rawUpgrade(b.port, '/vj?k=' + encodeURIComponent('é'.repeat(24)), 'Origin: null\r\n');
+    assert.match(mb.status, /101/);
+    mb.s.destroy();
+    const mb2 = await rawUpgrade(b.port, '/vj?k=' + encodeURIComponent('あ'.repeat(24)), 'Origin: null\r\n');
+    assert.match(mb2.status, /101/);
+    mb2.s.destroy();
+    await wait(100);
+    assert.equal((await fetch(`http://127.0.0.1:${b.port}/status`).then((r) => r.json())).ok, true, '鍵の比べ方で落ちない');
     assert.ok(vjOriginOk(undefined) && vjOriginOk('null') && vjOriginOk('file://') && vjOriginOk('http://localhost:5173') && vjOriginOk('http://127.0.0.1'));
     assert.ok(!vjOriginOk('https://example.com') && !vjOriginOk('http://localhost.evil.com') && !vjOriginOk('http://127.0.0.1.evil.com'));
   } finally {
@@ -257,6 +291,8 @@ test('ブリッジ：VJ 本体に QR コード（暗証番号入り）を渡す�
     assert.equal((await getWithHost(b.port, '/qr', `evil.example:${b.port}`)).status, 403);
     const lan = lanAddresses()[0];
     if (lan) assert.equal((await getWithHost(b.port, '/qr', `${lan}:${b.port}`, lan)).status, 403, 'LAN からは開けない');
+    // YouTube の埋め込みの中継ページは、もう無い
+    assert.equal((await fetch(`http://127.0.0.1:${b.port}/embed?v=dQw4w9WgXcQ`)).status, 404);
     // 見本画像：形の正しいものだけ、つながっているスマホとあとからつながるスマホへ
     const ph = await open(`ws://127.0.0.1:${b.port}/phone`);
     ph.send(JSON.stringify({ t: 'auth', pin: '5678' }));
@@ -327,6 +363,7 @@ test('照明（DMX）：パレットの色・音量・キックのチェイス�
     VJ.dmx.compute(show, Object.assign({}, f, { kickN: k, onsetFlags: 1 }), c, k * 0.1, out);
     if (Math.max(...dims()) > Math.max(...base) + 20) n++;
   }
+  assert.ok(n >= 2, `キックで強く光る（${n} フレーム）`);
   // 映像のフラッシュと同じ制限器（1 秒に 3 回のうち、キメの 1 回分を残して 2 回）
   assert.ok(Math.abs(VJ.dmx._pulseAt - 0.5) < 1e-9, 'last pulse ' + VJ.dmx._pulseAt);
   assert.equal(show.limiter.times.length, 2);
