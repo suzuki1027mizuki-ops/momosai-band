@@ -78,12 +78,28 @@
     seq: 0,
     lastStatus: null,
     _poll: null,
+    PATCH_KEYS,
+    // 操作側：出力側でも変わる設定（PATCH_KEYS）について、出力側が持っているはずの値（最後に送った値か、
+    // 最後に届いた値の新しい方）。設定を送るときは、これと違う項目だけ送る（_settingsMessage）
+    known: {},
     wantPreview: false, // 出力側：操作側がプレビューを見ているか
     PREVIEW_MS: 333, // プレビューの間隔（1 秒に 3 回。描画の読み出しは GPU の負担になるので控えめに）
 
     send(msg) {
       if (!link.peer || link.peer.closed) return false;
       try { link.peer.postMessage(msg, '*'); return true; } catch (e) { return false; }
+    },
+    /** 操作側：設定を送るとき、出力側でも変わる項目は、出力側が持っているはずの値と違うときだけ入れる。
+     *  出力側は送られてこなかった項目を今の値のまま使うので、次の 2 つの行き違いで古い値に戻さない：
+     *  (1) 出力側で変わった値（キー・曲の色など）の通知が届く前に、操作側でほかの設定を変えた
+     *  (2) 操作側で変えた直後に、出力側がその前に出した古い通知が届いて、操作側の値が一度戻った
+     *  msg は送る設定の複製（項目を消す）。all：全部送り、覚えた値もそろえる（出力ウィンドウが開いたとき） */
+    _settingsMessage(msg, s, all) {
+      for (const k of Object.keys(PATCH_KEYS)) {
+        if (!all && k in link.known && link.known[k] === s[k]) delete msg[k];
+        else link.known[k] = s[k];
+      }
+      return msg;
     },
     request(msg) {
       const id = ++link.seq;
@@ -185,6 +201,7 @@
       app.show.restoreSession(last);
       link.peer = null;
       link.role = 'solo';
+      link.known = {};
       app.paused = false;
       VJ.net.apply(app);
       VJ.dmx.apply(app);
@@ -204,7 +221,7 @@
       const app = link.app;
       if (d.t === 'hello') {
         // 出力ウィンドウが開いた／再読み込みされた：設定（出演バンドの一覧も）・曲の位置・音声入力を渡す
-        link.send({ t: 'settings', settings: app.settings });
+        link.send({ t: 'settings', settings: link._settingsMessage(Object.assign({}, app.settings), app.settings, true) });
         link._bandsSent = { ref: app.settings.bands, ver: VJ.bands.version };
         link._logoSent = app.settings.logo;
         link._ovImgSent = app.settings.overlay && app.settings.overlay.image;
@@ -243,11 +260,13 @@
         if (d.hits & 4) L.h = now;
         if (d.hits & 8) L.a = now;
         if (d.hits & 32) L.b = now;
-        // キー操作で変わった設定（パレット・感度・明るさ・オート）をこちらにも反映
+        // キー操作で変わった設定（パレット・感度・明るさ・オート）をこちらにも反映。出力側が持っている値として覚える
         let changed = false;
         for (const k of Object.keys(PATCH_KEYS)) {
           const v = d.patch && d.patch[k];
-          if (typeof v === PATCH_KEYS[k] && app.settings[k] !== v) { app.settings[k] = v; changed = true; }
+          if (typeof v !== PATCH_KEYS[k]) continue;
+          link.known[k] = v;
+          if (app.settings[k] !== v) { app.settings[k] = v; changed = true; }
         }
         if (changed) { VJ.panel.syncFromSettings(); VJ.panel.save(); }
         link._features = d.f;

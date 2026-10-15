@@ -290,7 +290,7 @@ test('曲のメディア：再開（restoreSession）のあとも、設定を変
   c.nextSong();
   assert.equal(c.effectiveMedia().kind, '');
   s.overlay.image = 'data:image/png;base64,AAAA';
-  c._mediaSigAt = c._mediaSig(); c._mediaManual = false;
+  VJ.mediaState.resume(c._media, s); // 画像を入れた状態を「曲が始まったとき」にする
   c.setOverlay(true);
   assert.equal(c.effectiveMedia().kind, 'image', 'すでに ON でも、m:off の曲で「出す」なら出す');
   c.setOverlay(false);

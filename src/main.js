@@ -65,7 +65,8 @@
         if (link._logoSent === s.logo) { delete msg.logo; keep.logo = true; } else link._logoSent = s.logo;
         const img = s.overlay && s.overlay.image;
         if (img && link._ovImgSent === img) { msg.overlay = Object.assign({}, s.overlay, { image: '' }); keep.ovImage = true; } else link._ovImgSent = img;
-        link.send({ t: 'settings', settings: msg, keep });
+        // 出力側でも変わる設定（パレット・感度など）は、出力側の値と違うときだけ（行き違いで古い値に戻さない）
+        link.send({ t: 'settings', settings: link._settingsMessage(msg, s), keep });
         return;
       }
       app.renderer.setOutput(s.output);

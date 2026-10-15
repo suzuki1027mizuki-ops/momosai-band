@@ -217,13 +217,17 @@ test('PC で再生中の音：AudioContext を使わずにトラックから直�
   assert.equal(await pg.evaluate(() => VJ.app.engine.ctx), null, 'AudioContext を作らない');
   // 音が解析まで届く：左のメーターだけ振れる。サンプルは実時間どおりに進む（間引かれない・途切れない）
   await pg.waitForFunction(() => VJ.app.engine.updateMeters().l > -30, null, { timeout: 10000 });
+  // 始めた直後は、ブラウザにたまっていた分（最大 0.68 秒）をまとめて読むので、実時間より速く進んで見える
+  // （遅い PC・CI で 1.08 倍になった）。音はかたまりで届くので、1 秒待って落ち着いてから 4 秒の間で測り、±5% まで認める
+  // （間引き・二重読みなら 0.5 倍・2 倍になるので見分けられる）
   const r = await pg.evaluate(async () => {
+    await new Promise((res) => setTimeout(res, 1000));
     const fx = VJ.app.extractor, e = VJ.app.engine, s0 = fx.sampleCount, t0 = performance.now(), g0 = e.diag.gaps;
-    await new Promise((res) => setTimeout(res, 2000));
+    await new Promise((res) => setTimeout(res, 4000));
     const m = e.updateMeters();
     return { rate: (fx.sampleCount - s0) / e.sampleRate / ((performance.now() - t0) / 1000), l: m.l, r: m.r, gaps: e.diag.gaps - g0, level: VJ.app.lastFeatures.level, sr: e.sampleRate };
   });
-  assert.ok(r.rate > 0.97 && r.rate < 1.03 && r.gaps === 0, 'サンプルが実時間どおりに届く ' + JSON.stringify(r));
+  assert.ok(r.rate > 0.95 && r.rate < 1.05 && r.gaps === 0, 'サンプルが実時間どおりに届く ' + JSON.stringify(r));
   assert.ok(r.l > -20 && r.r < -60 && r.level > 0, '左だけ音がある ' + JSON.stringify(r));
   // 「右だけ」を選ぶと解析には無音が渡る（メーターは左右とも元の音のまま）
   await pg.evaluate(() => VJ.app.engine.setChannel('right'));
@@ -303,6 +307,59 @@ test('出力ウィンドウ（2 画面）：操作側のキーで出力側が切
   await out.close();
   await ctrl.waitForFunction(() => VJ.link.role === 'solo' && !VJ.app.paused, null, { timeout: 5000 });
   assert.equal(await ctrl.evaluate(() => VJ.app.show.state.sceneId), 'eq');
+  await ctrl.close();
+});
+
+test('2 画面：出力側で変わった設定を、操作側のほかの変更で古い値に戻さない（通知との行き違い 3 通り）', async () => {
+  const p = await openApp(browser, DIST, 'test=1', { width: 480, height: 270 });
+  const ctrl = p.page;
+  const [out] = await Promise.all([ctrl.context().waitForEvent('page'), ctrl.click('#btn-output')]);
+  await out.waitForFunction(() => window.VJ && VJ.app && VJ.app.renderer && VJ.link.role === 'output', null, { timeout: 30000 });
+  await ctrl.waitForFunction(() => VJ.link.role === 'control' && VJ.link.lastStatus, null, { timeout: 15000 });
+  // 出力側からの状態の通知（1 秒に 10 回）を、操作側で止めておけるようにする（通知が届く前の操作を作るため）。
+  // 止めている間の最初の 1 通は取っておき、あとで「遅れて届いた古い通知」として渡す
+  await ctrl.evaluate(() => {
+    window.__hold = false; window.__held = null;
+    window.addEventListener('message', (e) => {
+      if (!window.__hold || !e.data || e.data.t !== 'status') return;
+      if (!window.__held) window.__held = e.data;
+      e.stopImmediatePropagation();
+    }, true);
+  });
+  const master = (v) => ctrl.evaluate((v) => { const el = document.getElementById('opt-master'); el.value = String(v); el.dispatchEvent(new Event('input')); }, v);
+  const outPal = () => out.evaluate(() => VJ.app.settings.paletteIdx);
+  const settle = () => new Promise((r) => setTimeout(r, 400));
+
+  // (1) 出力側でパレットが変わり（キー・曲の色など）、その通知が届く前に、操作側でほかの設定（明るさ）を変える
+  await ctrl.evaluate(() => { window.__hold = true; });
+  await out.evaluate(() => VJ.app.show.setPalette(5));
+  await master(0.6);
+  await settle();
+  assert.equal(await outPal(), 5, '(1) 操作側の古いパレットで戻さない');
+  await ctrl.evaluate(() => { window.__hold = false; });
+  await ctrl.waitForFunction(() => VJ.app.settings.paletteIdx === 5, null, { timeout: 5000 });
+
+  // (2) 操作側でパレットを変えた直後に、出力側がその前に出した古い通知が届き、そのあと操作側でほかの設定を変える
+  await ctrl.evaluate(() => { window.__held = null; window.__hold = true; });
+  await ctrl.waitForFunction(() => !!window.__held, null, { timeout: 5000 }); // 変える前の通知（パレット 5）
+  await ctrl.evaluate(() => { VJ.app.settings.paletteIdx = 2; VJ.app.applySettings(); });
+  await out.waitForFunction(() => VJ.app.settings.paletteIdx === 2, null, { timeout: 5000 });
+  await ctrl.evaluate(() => VJ.link._onControlMessage(window.__held));
+  assert.equal(await ctrl.evaluate(() => VJ.app.settings.paletteIdx), 5, '古い通知で操作側の表示は一度戻る');
+  await master(0.7);
+  await settle();
+  assert.equal(await outPal(), 2, '(2) 古い通知の値を送り返さない');
+  await ctrl.evaluate(() => { window.__hold = false; });
+  await ctrl.waitForFunction(() => VJ.app.settings.paletteIdx === 2, null, { timeout: 5000 });
+
+  // (3) 通知が届かない間に、操作側で変えてすぐ元に戻す：戻した操作も届く
+  await ctrl.evaluate(() => { window.__held = null; window.__hold = true; });
+  await ctrl.evaluate(() => { VJ.app.settings.paletteIdx = 4; VJ.app.applySettings(); VJ.app.settings.paletteIdx = 2; VJ.app.applySettings(); });
+  await settle();
+  assert.equal(await outPal(), 2, '(3) 変えて戻した操作も届く');
+  await ctrl.evaluate(() => { window.__hold = false; });
+  assert.equal(await out.evaluate(() => VJ.app.settings.master), 0.7, 'ほかの設定は届いている');
+  await out.close();
   await ctrl.close();
 });
 

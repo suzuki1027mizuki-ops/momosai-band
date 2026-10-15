@@ -18,6 +18,7 @@
     "src/core/schema.js",
     "src/core/storage.js",
     "src/show/safety.js",
-    "src/show/setlist.js"
+    "src/show/setlist.js",
+    "src/show/mediastate.js"
   ]
 }
