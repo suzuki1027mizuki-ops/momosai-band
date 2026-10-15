@@ -348,15 +348,10 @@ test('オーバーレイ：重ねるシーン・画像・隅の文字をフレ�
   c.toggleSceneOverlay();
   fr = step(6);
   assert.ok(fr.overlay && fr.ovImage && fr.text3);
-  // メディアの種類：動画・画面の取り込みは仕上げで重ね（ovImage）、YouTube / ニコニコは別（ovWeb）
+  // メディアの種類：動画・画面の取り込みも仕上げで重ねる（ovImage）。YouTube / ニコニコの埋め込み（ovWeb）はもう無い
   overlay.mediaKind = 'video';
   fr = step(6.1);
-  assert.ok(fr.ovImage && !fr.ovWeb);
-  overlay.mediaKind = 'web';
-  assert.equal(step(6.2).ovWeb, null, 'URL が無ければ出さない');
-  overlay.webUrl = 'https://youtu.be/dQw4w9WgXcQ';
-  fr = step(6.3);
-  assert.ok(!fr.ovImage && fr.ovWeb && Math.abs(fr.ovWeb.alpha - 0.7) < 1e-9);
+  assert.ok(fr.ovImage && !('ovWeb' in fr));
   overlay.mediaKind = 'image';
   // テストパターン（位置合わせ）の間は出さない
   c.toggleTestPattern();
@@ -371,7 +366,7 @@ test('オーバーレイ：重ねるシーン・画像・隅の文字をフレ�
   const ld = VJ.storage.fromJSON(JSON.stringify({ overlay: { scene: 'eq', sceneOpacity: 7, imageFit: 'zoom', image: 'javascript:alert(1)', corner: 'xx', textSize: 'big' } })).overlay;
   assert.deepEqual([ld.scene, ld.sceneOpacity, ld.imageFit, ld.image, ld.corner, ld.textSize, ld.sceneBlend], ['eq', 1, 'contain', '', 'tr', 1, 'screen']);
   const ld2 = VJ.storage.fromJSON(JSON.stringify({ overlayOn: false, overlay: { mediaKind: 'film', videoKey: '../x', webUrl: 'javascript:alert(1)' } }));
-  assert.deepEqual([ld2.overlay.mediaKind, ld2.overlay.videoKey, ld2.overlay.webUrl], ['image', '', '']);
+  assert.deepEqual([ld2.overlay.mediaKind, ld2.overlay.videoKey, 'webUrl' in ld2.overlay], ['image', '', false]);
   assert.equal(ld2.ovSceneOn, false, '古い設定で O が OFF だったら、シーンのオーバーレイも OFF');
   assert.equal(VJ.storage.fromJSON(JSON.stringify({ overlayOn: false, ovSceneOn: true })).ovSceneOn, true);
 });

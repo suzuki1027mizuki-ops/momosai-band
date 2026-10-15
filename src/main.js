@@ -70,7 +70,7 @@
       }
       app.renderer.setOutput(s.output);
       app.renderer.setLogo(s.logo);
-      VJ.media.sync(app); // メディアのオーバーレイ（画像・動画・画面の取り込み・YouTube / ニコニコ）
+      VJ.media.sync(app); // メディアのオーバーレイ（画像・動画・画面の取り込み・カメラ）
       app.renderer.setMaxScale(s.maxScale);
       if (!app.paused) { VJ.net.apply(app); VJ.dmx.apply(app); }
       if (link.role === 'output' && VJ.i18n.resolve(s.lang) !== VJ.i18n.lang) VJ.i18n.setLang(VJ.i18n.resolve(s.lang));

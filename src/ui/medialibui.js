@@ -6,7 +6,7 @@
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const t = (...a) => VJ.t(...a);
-  const KIND_TAG = { image: 'IMG', video: 'VIDEO', web: 'WEB', camera: 'CAM' };
+  const KIND_TAG = { image: 'IMG', video: 'VIDEO', camera: 'CAM' };
 
   /** data URL → Blob（fetch を使わない：古い環境・file:// でも動くように） */
   function dataUrlToBlob(url) {
@@ -143,11 +143,6 @@
       if (kind === 'video') {
         if (!o.videoKey) { toast(t('動画が選ばれていません')); return null; }
         return ui.add({ kind: 'video', key: o.videoKey, name: String(o.videoName || '').replace(/\.[^.]+$/, '') || t('動画') });
-      }
-      if (kind === 'web') {
-        const info = VJ.media.parseWebUrl(o.webUrl);
-        if (!info) { toast(t('YouTube / ニコニコの URL ではありません')); return null; }
-        return ui.add({ kind: 'web', url: o.webUrl, name: (info.provider === 'youtube' ? 'YouTube ' : t('ニコニコ') + ' ') + info.id });
       }
       if (kind === 'camera') return ui.add({ kind: 'camera', cameraId: o.cameraId || '', mirror: !!o.cameraMirror, name: o.cameraLabel || t('カメラ') });
       if (kind === 'capture') { toast(t('画面・タブの取り込みは一覧に入れられません')); return null; }

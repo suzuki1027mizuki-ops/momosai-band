@@ -212,6 +212,52 @@ test('パネルの折りたたみ：見出しを押すと開閉・再読み込�
   await page.close();
 });
 
+test('パネルの上：目次から飛ぶ（閉じていたら開く・いまの項目に印）。いまの状態（入力・曲・暗転）。説明を隠す（再読み込みしても残る）', async () => {
+  const { page, errors } = await openApp(browser, DIST, 'test=1', { width: 1280, height: 900 });
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.waitForFunction(() => window.VJ && VJ.app && VJ.panel.app);
+  const navOn = (n) => page.waitForFunction((n) => { const b = document.querySelector('#pnav button.on'); return !!b && b.dataset.go === n; }, String(n));
+  // 目次：閉じている ⑥ へ飛ぶと開き、見出しが「上に残る部分」のすぐ下に来る（下に隠れない）
+  assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('panel-top')).position), 'sticky');
+  await page.click('#psec-close-all');
+  assert.equal(await page.isVisible('#btn-show'), false);
+  await page.click('#pnav button[data-go="6"]');
+  await navOn(6);
+  assert.ok(await page.isVisible('#btn-show'));
+  const gap = await page.evaluate(() => document.querySelector('#panel .psec[data-sec="6"] h2').getBoundingClientRect().top - document.getElementById('panel-top').getBoundingClientRect().bottom);
+  assert.ok(gap >= 0 && gap < 60, `見出しの位置 ${gap}`);
+  // いまの状態：入力・音量・曲・暗転。押すとその項目へ
+  assert.match(await page.textContent('#ps-in'), /未開始/);
+  await page.click('#pstatus button[data-go="1"]');
+  await navOn(1);
+  await startDemo(page);
+  await page.waitForFunction(() => /入力中/.test(document.getElementById('ps-in').textContent) && parseFloat(document.getElementById('ps-lv').style.width) > 5, null, { timeout: 15000 });
+  await page.evaluate(() => document.activeElement && document.activeElement.blur());
+  await page.keyboard.press('ArrowRight');
+  await page.waitForFunction(() => /^M1 /.test(document.getElementById('ps-song').textContent));
+  assert.ok((await page.textContent('#ps-scene')).trim().length > 0);
+  await page.keyboard.press('KeyB');
+  await page.waitForFunction(() => document.getElementById('ps-black').classList.contains('on'));
+  await page.keyboard.press('KeyB');
+  await page.waitForFunction(() => !document.getElementById('ps-black').classList.contains('on'));
+  // 説明を隠す：説明の文だけが消え、状態の表示は残る
+  await page.click('#psec-open-all');
+  assert.ok(await page.isVisible('#output-hint'));
+  await page.click('#psec-help');
+  assert.equal(await page.isVisible('#output-hint'), false);
+  assert.ok(await page.isVisible('#audio-status'), '状態の表示は隠さない');
+  assert.match(await page.textContent('#psec-help'), /説明を表示/);
+  await page.waitForTimeout(400); // 保存（0.3 秒後）
+  await page.reload();
+  await page.waitForFunction(() => window.VJ && VJ.app && VJ.panel.app);
+  assert.equal(await page.isVisible('#output-hint'), false, '再読み込みしても隠したまま');
+  await page.click('#psec-help');
+  assert.ok(await page.isVisible('#output-hint'));
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
 test('フラッシュの上限：推奨を超えると警告（パネル・本番前チェック）。照明のチェイスも同じ上限。激しさは保存される', async () => {
   const { page, errors } = await openApp(browser, DIST, 'test=1', { width: 1280, height: 900 });
   await page.evaluate(() => localStorage.clear());

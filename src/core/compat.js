@@ -48,6 +48,14 @@
       return out.map((x) => VJ.t(x));
     },
 
+    /** ファイルの場所（location.pathname を戻したもの）が、OneDrive・Dropbox などの同期されるフォルダの中か。
+     *  起動スクリプトの設定の保存場所（.vj-profile）は配布フォルダの中にあるので、同期されるフォルダに置くと、
+     *  Chrome が使っている最中のファイルが同期され続ける */
+    syncedPath(p) {
+      p = String(p || '').replace(/\\/g, '/');
+      return /\/(OneDrive[^/]*|Dropbox[^/]*|Google ?Drive|iCloud ?Drive|Box)\//i.test(p) || /\/Library\/(Mobile Documents|CloudStorage)\//.test(p);
+    },
+
     fullscreenElement() {
       const d = globalThis.document;
       return d ? d.fullscreenElement || d.webkitFullscreenElement || null : null;

@@ -1,5 +1,5 @@
-// メディアのオーバーレイ（画像の貼り付け・ファイルを落とす・動画ファイル・画面の取り込み・YouTube / ニコニコ）と、
-// 2 画面のときの受け渡し。YouTube / ニコニコはネットにつながないので、埋め込みのページを偽物に差し替えて確かめる
+// メディアのオーバーレイ（画像の貼り付け・ファイルを落とす・動画ファイル・画面の取り込み）と、
+// 2 画面のときの受け渡し。YouTube・ニコニコの埋め込みはやめたので、古い設定の扱いだけを確かめる
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -51,13 +51,16 @@ test('画像：Ctrl+V の貼り付け・ファイルを落とすとメディア�
     document.getElementById('band').dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
   });
   assert.equal(await page.evaluate(() => VJ.app.settings.overlay.mediaKind), 'image');
-  // 文字の欄でないところに URL を貼る → YouTube のメディア
-  await page.evaluate(() => {
+  // 文字の欄でないところに URL を貼っても、何も変えない（YouTube・ニコニコの埋め込みはやめた）
+  const pastedUrl = await page.evaluate(() => {
     const dt = new DataTransfer();
     dt.setData('text/plain', 'https://youtu.be/dQw4w9WgXcQ?t=1m5s');
-    document.body.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+    const ev = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true });
+    document.body.dispatchEvent(ev);
+    return ev.defaultPrevented;
   });
-  assert.deepEqual(await page.evaluate(() => [VJ.app.settings.overlay.mediaKind, VJ.app.settings.overlay.webUrl]), ['web', 'https://youtu.be/dQw4w9WgXcQ?t=1m5s']);
+  assert.equal(pastedUrl, false);
+  assert.deepEqual(await page.evaluate(() => [VJ.app.settings.overlay.mediaKind, 'webUrl' in VJ.app.settings.overlay]), ['image', false]);
   // ファイルを落とす（画像）。落とした先のページへ移らない
   const prevented = await page.evaluate(async () => {
     const c = document.createElement('canvas'); c.width = 40; c.height = 40;
@@ -83,7 +86,16 @@ test('動画ファイル：メディアに入れると再生されて映像に�
   const lum = (on) => page.evaluate((on) => VJ.testing.runOffline({ samples: 'demo', seconds: 0.5, sceneId: 'stars', grid: [4, 3],
     settings: { auto: false, overlayOn: on, overlay: Object.assign({}, VJ.app.settings.overlay, { imageFit: 'stretch' }) } })
     .then((r) => { const f = r.luma[r.luma.length - 1]; return f.reduce((a, b) => a + b, 0) / f.length; }), on);
-  await page.evaluate(() => { VJ.app.settings.overlay.imageFit = 'stretch'; VJ.panel.setOverlayVideoFile(window.__video); });
+  const toasts = await page.evaluate(async () => {
+    const got = [], t0 = VJ.app.ui.toast;
+    VJ.app.ui.toast = (m, k) => { got.push([m, k || '']); return t0(m, k); };
+    VJ.app.settings.overlay.imageFit = 'stretch';
+    await VJ.panel.setOverlayVideoFile(window.__video);
+    VJ.app.ui.toast = t0;
+    return got;
+  });
+  // この PC に保存できたときは「保存できませんでした」の警告を出さない
+  assert.ok(toasts.length && toasts.every(([m, k]) => k !== 'warn' && !/保存できません/.test(m)), JSON.stringify(toasts));
   await page.waitForFunction(() => VJ.media.status === 'playing' && VJ.app.renderer.ovVid && VJ.app.renderer.ovVid.ready, null, { timeout: 15000 });
   assert.match(await page.textContent('#ov-vname'), /loop\.webm/);
   await page.waitForFunction(() => /再生中/.test(document.getElementById('ov-status').textContent)); // 表示は 1 秒に 4 回
@@ -142,63 +154,36 @@ test('画面・タブの取り込み：選んだ画面が重なり、共有が�
   await page.close();
 });
 
-const FAKE_EMBED = `<!doctype html><body style="margin:0;background:#2a6"><script>
-  window.addEventListener('message', (e) => parent.postMessage({ fake: 'got', d: e.data }, '*'));
-  if (location.host === 'embed.nicovideo.jp') setTimeout(() => parent.postMessage({ eventName: 'loadComplete', playerId: '1' }, '*'), 200);
-</script></body>`;
-
-test('YouTube / ニコニコ：URL から埋め込みを作り、映像の場所・濃さ・暗転・テストパターンに合わせる。▶ などの命令が届く', async () => {
+test('YouTube・ニコニコの埋め込みはやめた：選べず、作らない。使っていた古い設定は画像に戻して、パネルの上で知らせる', async () => {
   const { page, errors } = await openApp(browser, DIST, 'test=1', { width: 1280, height: 720 });
-  await page.route('https://www.youtube-nocookie.com/embed/**', (r) => r.fulfill({ contentType: 'text/html', body: FAKE_EMBED }));
-  await page.route('https://embed.nicovideo.jp/watch/**', (r) => r.fulfill({ contentType: 'text/html', body: FAKE_EMBED }));
   await fresh(page);
-  await page.evaluate(() => { window.__got = []; window.addEventListener('message', (e) => { if (e.data && e.data.fake === 'got') window.__got.push(e.data.d); }); });
-  await page.check('input[name=ov-kind][value=web]');
-  await page.fill('#ov-web', 'not a url');
-  await page.click('#btn-ov-web');
-  assert.equal(await page.evaluate(() => VJ.app.settings.overlay.webUrl), '', '読めない URL は入れない');
-  await page.fill('#ov-web', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=90');
-  await page.click('#btn-ov-web');
-  await page.waitForSelector('#web-overlay iframe');
-  const src = await page.getAttribute('#web-overlay iframe', 'src');
-  assert.match(src, /^https:\/\/www\.youtube-nocookie\.com\/embed\/dQw4w9WgXcQ\?/);
-  for (const k of ['autoplay=1', 'mute=1', 'loop=1', 'playlist=dQw4w9WgXcQ', 'enablejsapi=1', 'start=90']) assert.ok(src.includes(k), k);
-  // 映像の場所（パネルの下のキャンバス全体）に、16:9 で
-  await page.waitForFunction(() => document.getElementById('web-overlay').getBoundingClientRect().width > 0);
-  const box = await page.evaluate(() => { const r = document.getElementById('web-overlay').getBoundingClientRect(); const c = document.getElementById('stage').getBoundingClientRect(); return { r: [r.left, r.top, r.width, r.height], c: [c.left, c.top, c.width, c.height], op: getComputedStyle(document.getElementById('web-overlay')).opacity }; });
-  assert.deepEqual(box.r.map(Math.round), box.c.map(Math.round));
-  assert.equal(+box.op, 1);
-  // 命令（再生）が埋め込みに届く
-  await page.waitForFunction(() => window.__got.some((d) => typeof d === 'string' && /"playVideo"/.test(d)), null, { timeout: 5000 });
-  await page.click('#ov-play [data-mcmd=pause]');
-  await page.waitForFunction(() => window.__got.some((d) => typeof d === 'string' && /"pauseVideo"/.test(d)));
-  // 濃さ・暗転・テストパターン・O
-  await page.evaluate(() => { VJ.app.settings.overlay.imageOpacity = 0.5; VJ.panel.applyShow(true); });
-  await page.waitForFunction(() => Math.abs(+getComputedStyle(document.getElementById('web-overlay')).opacity - 0.5) < 0.02);
-  await page.keyboard.press('KeyB');
-  await page.waitForFunction(() => +getComputedStyle(document.getElementById('web-overlay')).opacity < 0.01, null, { timeout: 3000 });
-  await page.keyboard.press('KeyB');
-  await page.keyboard.press('KeyG');
-  await page.waitForFunction(() => document.getElementById('web-overlay').hidden);
-  await page.keyboard.press('KeyG');
-  await page.waitForFunction(() => !document.getElementById('web-overlay').hidden);
-  await page.keyboard.press('KeyO');
-  await page.waitForFunction(() => document.getElementById('web-overlay').hidden, null, { timeout: 3000 });
-  await page.keyboard.press('KeyO');
-  // ニコニコ：読み込みの完了の知らせで、音を消して再生
-  await page.evaluate(() => { window.__got.length = 0; VJ.panel.setWebUrl('https://www.nicovideo.jp/watch/sm9'); });
-  await page.waitForFunction(() => /embed\.nicovideo\.jp\/watch\/sm9\?/.test((document.querySelector('#web-overlay iframe') || {}).src || ''));
-  await page.waitForFunction(() => window.__got.some((d) => d && d.eventName === 'play' && d.playerId === '1') && window.__got.some((d) => d && d.eventName === 'mute' && d.data && d.data.mute === true), null, { timeout: 5000 });
-  // ほかの種類にすると埋め込みは消える
-  await page.check('input[name=ov-kind][value=image]');
-  await page.waitForFunction(() => !document.getElementById('web-overlay'));
+  assert.equal(await page.locator('input[name=ov-kind][value=web]').count(), 0, 'メディアの種類に無い');
+  assert.equal(await page.locator('#ov-web').count(), 0);
+  // 古い設定（YouTube を出していた・一覧に YouTube があった）を読み込む
+  await page.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem(VJ.storage.KEY) || '{}');
+    s.overlay = Object.assign({}, s.overlay, { mediaKind: 'web', webUrl: 'https://youtu.be/dQw4w9WgXcQ' });
+    s.overlayOn = true;
+    s.mediaLib = [{ id: 'Lyt', name: 'MV', kind: 'web', url: 'https://youtu.be/dQw4w9WgXcQ' }];
+    localStorage.setItem(VJ.storage.KEY, JSON.stringify(s));
+  });
+  await page.reload();
+  await page.waitForFunction(() => window.VJ && VJ.app && VJ.panel.app);
+  assert.match(await page.textContent('#warnings'), /YouTube・ニコニコの埋め込みはなくなりました/);
+  assert.deepEqual(await page.evaluate(() => [VJ.app.settings.overlay.mediaKind, VJ.app.settings.mediaLib.length]), ['image', 0]);
+  assert.equal(await page.evaluate(() => document.querySelectorAll('iframe').length), 0, '埋め込みを作らない');
+  // 次に開いたときは、もう知らせない（直した設定を保存した）
+  await page.evaluate(() => VJ.panel.save());
+  await page.waitForTimeout(500);
+  await page.reload();
+  await page.waitForFunction(() => window.VJ && VJ.app && VJ.panel.app);
+  assert.doesNotMatch(await page.textContent('#warnings'), /YouTube・ニコニコ/);
   assert.deepEqual(errors, []);
   await page.close();
 });
 
-test('2 画面：動画ファイル・YouTube は出力ウィンドウで出す（操作ウィンドウでは出さない）。取り込みの画面は出力ウィンドウで選ぶ', async () => {
+test('2 画面：動画ファイルは出力ウィンドウで出す（操作ウィンドウでは出さない）。取り込みの画面は出力ウィンドウで選ぶ', async () => {
   const { page: ctrl, errors } = await openApp(browser, DIST, 'test=1', { width: 1100, height: 800 });
-  await ctrl.context().route('https://www.youtube-nocookie.com/embed/**', (r) => r.fulfill({ contentType: 'text/html', body: FAKE_EMBED }));
   await fresh(ctrl);
   await makeVideo(ctrl);
   const [out] = await Promise.all([ctrl.context().waitForEvent('page'), ctrl.click('#btn-output')]);
@@ -208,10 +193,6 @@ test('2 画面：動画ファイル・YouTube は出力ウィンドウで出す�
   await out.waitForFunction(() => VJ.media.status === 'playing' && VJ.app.renderer.ovVid && VJ.app.renderer.ovVid.ready, null, { timeout: 15000 });
   assert.equal(await ctrl.evaluate(() => !!document.querySelector('video')), false, '操作ウィンドウでは再生しない');
   await ctrl.waitForFunction(() => /再生中/.test(document.getElementById('ov-status').textContent), null, { timeout: 5000 });
-  // YouTube
-  await ctrl.evaluate(() => VJ.panel.setWebUrl('https://youtu.be/dQw4w9WgXcQ'));
-  await out.waitForSelector('#web-overlay iframe');
-  assert.equal(await ctrl.evaluate(() => !!document.getElementById('web-overlay')), false);
   // 取り込み：出力ウィンドウで共有を選ぶ
   await out.evaluate(() => {
     navigator.mediaDevices.getDisplayMedia = async () => { const c = document.createElement('canvas'); c.getContext('2d').fillRect(0, 0, 10, 10); return c.captureStream(10); };

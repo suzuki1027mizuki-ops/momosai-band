@@ -41,15 +41,7 @@
     },
 
     /** パネルの n 番の見出しまでスクロールして、少し光らせる（閉じていたら開く） */
-    scrollTo(n) {
-      const h = Array.from(document.querySelectorAll('#panel h2')).find((x) => x.textContent.trim().startsWith('①②③④⑤⑥⑦'[n - 1]));
-      if (!h) return;
-      if (VJ.sections) VJ.sections.open(n);
-      h.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      h.classList.remove('flash-h');
-      void h.offsetWidth;
-      h.classList.add('flash-h');
-    },
+    scrollTo(n) { VJ.sections.go(n); },
 
     /** 手順が終わったか（パネルの更新ごと。一度終わったものは戻さない） */
     check(f) {
@@ -152,9 +144,9 @@
         else if (c.media && c.media !== 'on' && c.media !== 'off') lost.push(c.name || '?');
       }
       const ms = remote ? ls.media || {} : VJ.media.state();
-      const moving = ['video', 'capture', 'web'].filter((k) => used.has(k));
+      const moving = ['video', 'capture'].filter((k) => used.has(k));
       if (moving.length) {
-        const names = moving.map((k) => ({ video: t('動画ファイル'), capture: t('画面・タブの取り込み'), web: 'YouTube / ' + t('ニコニコ') }[k])).join(t('・'));
+        const names = moving.map((k) => ({ video: t('動画ファイル'), capture: t('画面・タブの取り込み') }[k])).join(t('・'));
         add('warn', t('メディアに{0}を使っています。動画の中の点滅はフラッシュの上限で制限できないので、事前に確認してください', names));
       }
       if (s.overlayOn && baseKind === 'capture' && !ms.capture) add('warn', t('画面の取り込みが止まっています（⑤ のメディア）'));
@@ -165,7 +157,6 @@
         else if (ms.status === 'camerror') add('bad', t('カメラを開けません：{0}', ms.error || ''));
         else add('warn', t('カメラが開いていません（⑤ のメディアで「カメラを開く」）'));
       } else if (used.has('camera')) add('info', t('曲・キューでカメラを使います。リハで一度出して、許可・映り方を確かめてください'));
-      if (used.has('web')) add('info', t('YouTube / ニコニコはインターネットが必要です。会場の回線で再生できるか確かめてください'));
       if (lost.length) add('warn', t('メディアの一覧にないメディアを指定しています：{0}（③ のセットリスト・⑥ のキュー）', [...new Set(lost)].join(t('・'))));
       // スリープ
       if (VJ.compat.features().wakeLock) add('ok', t('「ショー開始」で画面のスリープを止めます'));

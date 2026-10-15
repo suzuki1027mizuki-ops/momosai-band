@@ -342,6 +342,7 @@
       $('lh').classList.toggle('on', perfNow - L.h < 120);
       $('la').classList.toggle('on', perfNow - L.a < 200);
       $('lb').classList.toggle('on', perfNow - L.b < 120);
+      panel.renderStrip(f, m);
       // 激しさが自動のとき、いまの段階を表示
       const sh = panel.app.show, lvName = ['控えめ', 'ふつう', '激しい', '最大'][sh.state.intLv];
       const nowTxt = +panel.app.settings.intensity < 0 && lvName ? t('いま：{0}', t(lvName)) : '';
@@ -359,6 +360,27 @@
         if ($('sp-follow').checked && panel.app.show.state && panel.app.show.state.sceneId !== panel._spScene) panel.renderSceneParams();
         if (perfNow - (panel._ioT || 0) > 500) { panel._ioT = perfNow; panel.renderIo(); }
       }
+    },
+
+    /** パネルの上の「いまの状態」（入力と音量・テンポ・オート / 暗転 / ロック・シーン・曲）。どの項目を見ていても分かるように
+     *  上に残す。変わったところだけ書く（20Hz） */
+    renderStrip(f, m) {
+      const app = panel.app, sh = app.show, st = sh.state || {}, es = app.engine.status;
+      const set = (id, txt) => { const el = $(id); if (el.textContent !== txt) el.textContent = txt; };
+      const cls = (id, name, on) => { const el = $(id); if (el.classList.contains(name) !== !!on) el.classList.toggle(name, !!on); };
+      const dot = es === 'running' ? 'ok' : es === 'error' ? 'bad' : es === 'idle' ? '' : 'warn';
+      for (const k of ['ok', 'warn', 'bad']) cls('ps-dot', k, k === dot);
+      set('ps-in', es === 'running' ? t('入力中') : es === 'error' ? t('エラー') : es === 'idle' ? t('未開始') : es === 'starting' ? t('開始中…') : t('再接続中…'));
+      const db = es === 'running' && m ? Math.max(m.l, m.mono ? -120 : m.r) : -120;
+      $('ps-lv').style.width = Math.max(0, Math.min(100, ((db + 60) / 60) * 100)) + '%';
+      set('ps-bpm', f && f.bpm && f.beatConf > 0.2 ? `${Math.round(f.bpm)} BPM` : '— BPM');
+      cls('ps-auto', 'on', st.auto);
+      for (const [id, on] of [['ps-black', st.blackout], ['ps-lock', st.locked]]) { cls(id, 'on', on); cls(id, 'alert', on); }
+      const sc = VJ.scenes.byId[st.sceneId], pd = st.pending && VJ.scenes.byId[st.pending.id];
+      const key = (d) => (d.key ? d.key.replace('s', '⇧') + ' ' : '');
+      set('ps-scene', (sc ? key(sc) + VJ.sceneName(sc) : '') + (pd ? ' → ' + VJ.sceneName(pd) : ''));
+      const song = sh.currentSong ? sh.currentSong() : null;
+      set('ps-song', song ? `M${st.songIdx + 1} ${song.title}` : st.endState ? t('（終演）') : t('（開演前）'));
     },
 
     applyShow(immediate) {
@@ -655,12 +677,9 @@
         panel.syncOverlay(); apply();
       });
       $('ov-vloop').addEventListener('change', () => { s.overlay.videoLoop = $('ov-vloop').checked; apply(); });
-      $('ov-vsound').addEventListener('change', () => { s.overlay.videoSound = $('ov-vsound').checked; $('ov-wsound').checked = s.overlay.videoSound; apply(); });
-      $('ov-wsound').addEventListener('change', () => { s.overlay.videoSound = $('ov-wsound').checked; $('ov-vsound').checked = s.overlay.videoSound; apply(); });
+      $('ov-vsound').addEventListener('change', () => { s.overlay.videoSound = $('ov-vsound').checked; apply(); });
       $('btn-ov-capture').addEventListener('click', () => panel.startCapture());
       $('btn-ov-capstop').addEventListener('click', () => { panel.app.mediaCall('stopCapture').catch(() => {}); });
-      $('btn-ov-web').addEventListener('click', () => panel.setWebUrl($('ov-web').value));
-      $('ov-web').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); panel.setWebUrl($('ov-web').value); } });
       $('ov-play').addEventListener('click', (e) => {
         const b = e.target.closest('button[data-mcmd]');
         if (b) panel.app.mediaCall('webCmd', b.dataset.mcmd).catch(() => {});
@@ -735,7 +754,7 @@
       document.querySelectorAll('input[name=ov-kind]').forEach((r) => { r.checked = r.value === kind; });
       document.querySelectorAll('#overlay-box .ov-pane').forEach((p) => { p.hidden = p.dataset.kind !== kind; });
       const shown = libItem ? libItem.kind : kind;
-      $('ov-play').hidden = shown !== 'video' && shown !== 'web';
+      $('ov-play').hidden = shown !== 'video';
       $('ov-vwarn').hidden = shown === 'image' || shown === 'camera';
       // 一覧から選ぶ欄
       const ls = $('ov-lib');
@@ -755,9 +774,8 @@
       sel.value = o.scene;
       if (sel.selectedIndex < 0) sel.value = '';
       for (const [id, key] of [['ov-fit', 'imageFit'], ['ov-imgblend', 'imageBlend'], ['ov-sceneblend', 'sceneBlend'], ['ov-corner', 'corner']]) $(id).value = o[key];
-      for (const [id, key] of [['ov-clock', 'clock'], ['ov-band', 'band'], ['ov-song', 'song'], ['ov-vloop', 'videoLoop'], ['ov-vsound', 'videoSound'], ['ov-wsound', 'videoSound']]) $(id).checked = !!o[key];
+      for (const [id, key] of [['ov-clock', 'clock'], ['ov-band', 'band'], ['ov-song', 'song'], ['ov-vloop', 'videoLoop'], ['ov-vsound', 'videoSound']]) $(id).checked = !!o[key];
       if ($('ov-text').value !== o.text) $('ov-text').value = o.text;
-      if (document.activeElement !== $('ov-web') && $('ov-web').value !== o.webUrl) $('ov-web').value = o.webUrl;
       $('ov-vname').textContent = o.videoName ? t('動画：{0}', o.videoName) : t('動画が選ばれていません');
       for (const [id, key] of [['ov-imgop', 'imageOpacity'], ['ov-sceneop', 'sceneOpacity'], ['ov-textop', 'textOpacity'], ['ov-textsize', 'textSize']]) {
         $(id).value = o[key];
@@ -783,7 +801,6 @@
       if (!s.overlayOn) txt = t('メディアは OFF（O キーで表示）');
       else if (kind === 'video') txt = ({ loading: t('読み込み中…'), playing: t('再生中'), paused: t('一時停止中'), ended: t('終わりました（⏮ で最初から）'), missing: t('動画が見つかりません。もう一度選んでください'), error: t('この動画は再生できません（MP4・WebM がおすすめ）'), empty: t('動画が選ばれていません') })[st.status] || '';
       else if (kind === 'capture') txt = st.capture ? t('取り込み中：{0}', st.label || '') : t('取り込んでいません（「取り込む画面・タブを選ぶ」）');
-      else if (kind === 'web') txt = ({ loading: t('読み込み中…'), playing: t('表示中（動かないときは ▶）'), badurl: t('YouTube / ニコニコの URL ではありません'), empty: t('URL を入れて「表示」') })[st.status] || '';
       else if (kind === 'camera') {
         txt = st.camera ? t('カメラ：{0}', st.cameraLabel || t('使用中')) + (st.error ? ' — ' + st.error : '')
           : ({ loading: t('カメラを開いています…（許可を聞かれたら「許可」）'), camerror: t('カメラを開けません：{0}', st.error || ''), lost: t('カメラが外れました。つなぎ直すと戻ります') })[st.status] || t('カメラは止まっています（「カメラを開く」）');
@@ -792,7 +809,7 @@
       // 曲の指定（m:…）・一覧から出しているときは、その名前も
       if (s.overlayOn && st.name) txt = (st.song ? t('曲の指定：{0}', st.name) : t('一覧：{0}', st.name)) + (txt ? ' — ' + txt : '');
       if ($('ov-status').textContent !== txt) $('ov-status').textContent = txt;
-      $('ov-play').hidden = !(kind === 'video' || kind === 'web');
+      $('ov-play').hidden = kind !== 'video';
       if ($('ov-play').hidden && txt && s.overlayOn) {
         // 再生ボタンが無いときも状態の文字は見せる（ボタンの行ごと隠れないように、文字だけの行にする）
         $('ov-play').hidden = false;
@@ -834,19 +851,6 @@
       panel.app.ui.toast(saved ? t('メディアに動画を入れました（O で表示・非表示）') : t('動画を保存できませんでした。このウィンドウを閉じるまで使えます'), saved ? undefined : 'warn');
     },
 
-    /** YouTube / ニコニコの URL をメディアにする */
-    setWebUrl(raw) {
-      const url = String(raw || '').trim();
-      if (!VJ.media.parseWebUrl(url)) { panel.app.ui.toast(t('YouTube / ニコニコの URL ではありません'), 'warn'); return false; }
-      const s = panel.app.settings;
-      s.overlay.webUrl = /^https:\/\//i.test(url) ? url : 'https://' + url.replace(/^http:\/\//i, '');
-      s.overlay.mediaKind = 'web';
-      s.overlayOn = true;
-      panel.syncOverlay();
-      panel.applyShow(true);
-      return true;
-    },
-
     /** 「貼り付け」ボタン：クリップボードの画像を読む（許可を聞かれることがある） */
     async pasteImage() {
       const cb = navigator.clipboard;
@@ -862,7 +866,7 @@
       }
     },
 
-    /** Ctrl+V：画像・動画のファイル、YouTube / ニコニコの URL を、メディアにする（文字の欄に文字を貼るときはそのまま） */
+    /** Ctrl+V：画像・動画のファイルを、メディアにする（文字の欄に文字を貼るときはそのまま） */
     onPaste(e) {
       if (VJ.link.role === 'output') return;
       const cd = e.clipboardData;
@@ -874,8 +878,7 @@
       const text = cd.getData('text/plain') || '';
       if (editable && (text || !(img || vid))) return;
       if (img) { e.preventDefault(); panel.setOverlayImageFile(img); return; }
-      if (vid) { e.preventDefault(); panel.setOverlayVideoFile(vid); return; }
-      if (!editable && VJ.media.parseWebUrl(text)) { e.preventDefault(); panel.setWebUrl(text); }
+      if (vid) { e.preventDefault(); panel.setOverlayVideoFile(vid); }
     },
 
     /** 画面・タブの取り込みを始める（2 画面のときは出力ウィンドウに選ぶ画面が出る） */
@@ -897,7 +900,7 @@
 
     /** メディアの種類の名前 */
     mediaKindName(kind) {
-      return ({ image: t('画像'), video: t('動画'), web: 'YouTube / ' + t('ニコニコ'), camera: t('カメラ'), capture: t('画面の取り込み') })[kind] || '';
+      return ({ image: t('画像'), video: t('動画'), camera: t('カメラ'), capture: t('画面の取り込み') })[kind] || '';
     },
 
     /** カメラの一覧を作り直す（描画しているウィンドウで調べる：許可はそちらで出しているので名前が分かる） */
@@ -954,7 +957,10 @@
       }
     },
 
+    _notes: [],
+
     renderWarnings() {
+      panel._notes.push(...VJ.storage.takeNotes().filter((n) => !panel._notes.includes(n)));
       const app = panel.app, w = [];
       if (VJ.compat.browser !== 'chromium') {
         const miss = VJ.compat.missing();
@@ -964,10 +970,19 @@
       if (r.software) w.push(t('GPU が使われていません（ソフトウェア描画）。Chrome の 設定 → システム →「グラフィック アクセラレーションが使用可能な場合は使用する」を ON にして再起動してください。'));
       if (r.failed.length) w.push(t('一部のシーンを読み込めませんでした（自動的に飛ばします）：') + r.failed.join(', '));
       try {
-        if (location.protocol === 'file:' && /[^\x00-\x7f]/.test(decodeURIComponent(location.pathname))) {
+        const p = location.protocol === 'file:' ? decodeURIComponent(location.pathname) : '';
+        // OneDrive・Dropbox などの同期されるフォルダ：起動スクリプトの設定の保存場所（.vj-profile）もフォルダの中にあるので、
+        // Chrome が使っている最中のファイルが同期され続ける（単体アプリの設定は別の場所なので関係ない）
+        if (VJ.params.app !== '1' && VJ.compat.syncedPath(p)) {
+          w.push(t('このフォルダは OneDrive などの同期されるフォルダの中にあります。設定の保存場所（.vj-profile）も同期の対象になり、使っている最中のファイルが同期され続けます。本番の PC では C:\\momosai-vj のような、同期されない英数字だけの場所に置くのがおすすめです。'));
+        } else if (/[^\x00-\x7f]/.test(p)) {
           w.push(t('フォルダ名に日本語などが含まれています。念のため C:\\momosai-vj のような英数字だけの場所に置くのがおすすめです。'));
         }
       } catch (e) { /* noop */ }
+      // 読み込んだ設定についての知らせ（このウィンドウを閉じるまで出す）
+      for (const n of panel._notes) {
+        if (n === 'web-removed') w.push(t('YouTube・ニコニコの埋め込みはなくなりました（埋め込みの規約に沿えないため）。使っていたメディアは画像に戻し、メディアの一覧からも外しました。曲の m:… に残っていれば、本番前チェックに出ます。'));
+      }
       $('warnings').innerHTML = w.map((x) => `<div class="warnbox">⚠ ${esc(x)}</div>`).join('');
     },
 
@@ -1042,6 +1057,7 @@
       // 入力欄の更新で何度も反映しないように、最後に 1 回だけ（2 画面のときは出力側へ送る回数も減る）
       panel._bulk = true;
       try { panel._replace(ns); } finally { panel._bulk = false; }
+      panel.renderWarnings(); // 読み込んだ設定についての知らせ（YouTube・ニコニコをやめた など）
       panel.applyShow(true);
       VJ.storage.save(panel.app.settings);
     },

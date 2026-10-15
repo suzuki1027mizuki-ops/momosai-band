@@ -11,13 +11,13 @@ const LIB = [
   { id: 'Lcam', name: 'ステージ', kind: 'camera', cameraId: 'dev1', mirror: true },
   { id: 'Llogo', name: 'ロゴ', kind: 'image', key: 'k1' },
   { id: 'Lmv', name: 'MV', kind: 'video', key: 'k2' },
-  { id: 'Lyt', name: '12', kind: 'web', url: 'https://youtu.be/dQw4w9WgXcQ' },
+  { id: 'Lnum', name: '12', kind: 'camera', cameraId: 'dev2' },
 ];
 
 test('メディアの一覧：形を確かめる（壊れた設定・古い版でも動く）', () => {
   assert.deepEqual(VJ.mediaLib.clean({ id: 'a', name: 'x', kind: 'camera', cameraId: 'c', mirror: 1 }), { id: 'a', name: 'x', kind: 'camera', cameraId: 'c', mirror: true });
   assert.equal(VJ.mediaLib.clean({ id: 'a', kind: 'image' }), null, '画像は中身の鍵が要る');
-  assert.equal(VJ.mediaLib.clean({ id: 'a', kind: 'web', url: 'javascript:alert(1)' }), null);
+  assert.equal(VJ.mediaLib.clean({ id: 'a', kind: 'web', url: 'https://youtu.be/dQw4w9WgXcQ' }), null, 'YouTube・ニコニコ（web）は、もう一覧に入れない');
   assert.equal(VJ.mediaLib.clean({ id: 'a b', kind: 'camera' }), null, 'id に空白');
   assert.equal(VJ.mediaLib.clean({ id: 'a', kind: 'capture' }), null, '画面の取り込みは一覧に入れない');
   assert.equal(VJ.mediaLib.clean({ id: 'a', kind: 'image', key: 'k', name: 'x'.repeat(99) }).name.length, 60);
@@ -45,7 +45,7 @@ test('メディアの一覧：m:… の指定（番号・名前・off）・セ�
   assert.equal(VJ.mediaLib.find(s, ''), null);
   // 数字だけの名前は番号と間違えるので、セットリストには番号で書く
   assert.equal(VJ.mediaLib.token(s, 'Llogo'), 'ロゴ');
-  assert.equal(VJ.mediaLib.token(s, 'Lyt'), '4');
+  assert.equal(VJ.mediaLib.token(s, 'Lnum'), '4');
   assert.equal(VJ.mediaLib.uniqueName(s, 'ロゴ'), 'ロゴ 2');
   assert.equal(VJ.mediaLib.uniqueName(s, 'ロゴ', 'Llogo'), 'ロゴ', '自分自身とは重ならない');
   assert.deepEqual(VJ.mediaLib.keys(s), ['k1', 'k2']);
@@ -108,11 +108,91 @@ test('曲ごとのメディア：m:off の曲でも O で出せば設定のメ�
   s.overlay.image = 'data:image/png;base64,AAAA';
   s.overlayOn = true;
   const c = new VJ.ShowController(s);
+  const toasts = [];
+  c.on((m) => toasts.push(m));
   c.nextSong();
   assert.equal(c.effectiveMedia().kind, '');
-  c.toggleOverlay(); // OFF
-  c.toggleOverlay(); // ON
-  assert.equal(c.effectiveMedia().kind, 'image');
+  // ON のまま何も出ていない（m:off）ときは、O 1 回で出す（「メディア: OFF」と出て何も起きない、にしない）
+  toasts.length = 0;
+  c.toggleOverlay();
+  assert.deepEqual([s.overlayOn, c.effectiveMedia().kind, toasts], [true, 'image', ['メディア: ON']]);
+  c.toggleOverlay();
+  assert.equal(s.overlayOn, false, 'もう 1 回で消す');
+  // 消してあるときは、いままでどおり 1 回で出す
+  c.prevSong(); c.nextSong();
+  assert.deepEqual([s.overlayOn, c.effectiveMedia().kind], [false, '']);
+  c.toggleOverlay();
+  assert.deepEqual([s.overlayOn, c.effectiveMedia().kind], [true, 'image']);
+});
+
+test('曲ごとのメディア：消してあったメディアを曲の指定で出したら、指定の無い曲では消した状態に戻す（操作者が触ったら戻さない）', () => {
+  const mk = (over) => {
+    const s = fresh(Object.assign({ mediaLib: LIB.map((x) => Object.assign({}, x)), overlayOn: false, setlistText: 'A | 1 | | m:ロゴ\nB | 2\nC | 3 | | m:MV\nD | 4 | | m:off\nE | 5' }, over || {}));
+    s.overlay.image = 'data:image/png;base64,AAAA'; // O で隠してあるパネルの画像
+    return [s, new VJ.ShowController(s)];
+  };
+  let [s, c] = mk();
+  c.nextSong();
+  assert.equal(s.overlayOn, true, 'A：曲の指定で出す');
+  c.nextSong();
+  assert.equal(s.overlayOn, false, 'B：指定が無いので、隠してあった状態に戻す（パネルの画像が勝手に出ない）');
+  c.nextSong();
+  assert.equal(s.overlayOn, true, 'C');
+  c.nextSong();
+  assert.equal(s.overlayOn, false, 'D（m:off）');
+  c.prevSong();
+  assert.equal(s.overlayOn, true, 'C に戻れば出す');
+  c.prevSong(); c.prevSong(); c.prevSong();
+  assert.deepEqual([c.state.songIdx, s.overlayOn], [-1, false], '開演前に戻ったときも');
+  // 終演・出演バンドの切替でも戻す
+  [s, c] = mk({ setlistText: 'A | 1 | | m:ロゴ' });
+  c.nextSong(); c.nextSong();
+  assert.deepEqual([c.state.endState, s.overlayOn], [true, false]);
+  c.prevSong();
+  assert.equal(s.overlayOn, true);
+  c.resetShow();
+  assert.equal(s.overlayOn, false);
+  // 操作者がその曲のあいだに出す・消す・選ぶをしたら、そのままにする
+  [s, c] = mk();
+  c.nextSong(); c.setOverlay(true); c.nextSong();
+  assert.equal(s.overlayOn, true, '「出す」と決めた');
+  [s, c] = mk();
+  c.nextSong(); c.toggleOverlay(); c.toggleOverlay(); c.nextSong();
+  assert.equal(s.overlayOn, true, 'O で消して出し直した');
+  [s, c] = mk();
+  c.nextSong(); s.overlay.mediaKind = 'lib'; s.overlay.libId = 'Lmv'; c.effectiveMedia(); c.nextSong();
+  assert.equal(s.overlayOn, true, 'パネルでメディアを選んだ');
+  [s, c] = mk();
+  c.nextSong(); c.overrideSongMedia(); c.nextSong();
+  assert.equal(s.overlayOn, true, '一覧の ▶・キューで選んだ');
+  [s, c] = mk();
+  c.nextSong(); s.overlayOn = false; c.applySettings(s); s.overlayOn = true; c.applySettings(s); c.nextSong();
+  assert.equal(s.overlayOn, true, 'パネルのチェックで消して出し直した');
+  // はじめから出していたときは、曲が変わっても出したまま
+  [s, c] = mk({ overlayOn: true });
+  c.nextSong(); c.nextSong();
+  assert.equal(s.overlayOn, true);
+});
+
+test('YouTube・ニコニコの埋め込みはやめた：古い設定のメディアは画像に戻し、一覧から外し、一度だけ知らせる', () => {
+  VJ.storage.takeNotes();
+  const old = { v: 1, overlay: { mediaKind: 'web', webUrl: 'https://youtu.be/dQw4w9WgXcQ' }, mediaLib: [LIB[1], { id: 'Lyt', name: 'MV', kind: 'web', url: 'https://youtu.be/dQw4w9WgXcQ' }], setlistText: 'A | 1 | | m:MV' };
+  const s = VJ.storage.fromJSON(JSON.stringify(old));
+  assert.equal(s.overlay.mediaKind, 'image');
+  assert.equal('webUrl' in s.overlay, false, '使わない項目は残さない');
+  assert.deepEqual(s.mediaLib.map((x) => x.id), ['Llogo']);
+  assert.deepEqual(VJ.storage.takeNotes(), ['web-removed']);
+  assert.deepEqual(VJ.storage.takeNotes(), [], '一度だけ');
+  // 使っていなかった設定では知らせない
+  VJ.storage.fromJSON(JSON.stringify({ v: 1, overlay: { mediaKind: 'video' } }));
+  assert.deepEqual(VJ.storage.takeNotes(), []);
+  // 曲の m:MV は、一覧に無いメディアの指定になる（本番前チェックで知らせる）
+  assert.equal(VJ.mediaLib.find(s, 'MV'), null);
+  // 埋め込みの部品は無い
+  assert.equal(VJ.media.parseWebUrl, undefined);
+  const c = new VJ.ShowController(s);
+  c.nextSong();
+  assert.equal(c.effectiveMedia().kind, 'image', '曲の指定が見つからなければ、設定のメディア');
 });
 
 test('キュー：いまの状態を入れる・出す（そのままの項目は変えない）・説明', () => {

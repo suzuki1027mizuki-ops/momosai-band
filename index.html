@@ -7,16 +7,20 @@
 <style>
 :root {
   --bg: #07070d;
-  --panel: rgba(12, 12, 22, 0.94);
-  --line: #2a2a40;
-  --text: #e8e8f4;
-  --muted: #9a9ab4;
+  /* パネルは不透明（うしろの映像が透けると、明るいシーンで文字が読みにくい） */
+  --panel: #0c0c16;
+  --card: #151526;
+  --field: #0c0c17;
+  --line: #303050;
+  --text: #f2f2fa;
+  --muted: #b4b4cc;
   --accent: #00e5ff;
   --accent2: #ff2ec8;
   --warn: #ffb020;
   --bad: #ff4d6a;
   --ok: #3dff9a;
-  --font: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", "Meiryo", "Noto Sans JP", system-ui, sans-serif;
+  /* 画面で読みやすい書体を先に（Windows の游ゴシックは細く、暗い背景の小さい字が読みにくい） */
+  --font: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "BIZ UDPGothic", "Meiryo", "Yu Gothic UI", "Yu Gothic", "Noto Sans JP", system-ui, sans-serif;
   --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "BIZ UDGothic", monospace;
 }
 * { box-sizing: border-box; }
@@ -44,6 +48,7 @@ html.glass, html.glass body, html.glass #stage { background: transparent; }
 .cue-grid button .cn { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cue-grid button .cd { font-size: 11px; color: var(--muted); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .cue-grid button.fired { border-color: var(--accent2); }
+.cue-grid > .hint { grid-column: 1 / -1; }
 .cue-ed { border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; margin: 6px 0; }
 .cue-ed .row { margin: 3px 0; }
 #panel .cue-ed input[type=text] { flex: 1; width: auto; min-width: 0; }
@@ -53,47 +58,107 @@ html.glass, html.glass body, html.glass #stage { background: transparent; }
 
 /* 設定パネル（映像の上に右側だけ） */
 #panel {
-  position: fixed; top: 0; right: 0; bottom: 0; width: min(440px, 100vw);
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(460px, 100vw);
   background: var(--panel); border-left: 1px solid var(--line);
-  overflow-y: auto; padding: 14px 16px 40px; font-size: 14px; line-height: 1.5;
-  scrollbar-width: thin; z-index: 20;
+  overflow-y: auto; padding: 0 14px 48px; font-size: 14px; line-height: 1.55;
+  scrollbar-width: thin; z-index: 20; --top-h: 0px;
 }
-#panel header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+/* パネルの上：題・いまの状態・目次。スクロールしても上に残る（窓が低いときは、場所を取るので一緒に流す） */
+#panel-top { position: sticky; top: 0; z-index: 6; margin: 0 -14px 10px; padding: 10px 14px 8px; background: var(--panel); border-bottom: 1px solid var(--line); box-shadow: 0 6px 12px rgba(0, 0, 0, 0.45); }
+@media (max-height: 619px) { #panel-top { position: static; box-shadow: none; } }
+#panel header { display: flex; align-items: center; gap: 8px; }
 #panel header h1 { font-size: 18px; margin: 0; letter-spacing: 0.08em; font-weight: 900;
   background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
 #panel header .ver { color: var(--muted); font-size: 11px; flex: 1; }
-#panel h2 { font-size: 13px; color: var(--accent); margin: 18px 0 8px; letter-spacing: 0.05em; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
-#panel h2 .psec-btn { all: unset; display: flex; align-items: center; gap: 6px; width: 100%; cursor: pointer; box-sizing: border-box; }
-#panel h2 .psec-btn::before { content: '▾'; display: inline-block; width: 1em; text-align: center; color: var(--muted); transition: transform 0.15s; }
-#panel h2 .psec-btn:hover { color: var(--text); }
-#panel h2 .psec-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
-#panel .psec.closed h2 { margin-bottom: 0; }
-#panel .psec.closed h2 .psec-btn::before { transform: rotate(-90deg); }
+/* いまの状態（入力・テンポ・シーン・曲）。どこを見ていても分かるように */
+.pstatus { display: grid; grid-template-columns: 1fr auto auto; gap: 4px 6px; margin-top: 8px; font-size: 12.5px; }
+.pstatus button { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 3px 8px; background: var(--card); border: 1px solid var(--line); border-radius: 7px; text-align: left; }
+.pstatus .ps-now { grid-column: 1 / -1; }
+.pstatus .ps-now span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pstatus #ps-scene { font-weight: 700; flex: none; max-width: 55%; }
+.pstatus #ps-song { color: var(--muted); }
+.pstatus .ps-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: #55557a; }
+.pstatus .ps-dot.ok { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+.pstatus .ps-dot.warn { background: var(--warn); }
+.pstatus .ps-dot.bad { background: var(--bad); }
+.pstatus .ps-bar { flex: 1; min-width: 30px; height: 7px; border-radius: 4px; background: var(--field); border: 1px solid var(--line); overflow: hidden; }
+.pstatus .ps-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #12c26b 0%, #12c26b 70%, #ffd000 85%, #ff3b3b 100%); }
+.pstatus #ps-bpm { font-family: var(--mono); font-weight: 700; white-space: nowrap; }
+.pstatus .ps-flags { display: flex; align-items: center; gap: 3px; }
+.pstatus .ps-flags i { font: 700 10.5px/1 var(--mono); font-style: normal; padding: 4px 5px; border-radius: 5px; border: 1px solid var(--line); color: #62628a; white-space: nowrap; }
+.pstatus .ps-flags i.on { color: #001318; background: var(--accent); border-color: var(--accent); }
+.pstatus .ps-flags i.on.alert { color: #fff; background: var(--bad); border-color: var(--bad); }
+/* 目次（①〜⑦ へ飛ぶ。閉じている見出しは開く） */
+.pnav { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.pnav button { flex: 1 1 auto; min-width: 0; padding: 4px 4px; font-size: 12.5px; line-height: 1.4; background: transparent; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); white-space: nowrap; overflow: hidden; }
+.pnav button b { font-size: 14px; font-weight: 700; color: var(--text); margin-right: 1px; }
+.pnav button.closed { opacity: 0.6; }
+.pnav button.on { border-color: var(--accent); color: var(--text); background: #0d2430; opacity: 1; }
+.pnav button.on b { color: var(--accent); }
+/* ①〜⑦ は 1 つずつ枠で囲む（どこからどこまでが同じ項目か分かるように） */
+#panel .psec { background: var(--card); border: 1px solid var(--line); border-radius: 10px; margin: 12px 0; scroll-margin-top: calc(var(--top-h) + 8px); }
+#panel h2 { font-size: 15px; font-weight: 700; color: var(--text); margin: 0; letter-spacing: 0.03em; background: #1d1d36; border-radius: 9px 9px 0 0; }
+#panel h2 .psec-btn { all: unset; display: flex; align-items: center; gap: 8px; width: 100%; padding: 9px 12px; cursor: pointer; box-sizing: border-box; }
+#panel h2 .psec-btn::after { content: '▾'; margin-left: auto; color: var(--muted); transition: transform 0.15s; }
+#panel h2 .psec-btn:hover { color: var(--accent); }
+#panel h2 .psec-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 9px; }
+#panel .psec > .psec-body { padding: 6px 12px 12px; }
+#panel .psec.closed h2 { border-radius: 9px; background: transparent; }
+#panel .psec.closed h2 .psec-btn { color: var(--muted); }
+#panel .psec.closed h2 .psec-btn::after { transform: rotate(-90deg); }
 #panel .psec.closed > .psec-body { display: none; }
-#panel .psec-all { justify-content: flex-end; margin: 2px 0 -8px; }
-#panel .psec-all button { font-size: 11px; padding: 2px 8px; }
-#panel label { display: inline-flex; align-items: center; gap: 4px; margin-right: 10px; cursor: pointer; }
-#panel .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 4px; margin: 6px 0; }
-#panel .hint { color: var(--muted); font-size: 12px; margin: 4px 0; }
-#panel input[type=text], #panel select, #panel textarea {
-  background: #11111c; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font: inherit; }
+#panel .psec-all { justify-content: flex-end; margin: 4px 0 -4px; }
+#panel .psec-all button { font-size: 12px; padding: 3px 9px; }
+#panel label { display: inline-flex; align-items: center; gap: 6px; margin-right: 10px; cursor: pointer; }
+#panel input[type=checkbox], #panel input[type=radio] { width: 16px; height: 16px; margin: 0; flex: none; accent-color: var(--accent); }
+#panel .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 8px 0; }
+/* つまみの行は「名前・つまみ・値」の 3 列にそろえる */
+#panel .row:has(> input[type=range]), .sp-row { display: grid; grid-template-columns: 8em minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+#panel .row:has(> input[type=range]) > span:last-child, .sp-row > span:last-child { min-width: 3.4em; text-align: right; font: 12.5px var(--mono); color: var(--muted); white-space: nowrap; }
+/* 窓がとても狭いとき（パネルの幅が足りない）は、3 列にせず折り返す（つまみの幅が無くならないように）。上の状態も折り返す */
+@media (max-width: 400px) {
+  #panel .row:has(> input[type=range]), .sp-row { display: flex; flex-wrap: wrap; }
+  #panel input[type=range] { flex: 1 1 120px; min-width: 120px; width: auto; }
+  .pstatus { display: flex; flex-wrap: wrap; }
+  .pstatus > * { flex: 1 1 auto; }
+}
+/* 名前のあとに選ぶ欄が続く行は、名前の幅をそろえる */
+#panel .row:has(> select) > span:first-child:not(.hint) { min-width: 8em; }
+/* 選択肢（入力の種類・メディアの種類）は、選んでいるものがひと目で分かるボタンの形に */
+#panel .row.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+#panel .row.seg label { margin: 0; padding: 7px 9px; background: var(--field); border: 1px solid var(--line); border-radius: 8px; }
+#panel .row.seg label:hover { border-color: #5a5a88; }
+#panel .row.seg label:has(input:checked) { border-color: var(--accent); background: #0d2430; font-weight: 700; }
+/* 説明の文は、操作する部品より控えめに（左に細い線。「説明を隠す」で消せる） */
+#panel .hint { color: var(--muted); font-size: 12.5px; line-height: 1.6; margin: 4px 0; }
+#panel .hint.help { border-left: 2px solid #3a3a64; padding-left: 8px; margin: 6px 0 10px; }
+#panel.nohelp .help { display: none; }
+#panel input[type=text], #panel input[type=number], #panel select, #panel textarea {
+  background: var(--field); color: var(--text); border: 1px solid #44446a; border-radius: 7px; padding: 6px 8px; font: inherit; }
 #panel input[type=text], #panel textarea { width: 100%; }
 #panel select { max-width: 100%; }
+#panel input:focus-visible, #panel select:focus-visible, #panel textarea:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 #panel textarea { font-family: var(--mono); font-size: 12.5px; min-height: 110px; resize: vertical; }
-#panel input[type=range] { flex: 1; min-width: 120px; accent-color: var(--accent); }
+#panel input[type=range] { flex: 1; min-width: 0; width: 100%; accent-color: var(--accent); }
 #panel input[type=color] { width: 36px; height: 28px; border: 0; padding: 0; background: none; }
+#panel input[type=file] { max-width: 100%; font-size: 12.5px; color: var(--muted); }
+#panel input[type=file]::file-selector-button { font: inherit; font-size: 13.5px; color: var(--text); background: #222240; border: 1px solid #4a4a74; border-radius: 7px; padding: 5px 10px; margin-right: 8px; cursor: pointer; }
+#panel input[type=file]::file-selector-button:hover { border-color: var(--accent); background: #2a2a50; }
+#panel code { font-family: var(--mono); font-size: 12px; background: #23233c; border-radius: 4px; padding: 1px 4px; color: var(--text); }
 button {
-  font: inherit; color: var(--text); background: #1c1c2c; border: 1px solid #3a3a58; border-radius: 6px;
+  font: inherit; color: var(--text); background: #222240; border: 1px solid #4a4a74; border-radius: 7px;
   padding: 6px 12px; cursor: pointer; }
-button:hover { border-color: var(--accent); }
-button.primary { background: linear-gradient(90deg, #006a7a, #6a0a58); border-color: transparent; font-weight: 700; }
+button:hover { border-color: var(--accent); background: #2a2a50; }
+button:disabled { opacity: 0.4; cursor: default; }
+button.primary { background: linear-gradient(90deg, #007d90, #7c1068); border-color: transparent; font-weight: 700; color: #fff; }
+button.primary:hover { background: linear-gradient(90deg, #0095ab, #96147e); }
 button.big { width: 100%; padding: 14px; font-size: 18px; font-weight: 900; letter-spacing: 0.08em;
   background: linear-gradient(90deg, #00b8d0, #c8109c); border: 0; color: #fff; }
 button.close { margin-left: auto; padding: 2px 10px; }
-.status { margin: 6px 0; padding: 6px 8px; border-radius: 6px; background: #11111c; font-size: 13px; }
-.status.ok { border-left: 4px solid var(--ok); }
-.status.warn { border-left: 4px solid var(--warn); }
-.status.bad { border-left: 4px solid var(--bad); }
+.status { margin: 8px 0; padding: 7px 10px; border-radius: 7px; background: var(--field); border: 1px solid var(--line); border-left-width: 4px; font-size: 13px; }
+.status.ok { border-left-color: var(--ok); }
+.status.warn { border-left-color: var(--warn); }
+.status.bad { border-left-color: var(--bad); }
 .meter { display: grid; grid-template-columns: 18px 1fr 64px; align-items: center; gap: 6px; margin: 3px 0; font-family: var(--mono); font-size: 12px; }
 .meter .track { height: 12px; background: #11111c; border: 1px solid var(--line); border-radius: 3px; position: relative; overflow: hidden; }
 .meter .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0;
@@ -106,8 +171,9 @@ table.setlist { width: 100%; border-collapse: collapse; font-size: 12px; margin-
 table.setlist td, table.setlist th { border-bottom: 1px solid var(--line); padding: 3px 4px; text-align: left; }
 table.setlist th { color: var(--muted); font-weight: normal; }
 .err { color: var(--bad); font-size: 12px; }
-.keys { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font-size: 13px; }
-.keys kbd, #help kbd { font-family: var(--mono); background: #1c1c2c; border: 1px solid #3a3a58; border-bottom-width: 2px; border-radius: 4px; padding: 0 6px; white-space: nowrap; }
+.keys { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 13px; align-items: baseline; }
+.keys kbd { justify-self: start; }
+.keys kbd, #help kbd, #panel kbd { font-family: var(--mono); font-size: 12px; background: #23233c; border: 1px solid #4a4a74; border-bottom-width: 2px; border-radius: 4px; padding: 0 6px; white-space: nowrap; }
 .warnbox { background: #2a1a00; border: 1px solid var(--warn); color: #ffd99a; border-radius: 6px; padding: 8px; margin: 8px 0; font-size: 13px; }
 
 /* トースト・HUD・ヘルプ */
@@ -120,8 +186,13 @@ table.setlist th { color: var(--muted); font-weight: normal; }
 #help { position: fixed; z-index: 35; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.6); }
 #help .box { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 24px; max-width: 640px; width: calc(100vw - 32px); }
 #help h3 { margin: 0 0 10px; color: var(--accent); }
-details { margin: 8px 0; border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
-details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+/* 折りたたみ（詳しい項目）：開いているものは、中身が枠の中にあると分かるように */
+details { margin: 10px 0; border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; background: #101020; }
+details summary { cursor: pointer; color: var(--text); font-size: 13.5px; font-weight: 600; margin: 0 -10px; padding: 7px 10px; border-radius: 7px; }
+details summary:hover { color: var(--accent); }
+details[open] { padding-bottom: 6px; }
+details[open] > summary { border-bottom: 1px solid var(--line); border-radius: 7px 7px 0 0; margin-bottom: 8px; background: #17172c; }
+details details { background: var(--card); }
 .bpm { font-family: var(--mono); min-width: 80px; }
 .row.msg input[type=text] { flex: 1; width: auto; }
 #logo-preview { max-height: 60px; max-width: 200px; background: #222; border-radius: 4px; }
@@ -132,7 +203,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .midimap button { padding: 1px 8px; font-size: 12px; }
 .midimap button.wait { border-color: var(--accent2); color: var(--accent2); }
 /* シーンを絵で選ぶ */
-.scene-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; margin: 6px 0; }
+.scene-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 6px; margin: 6px 0; }
 .scene-btn { position: relative; padding: 0; border-radius: 6px; overflow: hidden; background: #000; border: 2px solid #3a3a58; display: flex; flex-direction: column; text-align: left; }
 .scene-btn img, .scene-btn .noimg { width: 100%; aspect-ratio: 16 / 9; display: block; object-fit: cover; background: #222; }
 .scene-btn .sk { position: absolute; left: 3px; top: 3px; background: rgba(0,0,0,0.72); color: #fff; font: 11px var(--mono); padding: 0 4px; border-radius: 3px; }
@@ -172,7 +243,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .guide li.next .g-mark { background: var(--accent2); color: #fff; }
 #btn-guide.on { border-color: var(--accent2); color: var(--accent2); }
 #panel h2.flash-h { animation: flashh 1.4s ease-out; }
-@keyframes flashh { 0% { background: rgba(255, 46, 200, 0.45); } 100% { background: transparent; } }
+@keyframes flashh { 0% { background: rgba(255, 46, 200, 0.6); } 100% { background: #1d1d36; } }
 .sc-step.bad { color: var(--bad); }
 .sc-step.warn { color: var(--warn); }
 .sc-step.ok { color: var(--ok); }
@@ -190,7 +261,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .qrbox { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; margin: 6px 0; }
 .qrbox figure { margin: 0; text-align: center; font-size: 12px; color: var(--muted); }
 .qrbox img { width: 180px; height: 180px; image-rendering: pixelated; background: #fff; border-radius: 6px; display: block; }
-.band-row { text-align: left; display: grid; grid-template-columns: 1.6em 3.4em 1fr auto auto auto auto auto; align-items: center; gap: 4px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: #11111c; cursor: pointer; font-size: 13px; }
+.band-row { text-align: left; display: grid; grid-template-columns: 1.4em auto minmax(0, 1fr) auto auto auto auto auto; align-items: center; gap: 4px; padding: 5px 6px; border: 1px solid var(--line); border-radius: 7px; background: var(--field); cursor: pointer; font-size: 13.5px; }
 .band-row.on { border-color: var(--accent); background: #0d2430; }
 .band-row .bi { color: var(--muted); font-family: var(--mono); }
 .band-row .bt { font-family: var(--mono); color: var(--muted); }
@@ -204,9 +275,9 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .band-edit { border: 1px solid var(--accent2); border-top: 0; border-radius: 0 0 6px 6px; margin-top: -4px; padding: 6px; background: #160c1a; }
 #panel .band-edit textarea { min-height: 90px; }
 #panel input[type=time] { background: #11111c; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 6px; font: inherit; color-scheme: dark; }
-.sp-row { display: grid; grid-template-columns: 7em 1fr 3.5em; align-items: center; gap: 6px; margin: 4px 0; }
+.sp-row { margin: 6px 0; }
 body.remote-mode #stage { opacity: 0.25; }
-#remote { position: fixed; left: 16px; top: 16px; max-width: max(260px, calc(100vw - min(440px, 100vw) - 40px)); display: flex; z-index: 10; }
+#remote { position: fixed; left: 16px; top: 16px; max-width: max(260px, calc(100vw - min(460px, 100vw) - 40px)); display: flex; z-index: 10; }
 #remote .box { background: var(--panel); border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; max-width: 640px; }
 #remote h3 { margin: 0 0 6px; color: var(--accent); }
 #remote pre { font: 12px/1.45 var(--mono); white-space: pre-wrap; color: #cfe; margin: 8px 0; }
@@ -220,24 +291,41 @@ body.remote-mode #stage { opacity: 0.25; }
 <canvas id="stage"></canvas>
 
 <div id="panel">
+  <div id="panel-top">
   <header>
     <h1>MOMOSAI VJ</h1>
     <span class="ver" id="ver"></span>
     <button class="close" id="btn-guide" title="はじめてのガイド">?</button>
     <button class="close" id="panel-close" title="閉じる（M で開く）">×</button>
   </header>
+  <div class="pstatus" id="pstatus">
+    <button type="button" data-go="1" title="音声入力（押すと ① へ）"><i class="ps-dot" id="ps-dot"></i><span id="ps-in">未開始</span><span class="ps-bar"><i id="ps-lv"></i></span></button>
+    <button type="button" data-go="2" title="テンポ（押すと ② へ）"><b id="ps-bpm" data-i18n-skip>— BPM</b></button>
+    <span class="ps-flags"><i id="ps-auto" title="オート（A）">AUTO</i><i id="ps-black" title="暗転（B）">暗転</i><i id="ps-lock" title="ロック（L）">LOCK</i></span>
+    <button type="button" class="ps-now" data-go="6" title="いまのシーンと曲（押すと ⑥ へ）"><span id="ps-scene"></span><span id="ps-song" data-i18n-skip></span></button>
+  </div>
+  <nav class="pnav" id="pnav" aria-label="パネルの目次">
+    <button type="button" data-go="1" title="① 音声入力"><b>①</b>入力</button>
+    <button type="button" data-go="2" title="② 音楽のタイプ・テンポ"><b>②</b>音楽</button>
+    <button type="button" data-go="3" title="③ 出演バンド・セットリスト・文字"><b>③</b>出演</button>
+    <button type="button" data-go="4" title="④ 表示（スクリーンに合わせる）"><b>④</b>画面</button>
+    <button type="button" data-go="5" title="⑤ 演出・オプション"><b>⑤</b>演出</button>
+    <button type="button" data-go="6" title="⑥ 本番"><b>⑥</b>本番</button>
+    <button type="button" data-go="7" title="⑦ 外部連携（スマホ・OSC・照明）"><b>⑦</b>連携</button>
+  </nav>
+  </div>
   <div class="row" data-i18n-skip><span>言語 / Language</span><select id="opt-lang"><option value="auto">自動 / Auto</option><option value="ja">日本語</option><option value="en">English</option></select></div>
   <div id="warnings"></div>
   <div id="resume-box" hidden>
     <div class="warnbox resume"><span id="resume-text"></span> <button id="btn-resume">前回の続きから再開</button> <button id="btn-resume-no">いいえ</button></div>
   </div>
   <div id="guide" class="guide" hidden></div>
-  <div class="row psec-all"><button id="psec-open-all" title="①〜⑦ をすべて開く">すべて開く</button><button id="psec-close-all" title="①〜⑦ をすべて閉じる（見出しを押すと 1 つずつ開きます）">すべて閉じる</button></div>
+  <div class="row psec-all"><button id="psec-help" title="説明の文（左に線のある小さい字）を出す / 隠す">説明を隠す</button><button id="psec-open-all" title="①〜⑦ をすべて開く">すべて開く</button><button id="psec-close-all" title="①〜⑦ をすべて閉じる（見出しを押すと 1 つずつ開きます）">すべて閉じる</button></div>
 
   <section class="psec" data-sec="1">
   <h2><button type="button" class="psec-btn" aria-expanded="true">① 音声入力</button></h2>
   <div class="psec-body">
-  <div class="row">
+  <div class="row seg">
     <label><input type="radio" name="src" value="mic" checked> マイク / ライン</label>
     <label><input type="radio" name="src" value="display"> PC で再生中の音</label>
     <label><input type="radio" name="src" value="demo"> デモ音源</label>
@@ -254,7 +342,7 @@ body.remote-mode #stage { opacity: 0.25; }
     <select id="device"><option value="">（既定のデバイス）</option></select>
     <button id="btn-refresh" title="デバイス一覧を更新">↻</button>
   </div>
-  <div class="hint" id="display-opts" hidden data-i18n-html>YouTube・音楽アプリ・DJ ソフトなど PC で流している音に反応します。開始すると共有する画面を聞かれるので、<b>「画面全体」</b>で画面を選び、<b>「システムの音声を含めて共有する」をオン</b>にして共有します（最初はオフです。Chrome のタブを選ぶときは「タブの音声を含めて共有する」）。2 画面のときは、選ぶ画面が出力ウィンドウに出ます。音が届かないときは、VJ を開き直して最初にこの入力を始めてください。Mac は Chrome のタブの音だけ使えます。</div>
+  <div class="hint help" id="display-opts" hidden data-i18n-html>YouTube・音楽アプリ・DJ ソフトなど PC で流している音に反応します。開始すると共有する画面を聞かれるので、<b>「画面全体」</b>で画面を選び、<b>「システムの音声を含めて共有する」をオン</b>にして共有します（最初はオフです。Chrome のタブを選ぶときは「タブの音声を含めて共有する」）。2 画面のときは、選ぶ画面が出力ウィンドウに出ます。音が届かないときは、VJ を開き直して最初にこの入力を始めてください。Mac は Chrome のタブの音だけ使えます。</div>
   <div class="row" id="file-opts" hidden>
     <input type="file" id="file" multiple accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac">
     <button id="btn-skip" title="次の曲（複数選んだとき）" hidden>次の曲 ▶▶</button>
@@ -275,16 +363,16 @@ body.remote-mode #stage { opacity: 0.25; }
   <div class="meter"><span>L</span><div class="track"><div class="fill" id="ml"></div><div class="peak" id="mlp"></div></div><span id="mlv">—</span></div>
   <div class="meter"><span>R</span><div class="track"><div class="fill" id="mr"></div><div class="peak" id="mrp"></div></div><span id="mrv">—</span></div>
   <div class="lamps"><span class="lamp" id="lk">KICK</span><span class="lamp" id="ls">SNARE</span><span class="lamp" id="lh">HAT</span><span class="lamp" id="la">ACCENT</span><span class="lamp" id="lb">BEAT</span></div>
-  <div class="hint">メーターが緑〜黄色の範囲で動けば OK。片方しか動かないときも「解析するチャンネル」はミックスのままで大丈夫です。</div>
+  <div class="hint help">メーターが緑〜黄色の範囲で動けば OK。片方しか動かないときも「解析するチャンネル」はミックスのままで大丈夫です。</div>
   <div class="row"><button id="btn-sc">サウンドチェック（自動調整）</button></div>
-  <div class="hint">リハで約 20 秒：音の大きさ・音割れ・会場の雑音を調べて、音楽のタイプと「無音とみなす音量」をおすすめします。</div>
+  <div class="hint help">リハで約 20 秒：音の大きさ・音割れ・会場の雑音を調べて、音楽のタイプと「無音とみなす音量」をおすすめします。</div>
   <div id="sc-box" class="scbox" hidden></div>
   </div></section>
   <section class="psec" data-sec="2">
   <h2><button type="button" class="psec-btn" aria-expanded="true">② 音楽のタイプ・テンポ</button></h2>
   <div class="psec-body">
   <div class="row"><select id="opt-profile"></select></div>
-  <div class="hint" id="profile-desc"></div>
+  <div class="hint help" id="profile-desc"></div>
   <div class="row">
     <span>テンポ</span><b id="bpm-view" class="bpm">— BPM</b><span class="hint" id="mode-view"></span>
     <button id="btn-tap" title="拍に合わせて 3 回以上（Enter キーでも）">タップ</button>
@@ -296,13 +384,13 @@ body.remote-mode #stage { opacity: 0.25; }
   <div class="psec-body">
   <div class="bandlist" id="band-list"></div>
   <div class="row"><button id="band-add">＋ バンドを追加</button><button id="band-next">次のバンドへ ▶（N）</button></div>
-  <div class="hint">バンドごとに名前・セットリスト・ロゴ・音楽のタイプ・色・開演時刻・テロップを覚えます。下の欄は「出演中」のバンドの内容です。</div>
+  <div class="hint help">バンドごとに名前・セットリスト・ロゴ・音楽のタイプ・色・開演時刻・テロップを覚えます。下の欄は「出演中」のバンドの内容です。</div>
   <div class="row"><input type="text" id="band" placeholder="バンド名" style="flex: 1; width: auto"><span>開演</span><input type="time" id="opt-countdown" title="タイトルに「開演まで 05:00」を表示（1 曲目に進むと消えます）"></div>
   <div class="row"><b class="sub">セットリスト</b><span class="hint">→ キーで次の曲（曲名とシーン・色が変わる）</span></div>
   <div id="setlist-preview"></div>
-  <div class="hint">文字でまとめて入力・貼り付けもできます（上の表と同じ内容）：</div>
+  <div class="hint help">文字でまとめて入力・貼り付けもできます（上の表と同じ内容）：</div>
   <textarea id="setlist" spellcheck="false"></textarea>
-  <div class="hint" data-i18n-html>1 行 1 曲：<code>曲名 | シーン | パレット</code>。シーンは 1〜9・Shift の段は s1〜s9、または名前（カンマで複数→オートで順番に）。<code>@end</code> で終演の文字。→ キーで次の曲。</div>
+  <div class="hint help" data-i18n-html>1 行 1 曲：<code>曲名 | シーン | パレット</code>。シーンは 1〜9・Shift の段は s1〜s9、または名前（カンマで複数→オートで順番に）。<code>@end</code> で終演の文字。→ キーで次の曲。</div>
   <details>
     <summary>ロゴ画像・テロップ</summary>
     <div class="row">
@@ -325,7 +413,7 @@ body.remote-mode #stage { opacity: 0.25; }
     <div class="row msg"><kbd>Q</kbd><input type="text" id="msg-0" placeholder="例：次は〇〇です"><button data-msg="0">表示</button></div>
     <div class="row msg"><kbd>W</kbd><input type="text" id="msg-1" placeholder="例：手拍子お願いします！"><button data-msg="1">表示</button></div>
     <div class="row msg"><kbd>E</kbd><input type="text" id="msg-2" placeholder="例：アンコールありがとう！"><button data-msg="2">表示</button></div>
-    <div class="hint">キー（Q / W / E）かボタンで表示、もう一度押すと消えます。</div>
+    <div class="hint help">キー（Q / W / E）かボタンで表示、もう一度押すと消えます。</div>
   </details>
   </div></section>
   <section class="psec" data-sec="4">
@@ -348,10 +436,10 @@ body.remote-mode #stage { opacity: 0.25; }
     <button id="btn-output" class="primary">出力ウィンドウを開く（2 画面）</button>
     <button id="btn-output-stop" hidden>出力ウィンドウを閉じる</button>
   </div>
-  <div class="hint" id="output-hint">プロジェクターを「拡張」でつないだときに使います。映像だけのウィンドウを開いてプロジェクター側で全画面にし、このウィンドウは操作・確認用になります（観客に操作画面が見えません）。</div>
+  <div class="hint help" id="output-hint">プロジェクターを「拡張」でつないだときに使います。映像だけのウィンドウを開いてプロジェクター側で全画面にし、このウィンドウは操作・確認用になります（観客に操作画面が見えません）。</div>
   </div></section>
   <section class="psec" data-sec="5">
-  <h2><button type="button" class="psec-btn" aria-expanded="true">⑤ オプション</button></h2>
+  <h2><button type="button" class="psec-btn" aria-expanded="true">⑤ 演出・オプション</button></h2>
   <div class="psec-body">
   <div class="row">
     <label><input type="checkbox" id="opt-auto"> オート（自動でシーン切替）</label>
@@ -368,8 +456,8 @@ body.remote-mode #stage { opacity: 0.25; }
     </select>
     <span class="hint" id="intensity-now"></span>
   </div>
-  <div class="hint">激しいほど、キックで画面が寄る・スネアで揺れる・拍ごとに軽く光る・オートの切替が速くなります（しっとり系・歌・司会のタイプでは弱め。フラッシュを一切使わないときは寄り・揺れもしません）。</div>
-  <div class="hint">「自動」は、静かなところは控えめに、サビでは激しく、と曲の盛り上がりを追って変わります（MC・無音のあいだは控えめ）。</div>
+  <div class="hint help">激しいほど、キックで画面が寄る・スネアで揺れる・拍ごとに軽く光る・オートの切替が速くなります（しっとり系・歌・司会のタイプでは弱め。フラッシュを一切使わないときは寄り・揺れもしません）。</div>
+  <div class="hint help">「自動」は、静かなところは控えめに、サビでは激しく、と曲の盛り上がりを追って変わります（MC・無音のあいだは控えめ）。</div>
   <div class="row">
     <label><input type="checkbox" id="opt-noflash"> フラッシュを一切使わない（光に配慮が必要な会場）</label>
   </div>
@@ -418,15 +506,14 @@ body.remote-mode #stage { opacity: 0.25; }
     <label><input type="checkbox" id="opt-palauto"> 自動で変える</label>
     <span id="custom-colors"></span>
   </div>
-  <div class="hint">「自動で変える」は、曲の区切り（キメ・小節の頭）ごとに、盛り上がりに合った色へゆっくり移します（およそ 20〜30 秒おき。曲ごとの色の指定があるときはそのまま。モノクロとカスタムは使いません）。</div>
+  <div class="hint help">「自動で変える」は、曲の区切り（キメ・小節の頭）ごとに、盛り上がりに合った色へゆっくり移します（およそ 20〜30 秒おき。曲ごとの色の指定があるときはそのまま。モノクロとカスタムは使いません）。</div>
   <details id="overlay-box">
-    <summary>メディアを重ねる（画像・動画・画面の取り込み・YouTube / ニコニコ）</summary>
+    <summary>メディアを重ねる（画像・動画・画面の取り込み・カメラ）</summary>
     <div class="row"><label><input type="checkbox" id="ov-on"> <span data-i18n-html>メディアを表示（<kbd>O</kbd> キーで切替）</span></label></div>
-    <div class="row ov-kinds">
+    <div class="row seg ov-kinds">
       <label><input type="radio" name="ov-kind" value="image"> 画像</label>
       <label><input type="radio" name="ov-kind" value="video"> 動画ファイル</label>
       <label><input type="radio" name="ov-kind" value="capture"> 画面・タブの取り込み</label>
-      <label><input type="radio" name="ov-kind" value="web"> YouTube / ニコニコ</label>
       <label><input type="radio" name="ov-kind" value="camera"> カメラ</label>
       <label id="ov-kind-lib" hidden><input type="radio" name="ov-kind" value="lib"> 一覧から</label>
     </div>
@@ -436,7 +523,7 @@ body.remote-mode #stage { opacity: 0.25; }
         <button id="btn-ov-paste" title="コピーした画像を貼り付ける">貼り付け</button>
         <button id="btn-ov-clear">消す</button>
       </div>
-      <div class="hint" data-i18n-html>枠やイラスト（透過 PNG など）を、すべてのシーンの上に。コピーした画像は <kbd>Ctrl</kbd>+<kbd>V</kbd>（Mac は <kbd>⌘</kbd>+<kbd>V</kbd>）でも貼り付けられます。ファイルをこの欄に落としても入ります。</div>
+      <div class="hint help" data-i18n-html>枠やイラスト（透過 PNG など）を、すべてのシーンの上に。コピーした画像は <kbd>Ctrl</kbd>+<kbd>V</kbd>（Mac は <kbd>⌘</kbd>+<kbd>V</kbd>）でも貼り付けられます。ファイルをこの欄に落としても入ります。</div>
       <div class="row"><img id="ov-preview" alt="" hidden></div>
     </div>
     <div class="ov-pane" data-kind="video">
@@ -449,22 +536,14 @@ body.remote-mode #stage { opacity: 0.25; }
         <label><input type="checkbox" id="ov-vloop"> くり返す</label>
         <label><input type="checkbox" id="ov-vsound"> 音を出す</label>
       </div>
-      <div class="hint">MP4（H.264）・WebM がおすすめ。動画はこの PC の中に保存され、次に開いたときも使えます（設定ファイルの書き出しには入りません）。</div>
+      <div class="hint help">MP4（H.264）・WebM がおすすめ。動画はこの PC の中に保存され、次に開いたときも使えます（設定ファイルの書き出しには入りません）。</div>
     </div>
     <div class="ov-pane" data-kind="capture">
       <div class="row">
         <button id="btn-ov-capture" class="primary">取り込む画面・タブを選ぶ</button>
         <button id="btn-ov-capstop">やめる</button>
       </div>
-      <div class="hint">YouTube・ニコニコ・スライドなどを別のタブ（またはウィンドウ）で開いて再生し、そのタブを選びます。動画を全画面・シアターモードにすると、動画だけがきれいに入ります。インターネットの動画をそのまま流すときの、いちばん確実な方法です。</div>
-    </div>
-    <div class="ov-pane" data-kind="web">
-      <div class="row">
-        <input type="text" id="ov-web" spellcheck="false" placeholder="https://www.youtube.com/watch?v=… / https://www.nicovideo.jp/watch/sm…" style="flex: 1; width: auto">
-        <button id="btn-ov-web">表示</button>
-      </div>
-      <div class="row"><label><input type="checkbox" id="ov-wsound"> 音を出す</label></div>
-      <div class="hint">インターネットが必要です。埋め込みは映像のいちばん上に重なり、揺れ・フラッシュの演出は掛かりません（濃さ・重ね方・明るさ・暗転は合わせます）。2 画面のときの手元のプレビューには映りません。ブラウザ版（HTML ファイルを開いて使う）では YouTube が「エラー 153」で再生できないことがあります。そのときは単体アプリ版か「画面・タブの取り込み」で。</div>
+      <div class="hint help">スライド・ほかのアプリ・動画プレーヤーなどを別のウィンドウ（またはタブ）で開いて、そのウィンドウを選びます。全画面にすると、中身だけがきれいに入ります。取り込む映像を会場で流してよいか（権利・サービスの利用規約）は、先に確かめてください。</div>
     </div>
     <div class="ov-pane" data-kind="camera">
       <div class="row">
@@ -476,11 +555,11 @@ body.remote-mode #stage { opacity: 0.25; }
         <button id="btn-ov-camstop">止める</button>
         <label><input type="checkbox" id="ov-cammirror"> 左右反転（鏡のように）</label>
       </div>
-      <div class="hint">Web カメラや、HDMI キャプチャーボードにつないだビデオカメラ・スイッチャーの映像を、すべてのシーンの上に。最初に使うときはカメラの使用の許可を聞かれます（2 画面のときは出力ウィンドウで）。「濃さ」を下げる・「光として足す」にすると映像になじみます。</div>
+      <div class="hint help">Web カメラや、HDMI キャプチャーボードにつないだビデオカメラ・スイッチャーの映像を、すべてのシーンの上に。最初に使うときはカメラの使用の許可を聞かれます（2 画面のときは出力ウィンドウで）。「濃さ」を下げる・「光として足す」にすると映像になじみます。</div>
     </div>
     <div class="ov-pane" data-kind="lib">
       <div class="row"><select id="ov-lib" style="flex: 1"></select></div>
-      <div class="hint">下の「メディアの一覧」に登録したものを出します。</div>
+      <div class="hint help">下の「メディアの一覧」に登録したものを出します。</div>
     </div>
     <div class="row ov-play" id="ov-play">
       <button data-mcmd="play" title="再生">▶</button>
@@ -501,23 +580,23 @@ body.remote-mode #stage { opacity: 0.25; }
       </select>
     </div>
     <div class="row"><span>濃さ</span><input type="range" id="ov-imgop" min="0" max="1" step="0.05"><span id="ov-imgop-v"></span></div>
-    <div class="warnbox" id="ov-vwarn" hidden>⚠ 動画・取り込んだ画面・YouTube の中の点滅は、このソフトでは制限できません（フラッシュの上限は効きません）。強い点滅のある動画は使わないでください。</div>
+    <div class="warnbox" id="ov-vwarn" hidden>⚠ 動画・取り込んだ画面の中の点滅は、このソフトでは制限できません（フラッシュの上限は効きません）。強い点滅のある動画は使わないでください。</div>
   </details>
   <details id="medialib-box">
     <summary>メディアの一覧（曲ごと・キューで切り替える）</summary>
-    <div class="hint" data-i18n-html>よく使うメディア（画像・動画・YouTube / ニコニコ・カメラ）を登録しておくと、③ のセットリストの曲ごとに「メディア」を選べます（文字の欄なら <code>曲名 | シーン | パレット | m:名前</code>、<code>m:off</code> でその曲は出さない）。⑥ のキューでも使えます。</div>
+    <div class="hint help" data-i18n-html>よく使うメディア（画像・動画・カメラ）を登録しておくと、③ のセットリストの曲ごとに「メディア」を選べます（文字の欄なら <code>曲名 | シーン | パレット | m:名前</code>、<code>m:off</code> でその曲は出さない）。⑥ のキューでも使えます。</div>
     <div id="ml-list" class="ml-list"></div>
     <div class="row">
       <button id="btn-ml-add">＋ いまのメディアを一覧に入れる</button>
       <button id="btn-ml-files">＋ ファイルから入れる</button>
       <input type="file" id="ml-files" multiple accept="image/*,video/*,.mp4,.webm,.mov,.m4v" hidden>
     </div>
-    <div class="hint">画像・動画はこの PC の中に保存されます（設定ファイルの書き出しには入りません）。画面・タブの取り込みは一覧に入れられません。</div>
+    <div class="hint help">画像・動画はこの PC の中に保存されます（設定ファイルの書き出しには入りません）。画面・タブの取り込みは一覧に入れられません。</div>
   </details>
   <details id="ovscene-box">
     <summary>シーンを重ねる</summary>
     <div class="row"><label><input type="checkbox" id="ovs-on"> <span data-i18n-html>重ねるシーンを表示（<kbd>Shift</kbd>+<kbd>O</kbd> で切替）</span></label></div>
-    <div class="hint">いまのシーンの上に、もう 1 つのシーンを重ねます。</div>
+    <div class="hint help">いまのシーンの上に、もう 1 つのシーンを重ねます。</div>
     <div class="row">
       <select id="ov-scene"></select>
       <select id="ov-sceneblend">
@@ -526,7 +605,7 @@ body.remote-mode #stage { opacity: 0.25; }
       </select>
     </div>
     <div class="row"><span>シーンの濃さ</span><input type="range" id="ov-sceneop" min="0" max="1" step="0.05"><span id="ov-sceneop-v"></span></div>
-    <div class="hint">シーンを重ねると描く量が 2 倍になります（重いときは重ねるのをやめてください）。まぶしくなりすぎないよう、重ねる強さは「シーンの濃さ」100% でも 6 割までです。</div>
+    <div class="hint help">シーンを重ねると描く量が 2 倍になります（重いときは重ねるのをやめてください）。まぶしくなりすぎないよう、重ねる強さは「シーンの濃さ」100% でも 6 割までです。</div>
   </details>
   <details id="ovtext-box">
     <summary>隅に文字を出す（時計・バンド名・曲名）</summary>
@@ -545,9 +624,9 @@ body.remote-mode #stage { opacity: 0.25; }
     <div class="row"><span>文字の大きさ</span><input type="range" id="ov-textsize" min="0.5" max="2" step="0.1"><span id="ov-textsize-v"></span></div>
     <div class="row"><span>文字の濃さ</span><input type="range" id="ov-textop" min="0" max="1" step="0.05"><span id="ov-textop-v"></span></div>
   </details>
-  <div class="hint">テストパターン（G）の間は、メディア・シーン・文字のオーバーレイを出しません。</div>
+  <div class="hint help">テストパターン（G）の間は、メディア・シーン・文字のオーバーレイを出しません。</div>
   <div class="row" id="glass-row" hidden><button id="btn-glass">ほかの画面の上に重ねて表示（透過ウィンドウ）</button></div>
-  <div class="hint" id="glass-hint">VJ の映像を透かして、ほかの画面（YouTube など）の上に重ねて表示するのは、単体アプリ版でできます（ブラウザではウィンドウを透明にできません）。</div>
+  <div class="hint help" id="glass-hint">VJ の映像を透かして、ほかの画面（スライド・動画プレーヤーなど）の上に重ねて表示するのは、単体アプリ版でできます（ブラウザではウィンドウを透明にできません）。</div>
   <details id="scene-adjust">
     <summary>シーンごとの調整（量・大きさ・速さなど）</summary>
     <div class="row"><select id="sp-scene"></select><label><input type="checkbox" id="sp-follow" checked> 表示中のシーンに合わせる</label></div>
@@ -559,7 +638,7 @@ body.remote-mode #stage { opacity: 0.25; }
     <div class="row"><span>オートで使うシーン</span></div>
     <div class="row" id="auto-scenes"></div>
     <div class="row"><span>無音とみなす音量</span><input type="range" id="opt-gate" min="-80" max="-20" step="1"><span id="opt-gate-v"></span></div>
-    <div class="hint">会場のざわざわで反応してしまうときは右へ（大きく）。小さい音に反応しないときは左へ。</div>
+    <div class="hint help">会場のざわざわで反応してしまうときは右へ（大きく）。小さい音に反応しないときは左へ。</div>
     <div class="row"><span>画質上限</span><input type="range" id="opt-scale" min="0.4" max="1" step="0.05"><span id="opt-scale-v"></span></div>
     <div class="row">
       <span>フレームレート</span>
@@ -581,7 +660,7 @@ body.remote-mode #stage { opacity: 0.25; }
     </div>
     <details id="midi-map-box">
       <summary>MIDI の割り当てを変える（学習）</summary>
-      <div class="hint">「学習」を押してから、割り当てたいパッド・ボタン・つまみを動かします。</div>
+      <div class="hint help">「学習」を押してから、割り当てたいパッド・ボタン・つまみを動かします。</div>
       <div id="midi-map" class="midimap"></div>
       <div class="row"><button id="btn-midi-default">既定の割り当てに戻す</button></div>
     </details>
@@ -599,7 +678,7 @@ body.remote-mode #stage { opacity: 0.25; }
   <div class="row"><button id="btn-precheck">本番前チェック</button></div>
   <div id="precheck" class="scbox" hidden></div>
   <button class="big" id="btn-show">ショー開始（全画面）</button>
-  <div class="hint" data-i18n-html>全画面・スリープ防止・Esc 長押しでのみ解除、がまとめて有効になります。<b>H</b> でキー一覧、<b>M</b> でこのパネル。</div>
+  <div class="hint help" data-i18n-html>全画面・スリープ防止・Esc 長押しでのみ解除、がまとめて有効になります。<b>H</b> でキー一覧、<b>M</b> でこのパネル。</div>
   <div class="row"><b class="sub">シーン</b><span class="hint">クリックで切替（次のビートで。もう一度押すとすぐ）</span></div>
   <div class="scene-grid" id="scene-grid"></div>
   <div class="row"><b class="sub">キュー</b><span class="hint" data-i18n-html>シーン・色・メディア・重ねるシーンを 1 回でまとめて切替（<kbd>Alt</kbd>+<kbd>1</kbd>〜<kbd>9</kbd>）</span></div>
@@ -608,7 +687,7 @@ body.remote-mode #stage { opacity: 0.25; }
     <summary>キューを作る・直す</summary>
     <div id="cue-edit"></div>
     <div class="row"><button id="btn-cue-add">＋ いまの状態をキューに入れる</button></div>
-    <div class="hint" data-i18n-html>「そのまま」の項目は、キューを出しても変えません。最大 9 個。MIDI・スマホ・OSC（<code>/vj/cue 1</code>）からも出せます。</div>
+    <div class="hint help" data-i18n-html>「そのまま」の項目は、キューを出しても変えません。最大 9 個。MIDI・スマホ・OSC（<code>/vj/cue 1</code>）からも出せます。</div>
   </details>
   <div class="keys" id="keys-mini"></div>
   <div class="row"><button id="btn-cheatsheet">キー早見表を印刷</button></div>
@@ -616,14 +695,14 @@ body.remote-mode #stage { opacity: 0.25; }
   <section class="psec" data-sec="7">
   <h2><button type="button" class="psec-btn" aria-expanded="true">⑦ 外部連携（スマホ・OSC・照明）</button></h2>
   <div class="psec-body">
-  <div class="hint" data-i18n-html>スマホからの操作・OSC・Art-Net には「ブリッジ」が要ります。単体アプリには入っています。ブラウザ版は <code>bridge</code> フォルダの起動ファイル（Node.js が必要）で起動します。</div>
+  <div class="hint help" data-i18n-html>スマホからの操作・OSC・Art-Net には「ブリッジ」が要ります。単体アプリには入っています。ブラウザ版は <code>bridge</code> フォルダの起動ファイル（Node.js が必要）で起動します。</div>
   <div class="row"><label><input type="checkbox" id="net-on"> ブリッジにつなぐ</label><input type="text" id="net-url" spellcheck="false" style="flex: 1; width: auto"></div>
   <div class="status" id="net-status">つないでいません</div>
   <div class="row"><button id="btn-qr" hidden>スマホ用の QR コードを表示</button></div>
   <div id="net-qr" class="qrbox" hidden></div>
   <details>
     <summary>OSC（照明卓・TouchDesigner・Resolume など）</summary>
-    <div class="hint" data-i18n-html>受信：ブリッジの UDP <b id="osc-in">9000</b> 番。<code>/vj/scene 3</code>・<code>/vj/flash</code>・<code>/vj/blackout 1</code>・<code>/vj/next</code>・<code>/vj/master 0.8</code> など（手順書参照）</div>
+    <div class="hint help" data-i18n-html>受信：ブリッジの UDP <b id="osc-in">9000</b> 番。<code>/vj/scene 3</code>・<code>/vj/flash</code>・<code>/vj/blackout 1</code>・<code>/vj/next</code>・<code>/vj/master 0.8</code> など（手順書参照）</div>
     <div class="row"><label><input type="checkbox" id="osc-on"> 音の特徴量を送る</label></div>
     <div class="row"><span>送り先</span><input type="text" id="osc-host" spellcheck="false" style="width: 10em"><span>ポート</span><input type="number" id="osc-port" min="1" max="65535" style="width: 6em">
       <select id="osc-rate"><option value="30">30 回/秒</option><option value="60">60 回/秒</option><option value="15">15 回/秒</option></select></div>
@@ -658,7 +737,7 @@ body.remote-mode #stage { opacity: 0.25; }
     <div class="row"><span>明るさの上限</span><input type="range" id="dmx-max" min="0" max="1" step="0.05"><span id="dmx-max-v"></span></div>
     <div class="row"><span>キックで光る強さ</span><input type="range" id="dmx-pulse" min="0" max="1" step="0.05"><span id="dmx-pulse-v"></span></div>
     <div class="row"><label><input type="checkbox" id="dmx-flash"> フラッシュで照明も白く光らせる</label></div>
-    <div class="hint">色は映像のパレットの 4 色を順に。キックで 1 台ずつ順に強く光ります（⑤ のフラッシュの上限まで。既定は 1 秒に 3 回）。暗転・明るさは映像と同じ。</div>
+    <div class="hint help">色は映像のパレットの 4 色を順に。キックで 1 台ずつ順に強く光ります（⑤ のフラッシュの上限まで。既定は 1 秒に 3 回）。暗転・明るさは映像と同じ。</div>
     <div class="status" id="dmx-status"></div>
   </details>
   </div></section>

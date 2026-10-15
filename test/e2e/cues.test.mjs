@@ -29,7 +29,6 @@ const makeImage = (page, color) => page.evaluate(async (color) => {
   const g = c.getContext('2d'); g.fillStyle = color; g.fillRect(0, 0, 64, 36);
   window.__img = new File([await new Promise((r) => c.toBlob(r, 'image/png'))], 'logo.png', { type: 'image/png' });
 }, color);
-const statusText = (page) => page.evaluate(() => document.getElementById('ov-status').textContent);
 
 test('カメラ：選んで開くと映像に重なる。左右反転・止める（勝手に開き直さない）・外れたら開き直す・本番前チェック', async () => {
   const { page, errors } = await openApp(browser, DIST, 'test=1', { width: 1280, height: 900 });
