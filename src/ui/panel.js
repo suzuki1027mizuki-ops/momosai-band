@@ -221,6 +221,7 @@
 
       // ⑥ 本番・再開
       $('btn-show').addEventListener('click', () => panel.startShow());
+      $('btn-log').addEventListener('click', () => panel.exportLog());
       // 本番の操作：キーと同じ関数（keys.js の run。ロック中は暗転だけ）。2 画面でも、操作ウィンドウのキーと同じ道で届く
       document.querySelectorAll('.live-ctl button[data-key]').forEach((b) => b.addEventListener('click', () => VJ.keys.run(app, b.dataset.key)));
       $('panel-close').addEventListener('click', () => panel.toggle(false));
@@ -472,6 +473,29 @@
       await shown;
       if (VJ.link.role === 'solo' && !VJ.compat.fullscreenElement()) app.ui.toast(t('F キーで全画面にできます'), 'warn');
       else app.ui.toast(t('ショー開始 — H でキー一覧 / M で設定'));
+    },
+
+    /** 本番の記録を CSV で書き出す（今日の分）。2 画面では、記録している出力ウィンドウに頼む */
+    async exportLog() {
+      const st = $('log-status');
+      try {
+        const r = VJ.link.role === 'control' ? await VJ.link.request({ t: 'cmd', target: 'app', name: 'logRows', args: [] }) : await panel.app.logRows();
+        st.hidden = false;
+        if (!r.rows.length) { st.textContent = t('まだ記録がありません（入力を始めると、1 秒ごとに記録します）'); return; }
+        const day = VJ.recorder.dayOf(r.rows[0].t);
+        const blob = new Blob([VJ.recorder.toCSV(r.rows)], { type: 'text/csv' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `momosai-vj-log-${day}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        st.textContent = t('{0} 行を書き出しました', r.rows.length) + (r.saved ? '' : ' ' + t('（この環境では保存できないので、記録は画面を閉じるまでです）'));
+      } catch (e) {
+        st.hidden = false;
+        st.textContent = t('書き出せませんでした：') + e.message;
+      }
     },
 
     toggle(force) {

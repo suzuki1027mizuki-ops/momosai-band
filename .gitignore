@@ -12,3 +12,6 @@ app/release/
 
 # ブリッジの鍵（この PC だけのもの）
 .vjkey
+
+# 自分たちの録音（npm run corpus。権利・大きさのため入れない）
+test/corpus/

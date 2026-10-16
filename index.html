@@ -701,7 +701,8 @@ body.remote-mode #stage { opacity: 0.25; }
     <div class="hint help" data-i18n-html>「そのまま」の項目は、キューを出しても変えません。最大 9 個。MIDI・スマホ・OSC（<code>/vj/cue 1</code>）からも出せます。</div>
   </details>
   <div class="keys" id="keys-mini"></div>
-  <div class="row"><button id="btn-cheatsheet">キー早見表を印刷</button></div>
+  <div class="row"><button id="btn-cheatsheet">キー早見表を印刷</button><button id="btn-log" title="今日の 1 秒ごとの状態と出来事（操作・シーン・曲・入力の切断・例外）。音・映像は入りません">本番の記録を書き出す（CSV）</button></div>
+  <div class="hint" id="log-status" hidden></div>
   </div></section>
   <section class="psec" data-sec="7">
   <h2><button type="button" class="psec-btn" aria-expanded="true">⑦ 外部連携（スマホ・OSC・照明）</button></h2>
@@ -822,6 +823,7 @@ body.remote-mode #stage { opacity: 0.25; }
 <script src="src/show/setlist.js"></script>
 <script src="src/show/medialib.js"></script>
 <script src="src/show/mediastate.js"></script>
+<script src="src/show/recorder.js"></script>
 <script src="src/show/cues.js"></script>
 <script src="src/show/bands.js"></script>
 <script src="src/show/safety.js"></script>

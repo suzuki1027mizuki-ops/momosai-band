@@ -19,6 +19,7 @@
     "src/core/storage.js",
     "src/show/safety.js",
     "src/show/setlist.js",
-    "src/show/mediastate.js"
+    "src/show/mediastate.js",
+    "src/show/recorder.js"
   ]
 }

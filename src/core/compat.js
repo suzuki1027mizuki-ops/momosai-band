@@ -8,8 +8,13 @@
     : /Edg\//.test(ua) || /Chrome\/|Chromium\//.test(ua) ? 'chromium'
     : /Safari\//.test(ua) ? 'safari' : 'other';
 
+  // Chrome / Edge の版（Chromium 系でなければ 0）。これより古いと、使っている機能（画面の音の直接の読み取りなど）が足りない
+  const chromeVersion = browser === 'chromium' ? +((/(?:Chrome|Chromium)\/(\d+)/.exec(ua) || [])[1] || 0) : 0;
+
   const compat = {
     browser,
+    chromeVersion,
+    MIN_CHROME: 116,
     windows: /Windows/.test(ua),
     get name() { return { chromium: 'Chrome / Edge', firefox: 'Firefox', safari: 'Safari', other: VJ.t('このブラウザ') }[browser]; },
 

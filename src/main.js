@@ -139,6 +139,28 @@
     };
     app.show.on(toast);
 
+    // 本番の記録（recorder.js）：解析しているウィンドウで（1 画面ならこの画面、2 画面なら出力ウィンドウ）。
+    // 出来事は、パネルに出る知らせ（シーン・曲・メディア・暗転など）・入力の状態・例外から
+    const rec = (app.recorder = new VJ.Recorder());
+    const R = VJ.recorder;
+    app.show.on((msg) => rec.event(Date.now(), msg));
+    app.engine.on((st, msg) => rec.event(Date.now(), VJ.t('入力：{0}', st) + (msg ? ' ' + msg : '')));
+    window.addEventListener('error', (e) => rec.error(Date.now(), (e && (e.message || (e.error && e.error.message))) || 'error'));
+    window.addEventListener('unhandledrejection', (e) => rec.error(Date.now(), (e && e.reason && (e.reason.message || String(e.reason))) || 'rejection'));
+    // 1 分ごとに、その 1 分の分だけ保存（全体を毎回書かない）。閉じるときにも。古い日は消す
+    const saveLog = () => { const rows = rec.takeUnsaved(); return rows.length ? R.logStore.append(rows) : Promise.resolve(true); };
+    setInterval(saveLog, 60000);
+    window.addEventListener('pagehide', saveLog);
+    R.logStore.prune(Date.now());
+    /** 今日の記録（保存した分と、まだ保存していない分）。2 画面では操作ウィンドウから頼まれる */
+    app.logRows = async () => {
+      await saveLog();
+      const day = R.dayOf(Date.now());
+      const cur = rec.cur ? [rec._row(rec.cur)] : [];
+      const rows = R.logStore.ok ? (await R.logStore.readDay(day)).concat(cur) : rec.snapshot().filter((r) => R.dayOf(r.t) === day);
+      return { rows, saved: R.logStore.ok };
+    };
+
     const help = document.getElementById('help');
     app.ui = {
       toast,
@@ -256,6 +278,16 @@
         VJ.net.frame(app, f, ts);
         VJ.dmx.tick(app, f, ts);
         if (app.onFrame) app.onFrame(ts, engine.ctx ? engine.ctx.currentTime : 0, f);
+        // 本番の記録（数を足すだけ。1 秒ごとに 1 行）
+        const st = app.show.state, song = app.show.currentSong();
+        app.recorder.frame(Date.now(), app._recTs ? ts - app._recTs : 0, {
+          input: engine.status === 'running' ? engine.opts.source + (engine.diag && engine.diag.device ? ':' + engine.diag.device : '') : engine.status,
+          meter: engine.meter, flags: f.onsetFlags, bpm: f.bpm, beatConf: f.beatConf, speech: f.speech, melodic: f.melodic,
+          scale: app.renderer.scale, denied: app.show.limiter.denied, scene: st.sceneId,
+          song: song ? `M${st.songIdx + 1} ${song.title}` : st.endState ? 'end' : '',
+          media: app.settings.overlayOn ? VJ.media.kind || '' : '', guard: app.renderer.ovGuardState(),
+        });
+        app._recTs = ts;
         app.errorsInRow = 0;
         // 次の曲名のテクスチャを先に作っておく（曲頭での引っかかり防止）
         if (ts > prefetchAt) {

@@ -360,7 +360,7 @@
           f: { bpm: f.bpm, beatConf: f.beatConf, melodic: f.melodic, tempoManual: f.tempoManual, active: f.active },
           patch: { paletteIdx: app.settings.paletteIdx, sensitivity: app.settings.sensitivity, master: app.settings.master, auto: app.settings.auto, overlayOn: !!app.settings.overlayOn, ovSceneOn: !!app.settings.ovSceneOn },
           media: VJ.media.state(),
-          fps: r.fps, size: r.size, fullscreen: !!VJ.compat.fullscreenElement(),
+          fps: r.fps, hz: r.hz, size: r.size, fullscreen: !!VJ.compat.fullscreenElement(),
           io: { net: VJ.net.state(), dmx: VJ.dmx.state() },
           hud: VJ.hud.text ? VJ.hud.text(app, f, performance.now()) : '',
         });

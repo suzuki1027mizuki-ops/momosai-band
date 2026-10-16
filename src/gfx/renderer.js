@@ -672,6 +672,7 @@
         gpu: this.gpu, software: this.software, hdr: this.hdr, scale: this.scale, fps: this.fps,
         size: [this.canvas.width, this.canvas.height], sceneSize: [this.tw, this.th], logical: [Math.round(this.lw), Math.round(this.lh)],
         failed: Object.keys(this.failed), lost: this.lost, lostCount: this.lostCount || 0,
+        hz: this.vsync ? Math.round(1000 / this.vsync) : 0, // 画面のリフレッシュレートの見積もり（描画の間隔の 10% 点から）
       };
     }
   }

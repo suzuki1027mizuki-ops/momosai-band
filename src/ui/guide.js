@@ -102,7 +102,11 @@
       if (!scl) add('info', t('リハで「サウンドチェック」をしておくと安心です（①）'));
       else add(scl.worst === 'bad' ? 'warn' : 'ok', scl.worst === 'bad' ? t('サウンドチェックで問題がありました（① の結果を確認）') : t('サウンドチェック済み'));
       // 映像
-      const r = remote ? { fps: ls.fps, software: false } : app.renderer.info();
+      const r = remote ? { fps: ls.fps, hz: ls.hz, software: false } : app.renderer.info();
+      // 起動時の自己診断：画面のリフレッシュレート（60Hz 未満だと動きがカクつく）・ブラウザの版
+      if (r.hz && r.hz < 55) add('warn', t('画面のリフレッシュレートが {0}Hz くらいのようです（60Hz 未満）。動きがカクつくことがあります。ディスプレイの設定を確かめてください', r.hz));
+      const cv = VJ.compat.chromeVersion;
+      if (cv && cv < VJ.compat.MIN_CHROME) add('warn', t('Chrome / Edge が古いです（{0}）。{1} 以降に更新してください', cv, VJ.compat.MIN_CHROME));
       if (r.software) add('warn', t('GPU が使われていません（ソフトウェア描画）。映像が重くなります'));
       if (r.fps && r.fps < 40) add('warn', t('描画が重いです（{0} fps）。⑤ の「画質上限」を下げるか、フレームレートを 30 に', Math.round(r.fps)));
       else if (r.fps) add('ok', t('描画 {0} fps', Math.round(r.fps)));
