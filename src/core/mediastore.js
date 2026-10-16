@@ -47,7 +47,8 @@
     /** blob を保存。IndexedDB に入ったら true（メモリには必ず置く） */
     async put(key, blob) {
       mem.set(key, blob);
-      return (await tx('readwrite', (st) => st.put(blob, key))) === true;
+      // tx は、うまくいけば要求の結果（put では鍵）、だめなら undefined を返す
+      return (await tx('readwrite', (st) => st.put(blob, key))) !== undefined;
     },
     /** このウィンドウのメモリにだけ置く（2 画面のとき、操作ウィンドウから受け取った分） */
     hold(key, blob) { mem.set(key, blob); },

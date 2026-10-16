@@ -1,0 +1,25 @@
+{
+  // 型の確認だけ（npm run typecheck）。ビルドは今のまま（tools/build.mjs）。
+  // 確かめるファイルは files に足していく（形のはっきりしたもの・新しく作るものから）
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "strict": false,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "skipLibCheck": true,
+    "types": []
+  },
+  "files": [
+    "types/vj.d.ts",
+    "src/core/schema.js",
+    "src/core/storage.js",
+    "src/show/safety.js",
+    "src/show/setlist.js",
+    "src/show/mediastate.js",
+    "src/show/recorder.js"
+  ]
+}

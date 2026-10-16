@@ -132,7 +132,13 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); }
         authed = !!m.ok;
         $('login').hidden = authed;
         if (authed) { sessionStorage.setItem('vj-pin', pin); setStatus(L('接続しました。VJ の状態を待っています…', 'Connected. Waiting for the VJ…')); }
-        else { sessionStorage.removeItem('vj-pin'); pin = ''; $('login-msg').textContent = m.locked ? L('失敗が多すぎます。VJ の PC でブリッジを起動し直してください', 'Too many attempts. Restart the bridge on the VJ PC.') : L('暗証番号が違います', 'Wrong PIN'); }
+        else {
+          sessionStorage.removeItem('vj-pin');
+          pin = '';
+          const w = Math.max(1, Math.ceil(Number(m.wait) || 60));
+          const wj = w >= 90 ? Math.ceil(w / 60) + ' 分' : w + ' 秒', we = w >= 90 ? Math.ceil(w / 60) + ' min' : w + ' s';
+          $('login-msg').textContent = m.locked ? L('失敗が多すぎます。' + wj + 'ほど待ってから、もう一度入れてください', 'Too many attempts. Wait about ' + we + ' and try again.') : L('暗証番号が違います', 'Wrong PIN');
+        }
       } else if (m.t === 'status') {
         st = m.s;
         render();

@@ -2,7 +2,7 @@
  *   曲名 | シーン(番号か名前、カンマ区切りで複数) | パレット | notitle | m:メディア（一覧の名前か番号。m:off で出さない）
  *   @band バンド名   @end 終演の文字   # コメント
  * 全角の「｜」「、」「１」などもそのまま受け付ける。 */
-(function (VJ) {
+(function (/** @type {VJNamespace} */ VJ) {
   'use strict';
 
   function normalize(s) {

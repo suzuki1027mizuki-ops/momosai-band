@@ -36,7 +36,14 @@ test('スマホの操作画面から暗証番号でつなぎ、シーン・暗�
   await phone.waitForFunction(() => /違|Wrong/.test(document.getElementById('login-msg').textContent));
   await phone.fill('#pin', '2468');
   await phone.click('#btn-login');
+  // 鍵つきでつないでいるので、VJ のパネル ⑦ で許可するまで待つ（スマホには案内が出る）
+  await phone.waitForFunction(() => /許可|Allow/.test(document.getElementById('login-msg').textContent));
+  await page.waitForSelector('#net-phones button[data-act="approve"]', { timeout: 10000 });
+  assert.match(await page.textContent('#net-phones'), /つなごうとしています/);
+  await page.click('#net-phones button[data-act="approve"]');
   await phone.waitForSelector('#login', { state: 'hidden' });
+  assert.match(await phone.evaluate(() => localStorage.getItem('vj-device-token') || ''), /^[0-9a-f]{32}$/, '端末の鍵を覚える');
+  await page.waitForFunction(() => /許可したスマホ/.test(document.getElementById('net-phones').textContent));
   await phone.waitForSelector('#scenes button[data-scene="orb"]');
   await phone.click('#scenes button[data-scene="orb"]');
   await page.waitForFunction(() => VJ.app.show.state.sceneId === 'orb', null, { timeout: 5000 });
@@ -84,6 +91,11 @@ test('QR コード：パネルに QR が出て、暗証番号入りの URL で�
   phone.on('pageerror', (e) => phoneErrors.push(String(e)));
   phone.on('dialog', (d) => d.accept());
   await phone.goto(`http://127.0.0.1:${bridge.port}/#p=2468`);
+  // 前のテストで許可した端末の鍵があれば、許可なしで入る。無ければパネルで許可する
+  await Promise.race([
+    phone.waitForSelector('#login', { state: 'hidden' }),
+    page.waitForSelector('#net-phones button[data-act="approve"]').then(() => page.click('#net-phones button[data-act="approve"]')),
+  ]);
   await phone.waitForSelector('#login', { state: 'hidden' });
   assert.equal(await phone.evaluate(() => location.hash), '');
   // シーンの見本画像
@@ -100,4 +112,29 @@ test('QR コード：パネルに QR が出て、暗証番号入りの URL で�
   assert.deepEqual(phoneErrors, []);
   await phone.close();
   await page.close();
+});
+
+test('スマホの許可：2 画面のときも操作ウィンドウのパネルで許可・外すができる。外したスマホは切れる', async () => {
+  const { page: ctrl, errors } = await openApp(browser, DIST, '', { width: 1000, height: 800 });
+  await ctrl.evaluate((url) => { document.getElementById('net-url').value = url; document.getElementById('net-url').dispatchEvent(new Event('change')); }, `ws://127.0.0.1:${bridge.port}/vj?k=${bridge.vjKey}`);
+  await ctrl.check('#net-on');
+  const [out] = await Promise.all([ctrl.context().waitForEvent('page'), ctrl.click('#btn-output')]);
+  await out.waitForFunction(() => window.VJ && VJ.app && VJ.net && VJ.net.status === 'on', null, { timeout: 30000 });
+  // 別のブラウザのコンテキスト（端末の鍵を持っていない、新しいスマホ）
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const phone = await ctx.newPage();
+  await phone.goto(`http://127.0.0.1:${bridge.port}/#p=2468`);
+  await phone.waitForFunction(() => /許可|Allow/.test(document.getElementById('login-msg').textContent));
+  await ctrl.waitForSelector('#net-phones button[data-act="approve"]', { timeout: 10000 });
+  await ctrl.click('#net-phones button[data-act="approve"]');
+  await phone.waitForSelector('#login', { state: 'hidden' });
+  // 外す → スマホは切れて、案内が出る（前のテストで許可したスマホも一覧に残っているので、つながっている行のボタン）
+  await ctrl.waitForSelector('#net-phones [data-online="1"] button[data-act="forget"]', { timeout: 10000 });
+  await ctrl.click('#net-phones [data-online="1"] button[data-act="forget"]');
+  await phone.waitForFunction(() => /断られました|declined/.test(document.getElementById('login-msg').textContent));
+  assert.equal(await phone.evaluate(() => localStorage.getItem('vj-device-token')), null, '鍵を捨てる');
+  await out.close();
+  await ctx.close();
+  await ctrl.close();
+  assert.deepEqual(errors, []);
 });

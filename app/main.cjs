@@ -8,11 +8,26 @@
 'use strict';
 const { app, BrowserWindow, session, screen, desktopCapturer, powerSaveBlocker, dialog, Menu, shell } = require('electron');
 const path = require('node:path');
-const { pathToFileURL } = require('node:url');
+const { pathToFileURL, fileURLToPath } = require('node:url');
 
 const SMOKE = !!process.env.MOMOSAI_SMOKE;
 const WEB = path.join(__dirname, 'web');
 const ALLOWED = new Set(['media', 'midi', 'fullscreen', 'display-capture', 'window-management', 'wake-lock', 'screen-wake-lock', 'serial', 'keyboardLock', 'pointerLock']);
+
+// 許可（マイク・カメラ・MIDI・画面の取り込み・USB-DMX など）を出すのは、アプリ自身のページ（web/momosai-vj.html）にだけ。
+// 枠の中のほかのページや、ほかのページには出さない（ページの移動・新しいウィンドウも、このページだけ）
+const APP_FILE = path.join(WEB, 'momosai-vj.html');
+const samePath = (a, b) => (process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b);
+/** アプリのページの URL か（? や # の後ろは見ない） */
+function isAppUrl(url) {
+  try {
+    const u = new URL(String(url));
+    return u.protocol === 'file:' && samePath(path.normalize(fileURLToPath(u)), APP_FILE);
+  } catch (e) {
+    return false;
+  }
+}
+const isOutputUrl = (url) => isAppUrl(url) && /[?&]role=output(&|#|$)/.test(String(url));
 
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 app.commandLine.appendSwitch('disable-background-timer-throttling');
@@ -60,10 +75,23 @@ async function startBridge() {
 
 function setupSession() {
   const ses = session.defaultSession;
-  ses.setPermissionRequestHandler((wc, permission, cb) => cb(ALLOWED.has(permission)));
-  ses.setPermissionCheckHandler((wc, permission) => ALLOWED.has(permission));
-  ses.setDevicePermissionHandler((d) => d.deviceType === 'serial');
+  const wcUrl = (wc) => (wc && !wc.isDestroyed() ? wc.getURL() : '');
+  ses.setPermissionRequestHandler((wc, permission, cb, details) => {
+    const d = details || {};
+    cb(ALLOWED.has(permission) && d.isMainFrame !== false && isAppUrl(d.requestingUrl || wcUrl(wc)));
+  });
+  ses.setPermissionCheckHandler((wc, permission, origin, details) => {
+    const d = details || {};
+    if (!ALLOWED.has(permission) || d.isMainFrame === false) return false;
+    if (d.requestingUrl) return isAppUrl(d.requestingUrl);
+    // アドレスが渡されない確認（種類による）：file: のページからで、そのウィンドウがアプリのページのときだけ
+    return /^file:/.test(String(origin || '')) && (!wc || wc.isDestroyed() || isAppUrl(wc.getURL()));
+  });
+  ses.setDevicePermissionHandler((d) => d.deviceType === 'serial' && /^file:/.test(String(d.origin || 'file:')));
   ses.setDisplayMediaRequestHandler((req, cb) => {
+    // アプリのページからの取り込みだけ（枠の中のページからは受けない）
+    const from = req.frame ? req.frame.url : '';
+    if (from ? !isAppUrl(from) : !/^file:/.test(String(req.securityOrigin || ''))) { cb({}); return; }
     // メディアのオーバーレイの「画面・タブの取り込み」（映像だけ）：取り込むウィンドウ・画面を選んでもらう
     if (!req.audioRequested) {
       desktopCapturer.getSources({ types: ['window', 'screen'] }).then((sources) => {
@@ -72,7 +100,7 @@ function setupSession() {
         const win = BrowserWindow.getFocusedWindow() || mainWin;
         dialog.showMessageBox(win, {
           type: 'question', message: '取り込むウィンドウ・画面を選んでください',
-          detail: 'YouTube・ニコニコなどは、ブラウザで動画を再生しておき、そのウィンドウを選びます（全画面にするときれいに入ります）。',
+          detail: 'スライド・ほかのアプリ・動画プレーヤーなどのウィンドウを選びます（全画面にするときれいに入ります）。会場で流してよい映像か（権利・利用規約）は先に確かめてください。',
           buttons: [...list.map((x) => x.name.slice(0, 60) || x.id), 'キャンセル'], cancelId: list.length, noLink: true,
         }).then((r) => cb(r.response < list.length ? { video: list[r.response] } : {})).catch(() => cb({}));
       }).catch(() => cb({}));
@@ -85,13 +113,6 @@ function setupSession() {
       if (process.platform === 'win32' || process.platform === 'darwin') opt.audio = 'loopback';
       cb(opt);
     }).catch(() => cb({}));
-  });
-  // YouTube の埋め込みは、埋め込んだページの情報（Referer）が無いと再生できない（エラー 153）。
-  // アプリのページ（file://）からは送られないので、アプリの名前を入れる
-  ses.webRequest.onBeforeSendHeaders({ urls: ['https://www.youtube-nocookie.com/*', 'https://www.youtube.com/*'] }, (d, cb) => {
-    const h = d.requestHeaders;
-    if (!h.Referer && !h.referer) h.Referer = 'https://momosai-vj.app/';
-    cb({ requestHeaders: h });
   });
   // USB-DMX のポート選び（1 つならそれ、複数なら選ぶ）
   ses.on('select-serial-port', (event, ports, wc, cb) => {
@@ -119,7 +140,7 @@ function outputWindowOptions() {
   };
 }
 
-/** 透過ウィンドウ（オーバーレイ）：映像を透かして、ほかの画面（YouTube など）の上に重ねて表示する。
+/** 透過ウィンドウ（オーバーレイ）：映像を透かして、ほかの画面（スライド・動画プレーヤーなど）の上に重ねて表示する。
  *  プロジェクター（主画面でない方）があればそこ、無ければ主画面いっぱい。枠なし・いちばん手前・操作は受け取らない
  *  （クリックは下の画面に届く）。閉じるのは操作ウィンドウの「出力ウィンドウを閉じる」から */
 const isGlass = (url) => /[?&]overlay=1(&|$)/.test(url);
@@ -147,13 +168,13 @@ function createMain() {
   if (SMOKE) query.test = '1';
   mainWin.loadFile(path.join(WEB, 'momosai-vj.html'), { query });
   mainWin.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('file:') && url.includes('role=output')) return { action: 'allow', overrideBrowserWindowOptions: isGlass(url) ? glassWindowOptions() : outputWindowOptions() };
+    if (isOutputUrl(url)) return { action: 'allow', overrideBrowserWindowOptions: isGlass(url) ? glassWindowOptions() : outputWindowOptions() };
     if (/^https?:/.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
   mainWin.webContents.on('did-create-window', (win, details) => {
-    // 出力ウィンドウも、ページの外（埋め込んだ YouTube などから）へ移らない・別のウィンドウを開かない
-    win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('file:')) e.preventDefault(); });
+    // 出力ウィンドウも、ページの外へ移らない・別のウィンドウを開かない
+    win.webContents.on('will-navigate', (e, url) => { if (!isAppUrl(url)) e.preventDefault(); });
     win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
     if (!isGlass(details.url)) return;
     glassWins.add(win);
@@ -162,8 +183,8 @@ function createMain() {
     win.setIgnoreMouseEvents(true);
     win.setMenuBarVisibility(false);
   });
-  // ページ内のリンクで別のページへ移らない
-  mainWin.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('file:')) { e.preventDefault(); if (/^https?:/.test(url)) shell.openExternal(url); } });
+  // ページ内のリンクで別のページへ移らない（アプリのページの再読み込みだけ。ほかの file: のページへも移らない）
+  mainWin.webContents.on('will-navigate', (e, url) => { if (!isAppUrl(url)) { e.preventDefault(); if (/^https?:/.test(url)) shell.openExternal(url); } });
   mainWin.on('closed', () => {
     mainWin = null;
     // 透過ウィンドウは自分では閉じられない（操作を受け取らない）ので、操作ウィンドウと一緒に閉じる

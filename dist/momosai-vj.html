@@ -7,16 +7,20 @@
 <style>
 :root {
   --bg: #07070d;
-  --panel: rgba(12, 12, 22, 0.94);
-  --line: #2a2a40;
-  --text: #e8e8f4;
-  --muted: #9a9ab4;
+  /* パネルは不透明（うしろの映像が透けると、明るいシーンで文字が読みにくい） */
+  --panel: #0c0c16;
+  --card: #151526;
+  --field: #0c0c17;
+  --line: #303050;
+  --text: #f2f2fa;
+  --muted: #b4b4cc;
   --accent: #00e5ff;
   --accent2: #ff2ec8;
   --warn: #ffb020;
   --bad: #ff4d6a;
   --ok: #3dff9a;
-  --font: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", "Meiryo", "Noto Sans JP", system-ui, sans-serif;
+  /* 画面で読みやすい書体を先に（Windows の游ゴシックは細く、暗い背景の小さい字が読みにくい） */
+  --font: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "BIZ UDPGothic", "Meiryo", "Yu Gothic UI", "Yu Gothic", "Noto Sans JP", system-ui, sans-serif;
   --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "BIZ UDGothic", monospace;
 }
 * { box-sizing: border-box; }
@@ -44,6 +48,7 @@ html.glass, html.glass body, html.glass #stage { background: transparent; }
 .cue-grid button .cn { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cue-grid button .cd { font-size: 11px; color: var(--muted); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .cue-grid button.fired { border-color: var(--accent2); }
+.cue-grid > .hint { grid-column: 1 / -1; }
 .cue-ed { border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; margin: 6px 0; }
 .cue-ed .row { margin: 3px 0; }
 #panel .cue-ed input[type=text] { flex: 1; width: auto; min-width: 0; }
@@ -53,47 +58,107 @@ html.glass, html.glass body, html.glass #stage { background: transparent; }
 
 /* 設定パネル（映像の上に右側だけ） */
 #panel {
-  position: fixed; top: 0; right: 0; bottom: 0; width: min(440px, 100vw);
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(460px, 100vw);
   background: var(--panel); border-left: 1px solid var(--line);
-  overflow-y: auto; padding: 14px 16px 40px; font-size: 14px; line-height: 1.5;
-  scrollbar-width: thin; z-index: 20;
+  overflow-y: auto; padding: 0 14px 48px; font-size: 14px; line-height: 1.55;
+  scrollbar-width: thin; z-index: 20; --top-h: 0px;
 }
-#panel header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+/* パネルの上：題・いまの状態・目次。スクロールしても上に残る（窓が低いときは、場所を取るので一緒に流す） */
+#panel-top { position: sticky; top: 0; z-index: 6; margin: 0 -14px 10px; padding: 10px 14px 8px; background: var(--panel); border-bottom: 1px solid var(--line); box-shadow: 0 6px 12px rgba(0, 0, 0, 0.45); }
+@media (max-height: 619px) { #panel-top { position: static; box-shadow: none; } }
+#panel header { display: flex; align-items: center; gap: 8px; }
 #panel header h1 { font-size: 18px; margin: 0; letter-spacing: 0.08em; font-weight: 900;
   background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
 #panel header .ver { color: var(--muted); font-size: 11px; flex: 1; }
-#panel h2 { font-size: 13px; color: var(--accent); margin: 18px 0 8px; letter-spacing: 0.05em; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
-#panel h2 .psec-btn { all: unset; display: flex; align-items: center; gap: 6px; width: 100%; cursor: pointer; box-sizing: border-box; }
-#panel h2 .psec-btn::before { content: '▾'; display: inline-block; width: 1em; text-align: center; color: var(--muted); transition: transform 0.15s; }
-#panel h2 .psec-btn:hover { color: var(--text); }
-#panel h2 .psec-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
-#panel .psec.closed h2 { margin-bottom: 0; }
-#panel .psec.closed h2 .psec-btn::before { transform: rotate(-90deg); }
+/* いまの状態（入力・テンポ・シーン・曲）。どこを見ていても分かるように */
+.pstatus { display: grid; grid-template-columns: 1fr auto auto; gap: 4px 6px; margin-top: 8px; font-size: 12.5px; }
+.pstatus button { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 3px 8px; background: var(--card); border: 1px solid var(--line); border-radius: 7px; text-align: left; }
+.pstatus .ps-now { grid-column: 1 / -1; }
+.pstatus .ps-now span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pstatus #ps-scene { font-weight: 700; flex: none; max-width: 55%; }
+.pstatus #ps-song { color: var(--muted); }
+.pstatus .ps-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: #55557a; }
+.pstatus .ps-dot.ok { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+.pstatus .ps-dot.warn { background: var(--warn); }
+.pstatus .ps-dot.bad { background: var(--bad); }
+.pstatus .ps-bar { flex: 1; min-width: 30px; height: 7px; border-radius: 4px; background: var(--field); border: 1px solid var(--line); overflow: hidden; }
+.pstatus .ps-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #12c26b 0%, #12c26b 70%, #ffd000 85%, #ff3b3b 100%); }
+.pstatus #ps-bpm { font-family: var(--mono); font-weight: 700; white-space: nowrap; }
+.pstatus .ps-flags { display: flex; align-items: center; gap: 3px; }
+.pstatus .ps-flags i { font: 700 10.5px/1 var(--mono); font-style: normal; padding: 4px 5px; border-radius: 5px; border: 1px solid var(--line); color: #62628a; white-space: nowrap; }
+.pstatus .ps-flags i.on { color: #001318; background: var(--accent); border-color: var(--accent); }
+.pstatus .ps-flags i.on.alert { color: #fff; background: var(--bad); border-color: var(--bad); }
+/* 目次（①〜⑦ へ飛ぶ。閉じている見出しは開く） */
+.pnav { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.pnav button { flex: 1 1 auto; min-width: 0; padding: 4px 4px; font-size: 12.5px; line-height: 1.4; background: transparent; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); white-space: nowrap; overflow: hidden; }
+.pnav button b { font-size: 14px; font-weight: 700; color: var(--text); margin-right: 1px; }
+.pnav button.closed { opacity: 0.6; }
+.pnav button.on { border-color: var(--accent); color: var(--text); background: #0d2430; opacity: 1; }
+.pnav button.on b { color: var(--accent); }
+/* ①〜⑦ は 1 つずつ枠で囲む（どこからどこまでが同じ項目か分かるように） */
+#panel .psec { background: var(--card); border: 1px solid var(--line); border-radius: 10px; margin: 12px 0; scroll-margin-top: calc(var(--top-h) + 8px); }
+#panel h2 { font-size: 15px; font-weight: 700; color: var(--text); margin: 0; letter-spacing: 0.03em; background: #1d1d36; border-radius: 9px 9px 0 0; }
+#panel h2 .psec-btn { all: unset; display: flex; align-items: center; gap: 8px; width: 100%; padding: 9px 12px; cursor: pointer; box-sizing: border-box; }
+#panel h2 .psec-btn::after { content: '▾'; margin-left: auto; color: var(--muted); transition: transform 0.15s; }
+#panel h2 .psec-btn:hover { color: var(--accent); }
+#panel h2 .psec-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 9px; }
+#panel .psec > .psec-body { padding: 6px 12px 12px; }
+#panel .psec.closed h2 { border-radius: 9px; background: transparent; }
+#panel .psec.closed h2 .psec-btn { color: var(--muted); }
+#panel .psec.closed h2 .psec-btn::after { transform: rotate(-90deg); }
 #panel .psec.closed > .psec-body { display: none; }
-#panel .psec-all { justify-content: flex-end; margin: 2px 0 -8px; }
-#panel .psec-all button { font-size: 11px; padding: 2px 8px; }
-#panel label { display: inline-flex; align-items: center; gap: 4px; margin-right: 10px; cursor: pointer; }
-#panel .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 4px; margin: 6px 0; }
-#panel .hint { color: var(--muted); font-size: 12px; margin: 4px 0; }
-#panel input[type=text], #panel select, #panel textarea {
-  background: #11111c; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font: inherit; }
+#panel .psec-all { justify-content: flex-end; margin: 4px 0 -4px; }
+#panel .psec-all button { font-size: 12px; padding: 3px 9px; }
+#panel label { display: inline-flex; align-items: center; gap: 6px; margin-right: 10px; cursor: pointer; }
+#panel input[type=checkbox], #panel input[type=radio] { width: 16px; height: 16px; margin: 0; flex: none; accent-color: var(--accent); }
+#panel .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 8px 0; }
+/* つまみの行は「名前・つまみ・値」の 3 列にそろえる */
+#panel .row:has(> input[type=range]), .sp-row { display: grid; grid-template-columns: 8em minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+#panel .row:has(> input[type=range]) > span:last-child, .sp-row > span:last-child { min-width: 3.4em; text-align: right; font: 12.5px var(--mono); color: var(--muted); white-space: nowrap; }
+/* 窓がとても狭いとき（パネルの幅が足りない）は、3 列にせず折り返す（つまみの幅が無くならないように）。上の状態も折り返す */
+@media (max-width: 400px) {
+  #panel .row:has(> input[type=range]), .sp-row { display: flex; flex-wrap: wrap; }
+  #panel input[type=range] { flex: 1 1 120px; min-width: 120px; width: auto; }
+  .pstatus { display: flex; flex-wrap: wrap; }
+  .pstatus > * { flex: 1 1 auto; }
+}
+/* 名前のあとに選ぶ欄が続く行は、名前の幅をそろえる */
+#panel .row:has(> select) > span:first-child:not(.hint) { min-width: 8em; }
+/* 選択肢（入力の種類・メディアの種類）は、選んでいるものがひと目で分かるボタンの形に */
+#panel .row.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+#panel .row.seg label { margin: 0; padding: 7px 9px; background: var(--field); border: 1px solid var(--line); border-radius: 8px; }
+#panel .row.seg label:hover { border-color: #5a5a88; }
+#panel .row.seg label:has(input:checked) { border-color: var(--accent); background: #0d2430; font-weight: 700; }
+/* 説明の文は、操作する部品より控えめに（左に細い線。「説明を隠す」で消せる） */
+#panel .hint { color: var(--muted); font-size: 12.5px; line-height: 1.6; margin: 4px 0; }
+#panel .hint.help { border-left: 2px solid #3a3a64; padding-left: 8px; margin: 6px 0 10px; }
+#panel.nohelp .help { display: none; }
+#panel input[type=text], #panel input[type=number], #panel select, #panel textarea {
+  background: var(--field); color: var(--text); border: 1px solid #44446a; border-radius: 7px; padding: 6px 8px; font: inherit; }
 #panel input[type=text], #panel textarea { width: 100%; }
 #panel select { max-width: 100%; }
+#panel input:focus-visible, #panel select:focus-visible, #panel textarea:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 #panel textarea { font-family: var(--mono); font-size: 12.5px; min-height: 110px; resize: vertical; }
-#panel input[type=range] { flex: 1; min-width: 120px; accent-color: var(--accent); }
+#panel input[type=range] { flex: 1; min-width: 0; width: 100%; accent-color: var(--accent); }
 #panel input[type=color] { width: 36px; height: 28px; border: 0; padding: 0; background: none; }
+#panel input[type=file] { max-width: 100%; font-size: 12.5px; color: var(--muted); }
+#panel input[type=file]::file-selector-button { font: inherit; font-size: 13.5px; color: var(--text); background: #222240; border: 1px solid #4a4a74; border-radius: 7px; padding: 5px 10px; margin-right: 8px; cursor: pointer; }
+#panel input[type=file]::file-selector-button:hover { border-color: var(--accent); background: #2a2a50; }
+#panel code { font-family: var(--mono); font-size: 12px; background: #23233c; border-radius: 4px; padding: 1px 4px; color: var(--text); }
 button {
-  font: inherit; color: var(--text); background: #1c1c2c; border: 1px solid #3a3a58; border-radius: 6px;
+  font: inherit; color: var(--text); background: #222240; border: 1px solid #4a4a74; border-radius: 7px;
   padding: 6px 12px; cursor: pointer; }
-button:hover { border-color: var(--accent); }
-button.primary { background: linear-gradient(90deg, #006a7a, #6a0a58); border-color: transparent; font-weight: 700; }
+button:hover { border-color: var(--accent); background: #2a2a50; }
+button:disabled { opacity: 0.4; cursor: default; }
+button.primary { background: linear-gradient(90deg, #007d90, #7c1068); border-color: transparent; font-weight: 700; color: #fff; }
+button.primary:hover { background: linear-gradient(90deg, #0095ab, #96147e); }
 button.big { width: 100%; padding: 14px; font-size: 18px; font-weight: 900; letter-spacing: 0.08em;
   background: linear-gradient(90deg, #00b8d0, #c8109c); border: 0; color: #fff; }
 button.close { margin-left: auto; padding: 2px 10px; }
-.status { margin: 6px 0; padding: 6px 8px; border-radius: 6px; background: #11111c; font-size: 13px; }
-.status.ok { border-left: 4px solid var(--ok); }
-.status.warn { border-left: 4px solid var(--warn); }
-.status.bad { border-left: 4px solid var(--bad); }
+.status { margin: 8px 0; padding: 7px 10px; border-radius: 7px; background: var(--field); border: 1px solid var(--line); border-left-width: 4px; font-size: 13px; }
+.status.ok { border-left-color: var(--ok); }
+.status.warn { border-left-color: var(--warn); }
+.status.bad { border-left-color: var(--bad); }
 .meter { display: grid; grid-template-columns: 18px 1fr 64px; align-items: center; gap: 6px; margin: 3px 0; font-family: var(--mono); font-size: 12px; }
 .meter .track { height: 12px; background: #11111c; border: 1px solid var(--line); border-radius: 3px; position: relative; overflow: hidden; }
 .meter .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0;
@@ -106,8 +171,9 @@ table.setlist { width: 100%; border-collapse: collapse; font-size: 12px; margin-
 table.setlist td, table.setlist th { border-bottom: 1px solid var(--line); padding: 3px 4px; text-align: left; }
 table.setlist th { color: var(--muted); font-weight: normal; }
 .err { color: var(--bad); font-size: 12px; }
-.keys { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font-size: 13px; }
-.keys kbd, #help kbd { font-family: var(--mono); background: #1c1c2c; border: 1px solid #3a3a58; border-bottom-width: 2px; border-radius: 4px; padding: 0 6px; white-space: nowrap; }
+.keys { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 13px; align-items: baseline; }
+.keys kbd { justify-self: start; }
+.keys kbd, #help kbd, #panel kbd { font-family: var(--mono); font-size: 12px; background: #23233c; border: 1px solid #4a4a74; border-bottom-width: 2px; border-radius: 4px; padding: 0 6px; white-space: nowrap; }
 .warnbox { background: #2a1a00; border: 1px solid var(--warn); color: #ffd99a; border-radius: 6px; padding: 8px; margin: 8px 0; font-size: 13px; }
 
 /* トースト・HUD・ヘルプ */
@@ -120,8 +186,13 @@ table.setlist th { color: var(--muted); font-weight: normal; }
 #help { position: fixed; z-index: 35; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.6); }
 #help .box { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 24px; max-width: 640px; width: calc(100vw - 32px); }
 #help h3 { margin: 0 0 10px; color: var(--accent); }
-details { margin: 8px 0; border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
-details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+/* 折りたたみ（詳しい項目）：開いているものは、中身が枠の中にあると分かるように */
+details { margin: 10px 0; border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; background: #101020; }
+details summary { cursor: pointer; color: var(--text); font-size: 13.5px; font-weight: 600; margin: 0 -10px; padding: 7px 10px; border-radius: 7px; }
+details summary:hover { color: var(--accent); }
+details[open] { padding-bottom: 6px; }
+details[open] > summary { border-bottom: 1px solid var(--line); border-radius: 7px 7px 0 0; margin-bottom: 8px; background: #17172c; }
+details details { background: var(--card); }
 .bpm { font-family: var(--mono); min-width: 80px; }
 .row.msg input[type=text] { flex: 1; width: auto; }
 #logo-preview { max-height: 60px; max-width: 200px; background: #222; border-radius: 4px; }
@@ -132,7 +203,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .midimap button { padding: 1px 8px; font-size: 12px; }
 .midimap button.wait { border-color: var(--accent2); color: var(--accent2); }
 /* シーンを絵で選ぶ */
-.scene-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; margin: 6px 0; }
+.scene-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 6px; margin: 6px 0; }
 .scene-btn { position: relative; padding: 0; border-radius: 6px; overflow: hidden; background: #000; border: 2px solid #3a3a58; display: flex; flex-direction: column; text-align: left; }
 .scene-btn img, .scene-btn .noimg { width: 100%; aspect-ratio: 16 / 9; display: block; object-fit: cover; background: #222; }
 .scene-btn .sk { position: absolute; left: 3px; top: 3px; background: rgba(0,0,0,0.72); color: #fff; font: 11px var(--mono); padding: 0 4px; border-radius: 3px; }
@@ -172,7 +243,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .guide li.next .g-mark { background: var(--accent2); color: #fff; }
 #btn-guide.on { border-color: var(--accent2); color: var(--accent2); }
 #panel h2.flash-h { animation: flashh 1.4s ease-out; }
-@keyframes flashh { 0% { background: rgba(255, 46, 200, 0.45); } 100% { background: transparent; } }
+@keyframes flashh { 0% { background: rgba(255, 46, 200, 0.6); } 100% { background: #1d1d36; } }
 .sc-step.bad { color: var(--bad); }
 .sc-step.warn { color: var(--warn); }
 .sc-step.ok { color: var(--ok); }
@@ -190,7 +261,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .qrbox { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; margin: 6px 0; }
 .qrbox figure { margin: 0; text-align: center; font-size: 12px; color: var(--muted); }
 .qrbox img { width: 180px; height: 180px; image-rendering: pixelated; background: #fff; border-radius: 6px; display: block; }
-.band-row { text-align: left; display: grid; grid-template-columns: 1.6em 3.4em 1fr auto auto auto auto auto; align-items: center; gap: 4px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: #11111c; cursor: pointer; font-size: 13px; }
+.band-row { text-align: left; display: grid; grid-template-columns: 1.4em auto minmax(0, 1fr) auto auto auto auto auto; align-items: center; gap: 4px; padding: 5px 6px; border: 1px solid var(--line); border-radius: 7px; background: var(--field); cursor: pointer; font-size: 13.5px; }
 .band-row.on { border-color: var(--accent); background: #0d2430; }
 .band-row .bi { color: var(--muted); font-family: var(--mono); }
 .band-row .bt { font-family: var(--mono); color: var(--muted); }
@@ -204,9 +275,9 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .band-edit { border: 1px solid var(--accent2); border-top: 0; border-radius: 0 0 6px 6px; margin-top: -4px; padding: 6px; background: #160c1a; }
 #panel .band-edit textarea { min-height: 90px; }
 #panel input[type=time] { background: #11111c; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 6px; font: inherit; color-scheme: dark; }
-.sp-row { display: grid; grid-template-columns: 7em 1fr 3.5em; align-items: center; gap: 6px; margin: 4px 0; }
+.sp-row { margin: 6px 0; }
 body.remote-mode #stage { opacity: 0.25; }
-#remote { position: fixed; left: 16px; top: 16px; max-width: max(260px, calc(100vw - min(440px, 100vw) - 40px)); display: flex; z-index: 10; }
+#remote { position: fixed; left: 16px; top: 16px; max-width: max(260px, calc(100vw - min(460px, 100vw) - 40px)); display: flex; z-index: 10; }
 #remote .box { background: var(--panel); border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; max-width: 640px; }
 #remote h3 { margin: 0 0 6px; color: var(--accent); }
 #remote pre { font: 12px/1.45 var(--mono); white-space: pre-wrap; color: #cfe; margin: 8px 0; }
@@ -220,24 +291,41 @@ body.remote-mode #stage { opacity: 0.25; }
 <canvas id="stage"></canvas>
 
 <div id="panel">
+  <div id="panel-top">
   <header>
     <h1>MOMOSAI VJ</h1>
     <span class="ver" id="ver"></span>
     <button class="close" id="btn-guide" title="はじめてのガイド">?</button>
     <button class="close" id="panel-close" title="閉じる（M で開く）">×</button>
   </header>
+  <div class="pstatus" id="pstatus">
+    <button type="button" data-go="1" title="音声入力（押すと ① へ）"><i class="ps-dot" id="ps-dot"></i><span id="ps-in">未開始</span><span class="ps-bar"><i id="ps-lv"></i></span></button>
+    <button type="button" data-go="2" title="テンポ（押すと ② へ）"><b id="ps-bpm" data-i18n-skip>— BPM</b></button>
+    <span class="ps-flags"><i id="ps-auto" title="オート（A）">AUTO</i><i id="ps-black" title="暗転（B）">暗転</i><i id="ps-lock" title="ロック（L）">LOCK</i></span>
+    <button type="button" class="ps-now" data-go="6" title="いまのシーンと曲（押すと ⑥ へ）"><span id="ps-scene"></span><span id="ps-song" data-i18n-skip></span></button>
+  </div>
+  <nav class="pnav" id="pnav" aria-label="パネルの目次">
+    <button type="button" data-go="1" title="① 音声入力"><b>①</b>入力</button>
+    <button type="button" data-go="2" title="② 音楽のタイプ・テンポ"><b>②</b>音楽</button>
+    <button type="button" data-go="3" title="③ 出演バンド・セットリスト・文字"><b>③</b>出演</button>
+    <button type="button" data-go="4" title="④ 表示（スクリーンに合わせる）"><b>④</b>画面</button>
+    <button type="button" data-go="5" title="⑤ 演出・オプション"><b>⑤</b>演出</button>
+    <button type="button" data-go="6" title="⑥ 本番"><b>⑥</b>本番</button>
+    <button type="button" data-go="7" title="⑦ 外部連携（スマホ・OSC・照明）"><b>⑦</b>連携</button>
+  </nav>
+  </div>
   <div class="row" data-i18n-skip><span>言語 / Language</span><select id="opt-lang"><option value="auto">自動 / Auto</option><option value="ja">日本語</option><option value="en">English</option></select></div>
   <div id="warnings"></div>
   <div id="resume-box" hidden>
     <div class="warnbox resume"><span id="resume-text"></span> <button id="btn-resume">前回の続きから再開</button> <button id="btn-resume-no">いいえ</button></div>
   </div>
   <div id="guide" class="guide" hidden></div>
-  <div class="row psec-all"><button id="psec-open-all" title="①〜⑦ をすべて開く">すべて開く</button><button id="psec-close-all" title="①〜⑦ をすべて閉じる（見出しを押すと 1 つずつ開きます）">すべて閉じる</button></div>
+  <div class="row psec-all"><button id="psec-help" title="説明の文（左に線のある小さい字）を出す / 隠す">説明を隠す</button><button id="psec-open-all" title="①〜⑦ をすべて開く">すべて開く</button><button id="psec-close-all" title="①〜⑦ をすべて閉じる（見出しを押すと 1 つずつ開きます）">すべて閉じる</button></div>
 
   <section class="psec" data-sec="1">
   <h2><button type="button" class="psec-btn" aria-expanded="true">① 音声入力</button></h2>
   <div class="psec-body">
-  <div class="row">
+  <div class="row seg">
     <label><input type="radio" name="src" value="mic" checked> マイク / ライン</label>
     <label><input type="radio" name="src" value="display"> PC で再生中の音</label>
     <label><input type="radio" name="src" value="demo"> デモ音源</label>
@@ -254,7 +342,7 @@ body.remote-mode #stage { opacity: 0.25; }
     <select id="device"><option value="">（既定のデバイス）</option></select>
     <button id="btn-refresh" title="デバイス一覧を更新">↻</button>
   </div>
-  <div class="hint" id="display-opts" hidden data-i18n-html>YouTube・音楽アプリ・DJ ソフトなど PC で流している音に反応します。開始すると共有する画面を聞かれるので、<b>「画面全体」</b>で画面を選び、<b>「システムの音声を含めて共有する」をオン</b>にして共有します（最初はオフです。Chrome のタブを選ぶときは「タブの音声を含めて共有する」）。2 画面のときは、選ぶ画面が出力ウィンドウに出ます。音が届かないときは、VJ を開き直して最初にこの入力を始めてください。Mac は Chrome のタブの音だけ使えます。</div>
+  <div class="hint help" id="display-opts" hidden data-i18n-html>YouTube・音楽アプリ・DJ ソフトなど PC で流している音に反応します。開始すると共有する画面を聞かれるので、<b>「画面全体」</b>で画面を選び、<b>「システムの音声を含めて共有する」をオン</b>にして共有します（最初はオフです。Chrome のタブを選ぶときは「タブの音声を含めて共有する」）。2 画面のときは、選ぶ画面が出力ウィンドウに出ます。音が届かないときは、VJ を開き直して最初にこの入力を始めてください。Mac は Chrome のタブの音だけ使えます。</div>
   <div class="row" id="file-opts" hidden>
     <input type="file" id="file" multiple accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac">
     <button id="btn-skip" title="次の曲（複数選んだとき）" hidden>次の曲 ▶▶</button>
@@ -275,16 +363,16 @@ body.remote-mode #stage { opacity: 0.25; }
   <div class="meter"><span>L</span><div class="track"><div class="fill" id="ml"></div><div class="peak" id="mlp"></div></div><span id="mlv">—</span></div>
   <div class="meter"><span>R</span><div class="track"><div class="fill" id="mr"></div><div class="peak" id="mrp"></div></div><span id="mrv">—</span></div>
   <div class="lamps"><span class="lamp" id="lk">KICK</span><span class="lamp" id="ls">SNARE</span><span class="lamp" id="lh">HAT</span><span class="lamp" id="la">ACCENT</span><span class="lamp" id="lb">BEAT</span></div>
-  <div class="hint">メーターが緑〜黄色の範囲で動けば OK。片方しか動かないときも「解析するチャンネル」はミックスのままで大丈夫です。</div>
+  <div class="hint help">メーターが緑〜黄色の範囲で動けば OK。片方しか動かないときも「解析するチャンネル」はミックスのままで大丈夫です。</div>
   <div class="row"><button id="btn-sc">サウンドチェック（自動調整）</button></div>
-  <div class="hint">リハで約 20 秒：音の大きさ・音割れ・会場の雑音を調べて、音楽のタイプと「無音とみなす音量」をおすすめします。</div>
+  <div class="hint help">リハで約 20 秒：音の大きさ・音割れ・会場の雑音を調べて、音楽のタイプと「無音とみなす音量」をおすすめします。</div>
   <div id="sc-box" class="scbox" hidden></div>
   </div></section>
   <section class="psec" data-sec="2">
   <h2><button type="button" class="psec-btn" aria-expanded="true">② 音楽のタイプ・テンポ</button></h2>
   <div class="psec-body">
   <div class="row"><select id="opt-profile"></select></div>
-  <div class="hint" id="profile-desc"></div>
+  <div class="hint help" id="profile-desc"></div>
   <div class="row">
     <span>テンポ</span><b id="bpm-view" class="bpm">— BPM</b><span class="hint" id="mode-view"></span>
     <button id="btn-tap" title="拍に合わせて 3 回以上（Enter キーでも）">タップ</button>
@@ -296,13 +384,13 @@ body.remote-mode #stage { opacity: 0.25; }
   <div class="psec-body">
   <div class="bandlist" id="band-list"></div>
   <div class="row"><button id="band-add">＋ バンドを追加</button><button id="band-next">次のバンドへ ▶（N）</button></div>
-  <div class="hint">バンドごとに名前・セットリスト・ロゴ・音楽のタイプ・色・開演時刻・テロップを覚えます。下の欄は「出演中」のバンドの内容です。</div>
+  <div class="hint help">バンドごとに名前・セットリスト・ロゴ・音楽のタイプ・色・開演時刻・テロップを覚えます。下の欄は「出演中」のバンドの内容です。</div>
   <div class="row"><input type="text" id="band" placeholder="バンド名" style="flex: 1; width: auto"><span>開演</span><input type="time" id="opt-countdown" title="タイトルに「開演まで 05:00」を表示（1 曲目に進むと消えます）"></div>
   <div class="row"><b class="sub">セットリスト</b><span class="hint">→ キーで次の曲（曲名とシーン・色が変わる）</span></div>
   <div id="setlist-preview"></div>
-  <div class="hint">文字でまとめて入力・貼り付けもできます（上の表と同じ内容）：</div>
+  <div class="hint help">文字でまとめて入力・貼り付けもできます（上の表と同じ内容）：</div>
   <textarea id="setlist" spellcheck="false"></textarea>
-  <div class="hint" data-i18n-html>1 行 1 曲：<code>曲名 | シーン | パレット</code>。シーンは 1〜9・Shift の段は s1〜s9、または名前（カンマで複数→オートで順番に）。<code>@end</code> で終演の文字。→ キーで次の曲。</div>
+  <div class="hint help" data-i18n-html>1 行 1 曲：<code>曲名 | シーン | パレット</code>。シーンは 1〜9・Shift の段は s1〜s9、または名前（カンマで複数→オートで順番に）。<code>@end</code> で終演の文字。→ キーで次の曲。</div>
   <details>
     <summary>ロゴ画像・テロップ</summary>
     <div class="row">
@@ -325,7 +413,7 @@ body.remote-mode #stage { opacity: 0.25; }
     <div class="row msg"><kbd>Q</kbd><input type="text" id="msg-0" placeholder="例：次は〇〇です"><button data-msg="0">表示</button></div>
     <div class="row msg"><kbd>W</kbd><input type="text" id="msg-1" placeholder="例：手拍子お願いします！"><button data-msg="1">表示</button></div>
     <div class="row msg"><kbd>E</kbd><input type="text" id="msg-2" placeholder="例：アンコールありがとう！"><button data-msg="2">表示</button></div>
-    <div class="hint">キー（Q / W / E）かボタンで表示、もう一度押すと消えます。</div>
+    <div class="hint help">キー（Q / W / E）かボタンで表示、もう一度押すと消えます。</div>
   </details>
   </div></section>
   <section class="psec" data-sec="4">
@@ -348,10 +436,10 @@ body.remote-mode #stage { opacity: 0.25; }
     <button id="btn-output" class="primary">出力ウィンドウを開く（2 画面）</button>
     <button id="btn-output-stop" hidden>出力ウィンドウを閉じる</button>
   </div>
-  <div class="hint" id="output-hint">プロジェクターを「拡張」でつないだときに使います。映像だけのウィンドウを開いてプロジェクター側で全画面にし、このウィンドウは操作・確認用になります（観客に操作画面が見えません）。</div>
+  <div class="hint help" id="output-hint">プロジェクターを「拡張」でつないだときに使います。映像だけのウィンドウを開いてプロジェクター側で全画面にし、このウィンドウは操作・確認用になります（観客に操作画面が見えません）。</div>
   </div></section>
   <section class="psec" data-sec="5">
-  <h2><button type="button" class="psec-btn" aria-expanded="true">⑤ オプション</button></h2>
+  <h2><button type="button" class="psec-btn" aria-expanded="true">⑤ 演出・オプション</button></h2>
   <div class="psec-body">
   <div class="row">
     <label><input type="checkbox" id="opt-auto"> オート（自動でシーン切替）</label>
@@ -368,8 +456,8 @@ body.remote-mode #stage { opacity: 0.25; }
     </select>
     <span class="hint" id="intensity-now"></span>
   </div>
-  <div class="hint">激しいほど、キックで画面が寄る・スネアで揺れる・拍ごとに軽く光る・オートの切替が速くなります（しっとり系・歌・司会のタイプでは弱め。フラッシュを一切使わないときは寄り・揺れもしません）。</div>
-  <div class="hint">「自動」は、静かなところは控えめに、サビでは激しく、と曲の盛り上がりを追って変わります（MC・無音のあいだは控えめ）。</div>
+  <div class="hint help">激しいほど、キックで画面が寄る・スネアで揺れる・拍ごとに軽く光る・オートの切替が速くなります（しっとり系・歌・司会のタイプでは弱め。フラッシュを一切使わないときは寄り・揺れもしません）。</div>
+  <div class="hint help">「自動」は、静かなところは控えめに、サビでは激しく、と曲の盛り上がりを追って変わります（MC・無音のあいだは控えめ）。</div>
   <div class="row">
     <label><input type="checkbox" id="opt-noflash"> フラッシュを一切使わない（光に配慮が必要な会場）</label>
   </div>
@@ -418,15 +506,14 @@ body.remote-mode #stage { opacity: 0.25; }
     <label><input type="checkbox" id="opt-palauto"> 自動で変える</label>
     <span id="custom-colors"></span>
   </div>
-  <div class="hint">「自動で変える」は、曲の区切り（キメ・小節の頭）ごとに、盛り上がりに合った色へゆっくり移します（およそ 20〜30 秒おき。曲ごとの色の指定があるときはそのまま。モノクロとカスタムは使いません）。</div>
+  <div class="hint help">「自動で変える」は、曲の区切り（キメ・小節の頭）ごとに、盛り上がりに合った色へゆっくり移します（およそ 20〜30 秒おき。曲ごとの色の指定があるときはそのまま。モノクロとカスタムは使いません）。</div>
   <details id="overlay-box">
-    <summary>メディアを重ねる（画像・動画・画面の取り込み・YouTube / ニコニコ）</summary>
+    <summary>メディアを重ねる（画像・動画・画面の取り込み・カメラ）</summary>
     <div class="row"><label><input type="checkbox" id="ov-on"> <span data-i18n-html>メディアを表示（<kbd>O</kbd> キーで切替）</span></label></div>
-    <div class="row ov-kinds">
+    <div class="row seg ov-kinds">
       <label><input type="radio" name="ov-kind" value="image"> 画像</label>
       <label><input type="radio" name="ov-kind" value="video"> 動画ファイル</label>
       <label><input type="radio" name="ov-kind" value="capture"> 画面・タブの取り込み</label>
-      <label><input type="radio" name="ov-kind" value="web"> YouTube / ニコニコ</label>
       <label><input type="radio" name="ov-kind" value="camera"> カメラ</label>
       <label id="ov-kind-lib" hidden><input type="radio" name="ov-kind" value="lib"> 一覧から</label>
     </div>
@@ -436,7 +523,7 @@ body.remote-mode #stage { opacity: 0.25; }
         <button id="btn-ov-paste" title="コピーした画像を貼り付ける">貼り付け</button>
         <button id="btn-ov-clear">消す</button>
       </div>
-      <div class="hint" data-i18n-html>枠やイラスト（透過 PNG など）を、すべてのシーンの上に。コピーした画像は <kbd>Ctrl</kbd>+<kbd>V</kbd>（Mac は <kbd>⌘</kbd>+<kbd>V</kbd>）でも貼り付けられます。ファイルをこの欄に落としても入ります。</div>
+      <div class="hint help" data-i18n-html>枠やイラスト（透過 PNG など）を、すべてのシーンの上に。コピーした画像は <kbd>Ctrl</kbd>+<kbd>V</kbd>（Mac は <kbd>⌘</kbd>+<kbd>V</kbd>）でも貼り付けられます。ファイルをこの欄に落としても入ります。</div>
       <div class="row"><img id="ov-preview" alt="" hidden></div>
     </div>
     <div class="ov-pane" data-kind="video">
@@ -449,22 +536,14 @@ body.remote-mode #stage { opacity: 0.25; }
         <label><input type="checkbox" id="ov-vloop"> くり返す</label>
         <label><input type="checkbox" id="ov-vsound"> 音を出す</label>
       </div>
-      <div class="hint">MP4（H.264）・WebM がおすすめ。動画はこの PC の中に保存され、次に開いたときも使えます（設定ファイルの書き出しには入りません）。</div>
+      <div class="hint help">MP4（H.264）・WebM がおすすめ。動画はこの PC の中に保存され、次に開いたときも使えます（設定ファイルの書き出しには入りません）。</div>
     </div>
     <div class="ov-pane" data-kind="capture">
       <div class="row">
         <button id="btn-ov-capture" class="primary">取り込む画面・タブを選ぶ</button>
         <button id="btn-ov-capstop">やめる</button>
       </div>
-      <div class="hint">YouTube・ニコニコ・スライドなどを別のタブ（またはウィンドウ）で開いて再生し、そのタブを選びます。動画を全画面・シアターモードにすると、動画だけがきれいに入ります。インターネットの動画をそのまま流すときの、いちばん確実な方法です。</div>
-    </div>
-    <div class="ov-pane" data-kind="web">
-      <div class="row">
-        <input type="text" id="ov-web" spellcheck="false" placeholder="https://www.youtube.com/watch?v=… / https://www.nicovideo.jp/watch/sm…" style="flex: 1; width: auto">
-        <button id="btn-ov-web">表示</button>
-      </div>
-      <div class="row"><label><input type="checkbox" id="ov-wsound"> 音を出す</label></div>
-      <div class="hint">インターネットが必要です。埋め込みは映像のいちばん上に重なり、揺れ・フラッシュの演出は掛かりません（濃さ・重ね方・明るさ・暗転は合わせます）。2 画面のときの手元のプレビューには映りません。ブラウザ版（HTML ファイルを開いて使う）では YouTube が「エラー 153」で再生できないことがあります。そのときは単体アプリ版か「画面・タブの取り込み」で。</div>
+      <div class="hint help">スライド・ほかのアプリ・動画プレーヤーなどを別のウィンドウ（またはタブ）で開いて、そのウィンドウを選びます。全画面にすると、中身だけがきれいに入ります。取り込む映像を会場で流してよいか（権利・サービスの利用規約）は、先に確かめてください。</div>
     </div>
     <div class="ov-pane" data-kind="camera">
       <div class="row">
@@ -476,11 +555,11 @@ body.remote-mode #stage { opacity: 0.25; }
         <button id="btn-ov-camstop">止める</button>
         <label><input type="checkbox" id="ov-cammirror"> 左右反転（鏡のように）</label>
       </div>
-      <div class="hint">Web カメラや、HDMI キャプチャーボードにつないだビデオカメラ・スイッチャーの映像を、すべてのシーンの上に。最初に使うときはカメラの使用の許可を聞かれます（2 画面のときは出力ウィンドウで）。「濃さ」を下げる・「光として足す」にすると映像になじみます。</div>
+      <div class="hint help">Web カメラや、HDMI キャプチャーボードにつないだビデオカメラ・スイッチャーの映像を、すべてのシーンの上に。最初に使うときはカメラの使用の許可を聞かれます（2 画面のときは出力ウィンドウで）。「濃さ」を下げる・「光として足す」にすると映像になじみます。</div>
     </div>
     <div class="ov-pane" data-kind="lib">
       <div class="row"><select id="ov-lib" style="flex: 1"></select></div>
-      <div class="hint">下の「メディアの一覧」に登録したものを出します。</div>
+      <div class="hint help">下の「メディアの一覧」に登録したものを出します。</div>
     </div>
     <div class="row ov-play" id="ov-play">
       <button data-mcmd="play" title="再生">▶</button>
@@ -501,23 +580,23 @@ body.remote-mode #stage { opacity: 0.25; }
       </select>
     </div>
     <div class="row"><span>濃さ</span><input type="range" id="ov-imgop" min="0" max="1" step="0.05"><span id="ov-imgop-v"></span></div>
-    <div class="warnbox" id="ov-vwarn" hidden>⚠ 動画・取り込んだ画面・YouTube の中の点滅は、このソフトでは制限できません（フラッシュの上限は効きません）。強い点滅のある動画は使わないでください。</div>
+    <div class="warnbox" id="ov-vwarn" hidden>⚠ 動画・取り込んだ画面の中の点滅は、このソフトでは制限できません（フラッシュの上限は効きません）。強い点滅のある動画は使わないでください。</div>
   </details>
   <details id="medialib-box">
     <summary>メディアの一覧（曲ごと・キューで切り替える）</summary>
-    <div class="hint" data-i18n-html>よく使うメディア（画像・動画・YouTube / ニコニコ・カメラ）を登録しておくと、③ のセットリストの曲ごとに「メディア」を選べます（文字の欄なら <code>曲名 | シーン | パレット | m:名前</code>、<code>m:off</code> でその曲は出さない）。⑥ のキューでも使えます。</div>
+    <div class="hint help" data-i18n-html>よく使うメディア（画像・動画・カメラ）を登録しておくと、③ のセットリストの曲ごとに「メディア」を選べます（文字の欄なら <code>曲名 | シーン | パレット | m:名前</code>、<code>m:off</code> でその曲は出さない）。⑥ のキューでも使えます。</div>
     <div id="ml-list" class="ml-list"></div>
     <div class="row">
       <button id="btn-ml-add">＋ いまのメディアを一覧に入れる</button>
       <button id="btn-ml-files">＋ ファイルから入れる</button>
       <input type="file" id="ml-files" multiple accept="image/*,video/*,.mp4,.webm,.mov,.m4v" hidden>
     </div>
-    <div class="hint">画像・動画はこの PC の中に保存されます（設定ファイルの書き出しには入りません）。画面・タブの取り込みは一覧に入れられません。</div>
+    <div class="hint help">画像・動画はこの PC の中に保存されます（設定ファイルの書き出しには入りません）。画面・タブの取り込みは一覧に入れられません。</div>
   </details>
   <details id="ovscene-box">
     <summary>シーンを重ねる</summary>
     <div class="row"><label><input type="checkbox" id="ovs-on"> <span data-i18n-html>重ねるシーンを表示（<kbd>Shift</kbd>+<kbd>O</kbd> で切替）</span></label></div>
-    <div class="hint">いまのシーンの上に、もう 1 つのシーンを重ねます。</div>
+    <div class="hint help">いまのシーンの上に、もう 1 つのシーンを重ねます。</div>
     <div class="row">
       <select id="ov-scene"></select>
       <select id="ov-sceneblend">
@@ -526,7 +605,7 @@ body.remote-mode #stage { opacity: 0.25; }
       </select>
     </div>
     <div class="row"><span>シーンの濃さ</span><input type="range" id="ov-sceneop" min="0" max="1" step="0.05"><span id="ov-sceneop-v"></span></div>
-    <div class="hint">シーンを重ねると描く量が 2 倍になります（重いときは重ねるのをやめてください）。まぶしくなりすぎないよう、重ねる強さは「シーンの濃さ」100% でも 6 割までです。</div>
+    <div class="hint help">シーンを重ねると描く量が 2 倍になります（重いときは重ねるのをやめてください）。まぶしくなりすぎないよう、重ねる強さは「シーンの濃さ」100% でも 6 割までです。</div>
   </details>
   <details id="ovtext-box">
     <summary>隅に文字を出す（時計・バンド名・曲名）</summary>
@@ -545,9 +624,9 @@ body.remote-mode #stage { opacity: 0.25; }
     <div class="row"><span>文字の大きさ</span><input type="range" id="ov-textsize" min="0.5" max="2" step="0.1"><span id="ov-textsize-v"></span></div>
     <div class="row"><span>文字の濃さ</span><input type="range" id="ov-textop" min="0" max="1" step="0.05"><span id="ov-textop-v"></span></div>
   </details>
-  <div class="hint">テストパターン（G）の間は、メディア・シーン・文字のオーバーレイを出しません。</div>
+  <div class="hint help">テストパターン（G）の間は、メディア・シーン・文字のオーバーレイを出しません。</div>
   <div class="row" id="glass-row" hidden><button id="btn-glass">ほかの画面の上に重ねて表示（透過ウィンドウ）</button></div>
-  <div class="hint" id="glass-hint">VJ の映像を透かして、ほかの画面（YouTube など）の上に重ねて表示するのは、単体アプリ版でできます（ブラウザではウィンドウを透明にできません）。</div>
+  <div class="hint help" id="glass-hint">VJ の映像を透かして、ほかの画面（スライド・動画プレーヤーなど）の上に重ねて表示するのは、単体アプリ版でできます（ブラウザではウィンドウを透明にできません）。</div>
   <details id="scene-adjust">
     <summary>シーンごとの調整（量・大きさ・速さなど）</summary>
     <div class="row"><select id="sp-scene"></select><label><input type="checkbox" id="sp-follow" checked> 表示中のシーンに合わせる</label></div>
@@ -559,7 +638,7 @@ body.remote-mode #stage { opacity: 0.25; }
     <div class="row"><span>オートで使うシーン</span></div>
     <div class="row" id="auto-scenes"></div>
     <div class="row"><span>無音とみなす音量</span><input type="range" id="opt-gate" min="-80" max="-20" step="1"><span id="opt-gate-v"></span></div>
-    <div class="hint">会場のざわざわで反応してしまうときは右へ（大きく）。小さい音に反応しないときは左へ。</div>
+    <div class="hint help">会場のざわざわで反応してしまうときは右へ（大きく）。小さい音に反応しないときは左へ。</div>
     <div class="row"><span>画質上限</span><input type="range" id="opt-scale" min="0.4" max="1" step="0.05"><span id="opt-scale-v"></span></div>
     <div class="row">
       <span>フレームレート</span>
@@ -581,7 +660,7 @@ body.remote-mode #stage { opacity: 0.25; }
     </div>
     <details id="midi-map-box">
       <summary>MIDI の割り当てを変える（学習）</summary>
-      <div class="hint">「学習」を押してから、割り当てたいパッド・ボタン・つまみを動かします。</div>
+      <div class="hint help">「学習」を押してから、割り当てたいパッド・ボタン・つまみを動かします。</div>
       <div id="midi-map" class="midimap"></div>
       <div class="row"><button id="btn-midi-default">既定の割り当てに戻す</button></div>
     </details>
@@ -599,7 +678,7 @@ body.remote-mode #stage { opacity: 0.25; }
   <div class="row"><button id="btn-precheck">本番前チェック</button></div>
   <div id="precheck" class="scbox" hidden></div>
   <button class="big" id="btn-show">ショー開始（全画面）</button>
-  <div class="hint" data-i18n-html>全画面・スリープ防止・Esc 長押しでのみ解除、がまとめて有効になります。<b>H</b> でキー一覧、<b>M</b> でこのパネル。</div>
+  <div class="hint help" data-i18n-html>全画面・スリープ防止・Esc 長押しでのみ解除、がまとめて有効になります。<b>H</b> でキー一覧、<b>M</b> でこのパネル。</div>
   <div class="row"><b class="sub">シーン</b><span class="hint">クリックで切替（次のビートで。もう一度押すとすぐ）</span></div>
   <div class="scene-grid" id="scene-grid"></div>
   <div class="row"><b class="sub">キュー</b><span class="hint" data-i18n-html>シーン・色・メディア・重ねるシーンを 1 回でまとめて切替（<kbd>Alt</kbd>+<kbd>1</kbd>〜<kbd>9</kbd>）</span></div>
@@ -608,7 +687,7 @@ body.remote-mode #stage { opacity: 0.25; }
     <summary>キューを作る・直す</summary>
     <div id="cue-edit"></div>
     <div class="row"><button id="btn-cue-add">＋ いまの状態をキューに入れる</button></div>
-    <div class="hint" data-i18n-html>「そのまま」の項目は、キューを出しても変えません。最大 9 個。MIDI・スマホ・OSC（<code>/vj/cue 1</code>）からも出せます。</div>
+    <div class="hint help" data-i18n-html>「そのまま」の項目は、キューを出しても変えません。最大 9 個。MIDI・スマホ・OSC（<code>/vj/cue 1</code>）からも出せます。</div>
   </details>
   <div class="keys" id="keys-mini"></div>
   <div class="row"><button id="btn-cheatsheet">キー早見表を印刷</button></div>
@@ -616,14 +695,14 @@ body.remote-mode #stage { opacity: 0.25; }
   <section class="psec" data-sec="7">
   <h2><button type="button" class="psec-btn" aria-expanded="true">⑦ 外部連携（スマホ・OSC・照明）</button></h2>
   <div class="psec-body">
-  <div class="hint" data-i18n-html>スマホからの操作・OSC・Art-Net には「ブリッジ」が要ります。単体アプリには入っています。ブラウザ版は <code>bridge</code> フォルダの起動ファイル（Node.js が必要）で起動します。</div>
+  <div class="hint help" data-i18n-html>スマホからの操作・OSC・Art-Net には「ブリッジ」が要ります。単体アプリには入っています。ブラウザ版は <code>bridge</code> フォルダの起動ファイル（Node.js が必要）で起動します。</div>
   <div class="row"><label><input type="checkbox" id="net-on"> ブリッジにつなぐ</label><input type="text" id="net-url" spellcheck="false" style="flex: 1; width: auto"></div>
   <div class="status" id="net-status">つないでいません</div>
   <div class="row"><button id="btn-qr" hidden>スマホ用の QR コードを表示</button></div>
   <div id="net-qr" class="qrbox" hidden></div>
   <details>
     <summary>OSC（照明卓・TouchDesigner・Resolume など）</summary>
-    <div class="hint" data-i18n-html>受信：ブリッジの UDP <b id="osc-in">9000</b> 番。<code>/vj/scene 3</code>・<code>/vj/flash</code>・<code>/vj/blackout 1</code>・<code>/vj/next</code>・<code>/vj/master 0.8</code> など（手順書参照）</div>
+    <div class="hint help" data-i18n-html>受信：ブリッジの UDP <b id="osc-in">9000</b> 番。<code>/vj/scene 3</code>・<code>/vj/flash</code>・<code>/vj/blackout 1</code>・<code>/vj/next</code>・<code>/vj/master 0.8</code> など（手順書参照）</div>
     <div class="row"><label><input type="checkbox" id="osc-on"> 音の特徴量を送る</label></div>
     <div class="row"><span>送り先</span><input type="text" id="osc-host" spellcheck="false" style="width: 10em"><span>ポート</span><input type="number" id="osc-port" min="1" max="65535" style="width: 6em">
       <select id="osc-rate"><option value="30">30 回/秒</option><option value="60">60 回/秒</option><option value="15">15 回/秒</option></select></div>
@@ -658,7 +737,7 @@ body.remote-mode #stage { opacity: 0.25; }
     <div class="row"><span>明るさの上限</span><input type="range" id="dmx-max" min="0" max="1" step="0.05"><span id="dmx-max-v"></span></div>
     <div class="row"><span>キックで光る強さ</span><input type="range" id="dmx-pulse" min="0" max="1" step="0.05"><span id="dmx-pulse-v"></span></div>
     <div class="row"><label><input type="checkbox" id="dmx-flash"> フラッシュで照明も白く光らせる</label></div>
-    <div class="hint">色は映像のパレットの 4 色を順に。キックで 1 台ずつ順に強く光ります（⑤ のフラッシュの上限まで。既定は 1 秒に 3 回）。暗転・明るさは映像と同じ。</div>
+    <div class="hint help">色は映像のパレットの 4 色を順に。キックで 1 台ずつ順に強く光ります（⑤ のフラッシュの上限まで。既定は 1 秒に 3 回）。暗転・明るさは映像と同じ。</div>
     <div class="status" id="dmx-status"></div>
   </details>
   </div></section>
@@ -688,7 +767,7 @@ body.remote-mode #stage { opacity: 0.25; }
   'use strict';
 
   VJ.version = '1.0.0';
-  VJ.buildTime = '2026-10-10 #8b73e6a';
+  VJ.buildTime = '2026-10-15 #1c55bfd';
 
   const LN10_20 = Math.LN10 / 20;
 
@@ -836,11 +915,11 @@ body.remote-mode #stage { opacity: 0.25; }
     bands: [], // 出演バンド（bands.js）。いま出ているバンドの値は上の bandName・setlistText などにある
     bandIdx: 0, // いま出ているバンドの番号
     bandPalette: -1, // いま出ているバンドの色（パネルで選んだもの。-1 = 決めていない）
-    overlayOn: true, // メディアのオーバーレイ（画像・動画・画面の取り込み・YouTube / ニコニコ）の表示（O キー）
+    overlayOn: true, // メディアのオーバーレイ（画像・動画・画面の取り込み・カメラ）の表示（O キー）
     ovSceneOn: true, // シーンのオーバーレイ（別のシーンを重ねる）の表示（Shift+O）
     overlay: {
-      // メディア：mediaKind image 画像 / video 動画ファイル / capture 画面・タブの取り込み / web YouTube・ニコニコ /
-      // camera カメラ / lib メディアの一覧の 1 件（libId）
+      // メディア：mediaKind image 画像 / video 動画ファイル / capture 画面・タブの取り込み / camera カメラ /
+      // lib メディアの一覧の 1 件（libId）。YouTube・ニコニコの埋め込み（web）はやめた（古い設定の web は image に戻す）
       mediaKind: 'image', libId: '',
       // カメラ（Web カメラ・キャプチャーボード）。cameraId が空なら既定のカメラ。mirror：左右反転（鏡）
       cameraId: '', cameraLabel: '', cameraMirror: false,
@@ -848,8 +927,6 @@ body.remote-mode #stage { opacity: 0.25; }
       image: '', imageFit: 'contain', imageBlend: 'normal', imageOpacity: 1, // blend: normal そのまま / add 光を足す / screen
       // 動画ファイル（中身は大きいので設定には入れず、mediastore.js に保存。ここは鍵と名前だけ）
       videoKey: '', videoName: '', videoLoop: true, videoSound: false,
-      // YouTube / ニコニコの URL（埋め込みで、映像の上に重ねる。インターネットが必要）
-      webUrl: '',
       // いまのシーンの上に、別のシーンを重ねる（'' = 重ねない）
       scene: '', sceneBlend: 'screen', sceneOpacity: 0.7, // blend: screen / add。濃さ 1 でも足す強さは 0.6 まで（光過敏対策）
       // 文字（時計・バンド名・曲名・自由な文字）を隅にずっと出す
@@ -859,6 +936,7 @@ body.remote-mode #stage { opacity: 0.25; }
     cues: [], // キュー：{ name, scene, palette, media, ovScene }（cues.js。1 回の操作でまとめて切り替える）
     guide: true, // パネルの上に「はじめてのガイド」を出す
     panelFold: {}, // パネルの閉じている見出し { '3': true, ... }（①〜⑦）
+    panelHelp: true, // パネルの説明の文を出す（慣れたら隠して、部品だけにできる）
   };
 
   /** 英語で初めて開いたときのセットリストの見本 */
@@ -1000,6 +1078,14 @@ body.remote-mode #stage { opacity: 0.25; }
       if (!f.screenDetails) out.push('出力ウィンドウをプロジェクター側へ自動で移す');
       if (!f.fullscreen) out.push('全画面');
       return out.map((x) => VJ.t(x));
+    },
+
+    /** ファイルの場所（location.pathname を戻したもの）が、OneDrive・Dropbox などの同期されるフォルダの中か。
+     *  起動スクリプトの設定の保存場所（.vj-profile）は配布フォルダの中にあるので、同期されるフォルダに置くと、
+     *  Chrome が使っている最中のファイルが同期され続ける */
+    syncedPath(p) {
+      p = String(p || '').replace(/\\/g, '/');
+      return /\/(OneDrive[^/]*|Dropbox[^/]*|Google ?Drive|iCloud ?Drive|Box)\//i.test(p) || /\/Library\/(Mobile Documents|CloudStorage)\//.test(p);
     },
 
     fullscreenElement() {
@@ -1741,7 +1827,7 @@ body.remote-mode #stage { opacity: 0.25; }
     "文字の濃さ": "Text opacity",
     "シーンを重ねると描く量が 2 倍になります（重いときは重ねるのをやめてください）。まぶしくなりすぎないよう、重ねる強さは「シーンの濃さ」100% でも 6 割までです。テストパターン（G）の間はオーバーレイを出しません。": "A second scene doubles the drawing work (turn it off if things get slow). To keep it from getting too bright, the second scene is added at no more than 60% strength even at 100% \"Scene opacity\". The overlay is hidden while the test pattern (G) is shown.",
     "ほかの画面の上に重ねて表示（透過ウィンドウ）": "Show on top of other windows (transparent window)",
-    "VJ の映像を透かして、ほかの画面（YouTube など）の上に重ねて表示するのは、単体アプリ版でできます（ブラウザではウィンドウを透明にできません）。": "Showing the visuals see-through on top of other windows (YouTube etc.) is available in the desktop app (a browser cannot make its window transparent).",
+    "VJ の映像を透かして、ほかの画面（スライド・動画プレーヤーなど）の上に重ねて表示するのは、単体アプリ版でできます（ブラウザではウィンドウを透明にできません）。": "Showing the visuals see-through on top of other windows (slides, a video player etc.) is available in the desktop app (a browser cannot make its window transparent).",
     "画像を読み込めませんでした：": "Could not load the image: ",
     "「自動で変える」は、曲の区切り（キメ・小節の頭）ごとに、盛り上がりに合った色へゆっくり移します（およそ 20〜30 秒おき。曲ごとの色の指定があるときはそのまま。モノクロとカスタムは使いません）。": "\"Change automatically\" moves slowly to a palette that suits the energy at musical boundaries (accents, bar lines), roughly every 20–30 seconds. Songs with their own palette keep it; Mono and Custom are not used.",
     "激しいほど、キックで画面が寄る・スネアで揺れる・拍ごとに軽く光る・オートの切替が速くなります（しっとり系・歌・司会のタイプでは弱め。フラッシュを一切使わないときは寄り・揺れもしません）。": "Higher settings zoom in on kicks, shake on snares, add light flashes on the beat and switch scenes faster in auto mode (weaker for the calm, singing and MC music types; no zoom or shake when flashes are turned off).",
@@ -1774,7 +1860,6 @@ body.remote-mode #stage { opacity: 0.25; }
     "メディアに{0}を使っています。動画の中の点滅はフラッシュの上限で制限できないので、事前に確認してください": "The media overlay uses {0}. Flashing inside a video is not limited by the flash limit, so check it beforehand",
     "画面の取り込みが止まっています（⑤ のメディア）": "Screen capture has stopped (media in ⑤)",
     "メディアの動画を読めません（⑤ で選び直す）": "Cannot read the media video (choose it again in ⑤)",
-    "YouTube / ニコニコはインターネットが必要です。会場の回線で再生できるか確かめてください": "YouTube / niconico need an internet connection. Check that it plays on the venue's network",
     "画像か動画のファイルを落としてください（音声ファイルは ① の「音声ファイル」で）": "Drop an image or video file (for audio files use \"Audio file\" in ①)",
     "動画：{0}": "Video: {0}",
     "動画が選ばれていません": "No video selected",
@@ -1787,9 +1872,6 @@ body.remote-mode #stage { opacity: 0.25; }
     "この動画は再生できません（MP4・WebM がおすすめ）": "This video cannot be played (MP4 or WebM recommended)",
     "取り込み中：{0}": "Capturing: {0}",
     "取り込んでいません（「取り込む画面・タブを選ぶ」）": "Not capturing (\"Choose a screen / tab to capture\")",
-    "表示中（動かないときは ▶）": "Showing (press ▶ if it does not play)",
-    "YouTube / ニコニコの URL ではありません": "Not a YouTube / niconico URL",
-    "URL を入れて「表示」": "Enter a URL and press \"Show\"",
     "メディアに画像を入れました（O で表示・非表示）": "Image set as media (O to show / hide)",
     "動画": "Video",
     "メディアに動画を入れました（O で表示・非表示）": "Video set as media (O to show / hide)",
@@ -1801,9 +1883,8 @@ body.remote-mode #stage { opacity: 0.25; }
     "画面の取り込みがキャンセルされました": "Screen capture was cancelled",
     "画面を取り込めませんでした：": "Could not capture the screen: ",
     "{0} 秒": "{0} s",
-    "メディアを重ねる（画像・動画・画面の取り込み・YouTube / ニコニコ）": "Media overlay (image, video, screen capture, YouTube / niconico)",
+    "メディアを重ねる（画像・動画・画面の取り込み・カメラ）": "Media overlay (image, video, screen capture, camera)",
     "メディアを表示（<kbd>O</kbd> キーで切替）": "Show media (toggle with the <kbd>O</kbd> key)",
-    "YouTube / ニコニコ": "YouTube / niconico",
     "コピーした画像を貼り付ける": "Paste a copied image",
     "貼り付け": "Paste",
     "枠やイラスト（透過 PNG など）を、すべてのシーンの上に。コピーした画像は <kbd>Ctrl</kbd>+<kbd>V</kbd>（Mac は <kbd>⌘</kbd>+<kbd>V</kbd>）でも貼り付けられます。ファイルをこの欄に落としても入ります。": "A frame or artwork (e.g. a transparent PNG) on top of every scene. You can also paste a copied image with <kbd>Ctrl</kbd>+<kbd>V</kbd> (<kbd>⌘</kbd>+<kbd>V</kbd> on Mac) or drop a file here.",
@@ -1811,13 +1892,12 @@ body.remote-mode #stage { opacity: 0.25; }
     "音を出す": "Play sound",
     "MP4（H.264）・WebM がおすすめ。動画はこの PC の中に保存され、次に開いたときも使えます（設定ファイルの書き出しには入りません）。": "MP4 (H.264) or WebM recommended. The video is stored on this PC and is still there next time (it is not included in exported settings files).",
     "取り込む画面・タブを選ぶ": "Choose a screen / tab to capture",
-    "YouTube・ニコニコ・スライドなどを別のタブ（またはウィンドウ）で開いて再生し、そのタブを選びます。動画を全画面・シアターモードにすると、動画だけがきれいに入ります。インターネットの動画をそのまま流すときの、いちばん確実な方法です。": "Open YouTube, niconico, slides etc. in another tab (or window), start playing, and choose that tab. Put the video in full screen or theater mode to capture just the video. This is the most reliable way to show online videos.",
-    "インターネットが必要です。埋め込みは映像のいちばん上に重なり、揺れ・フラッシュの演出は掛かりません（濃さ・重ね方・明るさ・暗転は合わせます）。2 画面のときの手元のプレビューには映りません。ブラウザ版（HTML ファイルを開いて使う）では YouTube が「エラー 153」で再生できないことがあります。そのときは単体アプリ版か「画面・タブの取り込み」で。": "Needs an internet connection. The embedded player sits on top of the visuals without the shake and flash effects (opacity, blending, brightness and blackout still apply). It does not appear in the two-screen preview. In the browser version (opening the HTML file), YouTube may refuse to play with \"Error 153\"; use the desktop app or \"Screen / tab capture\" instead.",
+    "スライド・ほかのアプリ・動画プレーヤーなどを別のウィンドウ（またはタブ）で開いて、そのウィンドウを選びます。全画面にすると、中身だけがきれいに入ります。取り込む映像を会場で流してよいか（権利・サービスの利用規約）は、先に確かめてください。": "Open slides, another app, a video player etc. in another window (or tab) and choose that window. Make it full screen to capture just its content. Check beforehand that you may show the captured footage at the venue (rights and the service's terms of use).",
     "再生": "Play",
     "一時停止": "Pause",
     "最初から": "Start over",
     "濃さ": "Opacity",
-    "⚠ 動画・取り込んだ画面・YouTube の中の点滅は、このソフトでは制限できません（フラッシュの上限は効きません）。強い点滅のある動画は使わないでください。": "⚠ Flashing inside videos, captured screens and YouTube cannot be limited by this software (the flash limit does not apply). Do not use videos with strong flashing.",
+    "⚠ 動画・取り込んだ画面の中の点滅は、このソフトでは制限できません（フラッシュの上限は効きません）。強い点滅のある動画は使わないでください。": "⚠ Flashing inside videos and captured screens cannot be limited by this software (the flash limit does not apply). Do not use videos with strong flashing.",
     "シーンを重ねる": "Scene overlay",
     "重ねるシーンを表示（<kbd>Shift</kbd>+<kbd>O</kbd> で切替）": "Show the overlay scene (toggle with <kbd>Shift</kbd>+<kbd>O</kbd>)",
     "いまのシーンの上に、もう 1 つのシーンを重ねます。": "Adds a second scene on top of the current one.",
@@ -1878,7 +1958,7 @@ body.remote-mode #stage { opacity: 0.25; }
     "選んでください": "Choose one",
     "（消えたメディア）": "(deleted media)",
     "メディアの一覧（曲ごと・キューで切り替える）": "Media list (switch per song or with cues)",
-    "よく使うメディア（画像・動画・YouTube / ニコニコ・カメラ）を登録しておくと、③ のセットリストの曲ごとに「メディア」を選べます（文字の欄なら <code>曲名 | シーン | パレット | m:名前</code>、<code>m:off</code> でその曲は出さない）。⑥ のキューでも使えます。": "Register the media you use often (images, videos, YouTube / niconico, cameras) and you can pick a \"Media\" for each song in the set list (③) (in the text box: <code>Title | Scene | Palette | m:name</code>; <code>m:off</code> hides media for that song). Cues (⑥) can use them too.",
+    "よく使うメディア（画像・動画・カメラ）を登録しておくと、③ のセットリストの曲ごとに「メディア」を選べます（文字の欄なら <code>曲名 | シーン | パレット | m:名前</code>、<code>m:off</code> でその曲は出さない）。⑥ のキューでも使えます。": "Register the media you use often (images, videos, cameras) and you can pick a \"Media\" for each song in the set list (③) (in the text box: <code>Title | Scene | Palette | m:name</code>; <code>m:off</code> hides media for that song). Cues (⑥) can use them too.",
     "＋ いまのメディアを一覧に入れる": "+ Add the current media to the list",
     "＋ ファイルから入れる": "+ Add from files",
     "画像・動画はこの PC の中に保存されます（設定ファイルの書き出しには入りません）。画面・タブの取り込みは一覧に入れられません。": "Images and videos are stored on this PC (they are not included in exported settings files). Screen/tab capture cannot be added to the list.",
@@ -1886,7 +1966,6 @@ body.remote-mode #stage { opacity: 0.25; }
     "名前": "Name",
     "出す": "Show",
     "一覧から消しますか？（曲・キューの指定は「見つからない」になります）": "Remove it from the list? (Songs and cues that use it will show \"not found\")",
-    "ニコニコ": "niconico",
     "画面の取り込み": "Screen capture",
     "保存できませんでした。このウィンドウを閉じるまで使えます": "Could not save. It can be used until this window is closed",
     "一覧はいっぱいです（{0} 個まで）": "The list is full (up to {0} items)",
@@ -1937,6 +2016,29 @@ body.remote-mode #stage { opacity: 0.25; }
     "いまの状態を入れる": "Use the current state",
     "このキューを消しますか？": "Delete this cue?",
     "キューの名前": "Cue name",
+    // パネルの上の「いまの状態」と目次・説明の表示
+    "未開始": "not started",
+    "開始中…": "starting…",
+    "入力": "Input",
+    "音楽": "Music",
+    "出演": "Bands",
+    "画面": "Screen",
+    "演出": "FX",
+    "本番": "Show",
+    "連携": "Link",
+    "⑤ 演出・オプション": "⑤ Effects & options",
+    "パネルの目次": "Panel sections",
+    "音声入力（押すと ① へ）": "Audio input (click to go to ①)",
+    "テンポ（押すと ② へ）": "Tempo (click to go to ②)",
+    "いまのシーンと曲（押すと ⑥ へ）": "Current scene and song (click to go to ⑥)",
+    "オート（A）": "Auto (A)",
+    "暗転（B）": "Blackout (B)",
+    "ロック（L）": "Lock (L)",
+    "YouTube・ニコニコの埋め込みはなくなりました（埋め込みの規約に沿えないため）。使っていたメディアは画像に戻し、メディアの一覧からも外しました。曲の m:… に残っていれば、本番前チェックに出ます。": "The YouTube / niconico embed has been removed (it could not follow the embedding terms). Media that used it went back to an image and was removed from the media list. Songs that still name it with m:… are flagged by the pre-show check.",
+    "説明を隠す": "Hide help text",
+    "説明を表示": "Show help text",
+    "説明の文（左に線のある小さい字）を出す / 隠す": "Show / hide the explanatory text (the small text with a line on its left)",
+    "このフォルダは OneDrive などの同期されるフォルダの中にあります。設定の保存場所（.vj-profile）も同期の対象になり、使っている最中のファイルが同期され続けます。本番の PC では C:\\momosai-vj のような、同期されない英数字だけの場所に置くのがおすすめです。": "This folder is inside a synced folder such as OneDrive. The settings location (.vj-profile) is synced too, so files keep syncing while they are in use. On the show PC, place it in a non-synced, ASCII-only folder such as C:\\momosai-vj.",
   };
 })(globalThis.VJ = globalThis.VJ || {});
 </script>
@@ -1946,12 +2048,20 @@ body.remote-mode #stage { opacity: 0.25; }
   'use strict';
 
   const KEY = 'momosai-vj/v1';
+  const clone = (v) => JSON.parse(JSON.stringify(v));
+  const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
   // 出演バンドの一覧（ロゴを含むので大きい）は別に保存し、変わったときだけ書く（キー操作のたびに数 MB を書かないように）
   const BANDS_KEY = KEY + '/bands';
   let savedBands = { ref: null, ver: -1 };
-
-  const clone = (v) => JSON.parse(JSON.stringify(v));
-  const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+  // 大きい画像（ロゴ・メディアの画像。合わせて 1MB を超える）も別に保存し、変わったときだけ書く。
+  // 設定と一緒に書くと、キー操作のたびに 1 フレーム分（十数 ms）描画が止まる
+  const BIG = [
+    { key: KEY + '/logo', get: (s) => (typeof s.logo === 'string' ? s.logo : ''), put: (o, v) => { if (!o.logo) o.logo = v; } },
+    { key: KEY + '/ovimg', get: (s) => (isObj(s.overlay) && typeof s.overlay.image === 'string' ? s.overlay.image : ''), put: (o, v) => { if (isObj(o.overlay) && !o.overlay.image) o.overlay.image = v; } },
+  ];
+  let savedBig = BIG.map(() => null); // 最後に保存した中身（null = まだ分からない）
+  // 読み込んだ設定について、利用者に一度だけ知らせること（'web-removed' など）。パネルが takeNotes で受け取る
+  const notes = new Set();
 
   /** 既定値に、保存されていた値を型が合うものだけ重ねる。既定値のオブジェクトは共有しない（複製する） */
   function merge(base, src) {
@@ -1964,20 +2074,74 @@ body.remote-mode #stage { opacity: 0.25; }
         // 出演バンドの一覧は長さが変わる（中身は sanitize で確かめる）
         if (Array.isArray(sv) && (sv.length === bv.length || k === 'bands' || k === 'mediaLib' || k === 'cues')) out[k] = clone(sv);
       } else if (isObj(bv)) {
-        if (isObj(sv)) out[k] = clone(sv);
-      } else if (typeof bv === typeof sv && (typeof sv !== 'number' || isFinite(sv))) {
+        if (!isObj(sv)) continue;
+        // 項目の決まっているもの（表示の調整・ブリッジ・OSC・照明）は、項目ごとに型を確かめ、無い項目は既定値のまま
+        // （項目の欠けた設定ファイル・あとから項目が増える前の古い設定でも、欄が空にならないように）
+        if (SHAPED.includes(k)) { for (const kk of Object.keys(bv)) if (typeOk(bv[kk], sv[kk])) out[k][kk] = sv[kk]; }
+        else out[k] = clone(sv);
+      } else if (typeOk(bv, sv)) {
         out[k] = sv;
       }
     }
+    // YouTube・ニコニコの埋め込みはやめた：使っていた設定なら、パネルで一度だけ知らせる（メディアは画像に、一覧からは外れる）
+    if ((isObj(src.overlay) && src.overlay.mediaKind === 'web') || (Array.isArray(src.mediaLib) && src.mediaLib.some((x) => isObj(x) && x.kind === 'web'))) notes.add('web-removed');
     // 古い設定：オーバーレイの ON/OFF が 1 つだったときは、シーンのオーバーレイもそれに合わせる
     if (!('ovSceneOn' in src) && typeof src.overlayOn === 'boolean') out.ovSceneOn = src.overlayOn;
     return sanitize(out);
   }
 
   const TRANSITIONS = ['fade', 'wipe', 'iris', 'blinds', 'zoom', 'slide', 'glitch', 'mosaic', 'random'];
+  const SHAPED = ['output', 'net', 'osc', 'dmx'];
+  const typeOk = (b, v) => typeof b === typeof v && (typeof v !== 'number' || isFinite(v));
+  const pick = (v, list, d) => (list.includes(v) ? v : d);
+  const clampN = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const clampI = (v, lo, hi) => clampN(Math.round(v), lo, hi);
 
   /** 中身の形も確かめる（壊れた設定ファイルで動かなくならないように） */
   function sanitize(s) {
+    const D = VJ.defaultSettings;
+    // 数値は、パネルで選べる範囲に入れる。選ぶものは、選択肢に無ければ既定値に（手で書き換えた設定ファイル・ちがう版の設定など）
+    s.master = clampN(s.master, 0.2, 1);
+    s.sensitivity = clampI(s.sensitivity, -5, 5);
+    s.maxScale = clampN(s.maxScale, 0.4, 1);
+    s.react = clampN(s.react, 0.3, 1.5);
+    s.gateDb = clampN(s.gateDb, -80, -20);
+    s.fpsCap = s.fpsCap > 0 ? 30 : 0; // 制限なしか 30fps
+    s.crossfade = s.crossfade < 0 ? -1 : Math.min(4, s.crossfade);
+    const np = VJ.palettes ? VJ.palettes.length : 1;
+    s.paletteIdx = clampI(s.paletteIdx, 0, np - 1);
+    s.bandPalette = clampI(s.bandPalette, -1, np - 1);
+    s.lang = pick(s.lang, ['auto', 'ja', 'en'], D.lang);
+    s.channel = pick(s.channel, ['mix', 'left', 'right'], D.channel);
+    s.logoMode = pick(s.logoMode, ['title', 'corner', 'both', 'off'], D.logoMode);
+    s.logoCorner = pick(s.logoCorner, ['tl', 'tr', 'bl', 'br'], D.logoCorner);
+    s.demoKind = pick(s.demoKind, ['band', 'sing', 'speech'], D.demoKind);
+    s.lastSource = pick(s.lastSource, ['mic', 'display', 'demo', 'file'], D.lastSource);
+    if (VJ.profileById) s.profile = VJ.profileById(s.profile).id;
+    // 画像は、設定の中に入れた画像（data URL）だけ（ほかの場所の画像を読みに行かない）
+    if (!/^data:image\//.test(s.logo)) s.logo = '';
+    s.customPalette = s.customPalette.map((c, i) => (typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c) ? c : D.customPalette[i]));
+    // 表示の調整・ブリッジ・OSC・照明
+    const o = s.output;
+    o.rotate = pick(o.rotate, [0, 90, 180, 270], 0);
+    o.size = clampN(o.size, 0.3, 1);
+    o.x = clampN(o.x, -0.5, 0.5);
+    o.y = clampN(o.y, -0.5, 0.5);
+    const host = (v, d) => (v.trim() && v.length <= 255 ? v.trim() : d);
+    s.net.url = s.net.url.trim().slice(0, 300);
+    if (s.net.url && !/^wss?:\/\//i.test(s.net.url)) s.net.url = D.net.url;
+    s.osc.host = host(s.osc.host, D.osc.host);
+    s.osc.port = s.osc.port >= 1 && s.osc.port <= 65535 ? Math.round(s.osc.port) : D.osc.port;
+    s.osc.rate = clampI(s.osc.rate, 10, 60);
+    const d = s.dmx;
+    d.out = pick(d.out, ['artnet', 'enttec', 'opendmx'], D.dmx.out);
+    d.type = pick(d.type, ['rgb', 'drgb', 'rgbw', 'drgbw', 'dim'], D.dmx.type);
+    d.host = host(d.host, D.dmx.host);
+    d.universe = clampI(d.universe, 0, 32767);
+    d.count = clampI(d.count, 1, 128);
+    d.start = clampI(d.start, 1, 512);
+    d.max = clampN(d.max, 0, 1);
+    d.pulse = clampN(d.pulse, 0, 1);
     const sp = {};
     for (const [id, v] of Object.entries(s.sceneParams || {})) {
       if (Array.isArray(v) && v.length <= 4 && v.every((x) => typeof x === 'number' && isFinite(x))) sp[id] = v;
@@ -1999,16 +2163,14 @@ body.remote-mode #stage { opacity: 0.25; }
     // オーバーレイ：無い項目・型の違う項目は既定値に（あとから増えた項目が古い設定に無くても動くように）
     const od = VJ.defaultSettings.overlay, ov = {};
     for (const k of Object.keys(od)) ov[k] = isObj(s.overlay) && typeof s.overlay[k] === typeof od[k] && (typeof od[k] !== 'number' || isFinite(s.overlay[k])) ? s.overlay[k] : od[k];
-    const pick = (v, list, d) => (list.includes(v) ? v : d);
     ov.imageFit = pick(ov.imageFit, ['contain', 'cover', 'stretch'], od.imageFit);
     ov.imageBlend = pick(ov.imageBlend, ['normal', 'add', 'screen'], od.imageBlend);
-    ov.mediaKind = pick(ov.mediaKind, ['image', 'video', 'capture', 'web', 'camera', 'lib'], od.mediaKind);
+    ov.mediaKind = pick(ov.mediaKind, ['image', 'video', 'capture', 'camera', 'lib'], od.mediaKind);
     ov.libId = /^[\w-]{0,40}$/.test(ov.libId) ? ov.libId : '';
     ov.cameraId = ov.cameraId.slice(0, 200);
     ov.cameraLabel = ov.cameraLabel.slice(0, 200);
     ov.videoKey = /^[\w-]{1,64}$/.test(ov.videoKey) ? ov.videoKey : '';
     ov.videoName = ov.videoName.slice(0, 200);
-    ov.webUrl = /^https:\/\//.test(ov.webUrl) ? ov.webUrl.slice(0, 500) : '';
     ov.sceneBlend = pick(ov.sceneBlend, ['screen', 'add'], od.sceneBlend);
     ov.corner = pick(ov.corner, ['tl', 'tr', 'bl', 'br'], od.corner);
     ov.imageOpacity = Math.max(0, Math.min(1, ov.imageOpacity));
@@ -2039,6 +2201,13 @@ body.remote-mode #stage { opacity: 0.25; }
           const b = localStorage.getItem(BANDS_KEY);
           if (b) { try { obj.bands = JSON.parse(b); } catch (e) { /* 壊れていたら一覧は無しで */ } }
         }
+        // 別に保存した大きい画像を戻す（古い保存では設定の中に入っている：そのまま使い、次の保存で分ける）
+        if (isObj(obj)) {
+          BIG.forEach((b, i) => {
+            const v = localStorage.getItem(b.key);
+            if (v && !b.get(obj)) { b.put(obj, v); if (b.get(obj) === v) savedBig[i] = v; }
+          });
+        }
         return merge(VJ.defaultSettings, obj);
       } catch (e) {
         return merge(VJ.defaultSettings, null);
@@ -2053,6 +2222,15 @@ body.remote-mode #stage { opacity: 0.25; }
         if (!globalThis.localStorage) return true;
         const rest = Object.assign({}, settings);
         delete rest.bands;
+        // 大きい画像は先に別の場所へ（変わったときだけ）。設定の方には入れない
+        BIG.forEach((b, i) => {
+          const v = b.get(settings);
+          if (savedBig[i] === v) return;
+          if (v) localStorage.setItem(b.key, v); else localStorage.removeItem(b.key);
+          savedBig[i] = v;
+        });
+        rest.logo = '';
+        if (isObj(settings.overlay)) rest.overlay = Object.assign({}, settings.overlay, { image: '' });
         localStorage.setItem(KEY, JSON.stringify(rest));
         const ver = VJ.bands ? VJ.bands.version : 0;
         if (settings.bands !== savedBands.ref || ver !== savedBands.ver) {
@@ -2062,12 +2240,20 @@ body.remote-mode #stage { opacity: 0.25; }
         return true;
       } catch (e) {
         savedBands = { ref: null, ver: -1 };
+        savedBig = BIG.map(() => null);
         return false;
       }
     },
     reset() {
-      try { if (globalThis.localStorage) { localStorage.removeItem(KEY); localStorage.removeItem(BANDS_KEY); } } catch (e) { /* noop */ }
+      try {
+        if (globalThis.localStorage) {
+          localStorage.removeItem(KEY);
+          localStorage.removeItem(BANDS_KEY);
+          for (const b of BIG) localStorage.removeItem(b.key);
+        }
+      } catch (e) { /* noop */ }
       savedBands = { ref: null, ver: -1 };
+      savedBig = BIG.map(() => null);
       return merge(VJ.defaultSettings, null);
     },
     /** JSON 文字列から読み込み（不正なキーは無視） */
@@ -2080,6 +2266,12 @@ body.remote-mode #stage { opacity: 0.25; }
       const known = isObj(o) ? Object.keys(VJ.defaultSettings).filter((k) => k in o).length : 0;
       if (!isObj(o) || (o.v !== 1 && known < 3)) throw new Error(VJ.t ? VJ.t('MOMOSAI VJ の設定ファイルではありません') : 'not a settings file');
       return merge(VJ.defaultSettings, o);
+    },
+    /** 読み込んだ設定について、利用者に知らせること（一度だけ）。['web-removed'] など */
+    takeNotes() {
+      const out = [...notes];
+      notes.clear();
+      return out;
     },
     toJSON(settings) {
       return JSON.stringify(settings, null, 2);
@@ -2140,7 +2332,8 @@ body.remote-mode #stage { opacity: 0.25; }
     /** blob を保存。IndexedDB に入ったら true（メモリには必ず置く） */
     async put(key, blob) {
       mem.set(key, blob);
-      return (await tx('readwrite', (st) => st.put(blob, key))) === true;
+      // tx は、うまくいけば要求の結果（put では鍵）、だめなら undefined を返す
+      return (await tx('readwrite', (st) => st.put(blob, key))) !== undefined;
     },
     /** このウィンドウのメモリにだけ置く（2 画面のとき、操作ウィンドウから受け取った分） */
     hold(key, blob) { mem.set(key, blob); },
@@ -6013,52 +6206,15 @@ void main() {
 /* メディアのオーバーレイ（描画しているウィンドウで動く：1 画面のとき・2 画面の出力ウィンドウ）。
  *   image   画像（設定の data URL）→ レンダラーのテクスチャ
  *   video   動画ファイル（mediastore.js から読む）→ <video> → 毎フレームテクスチャへ
- *   capture 画面・タブの取り込み（getDisplayMedia。YouTube・ニコニコなどを別のタブで再生して取り込む）→ 同上
+ *   capture 画面・タブの取り込み（getDisplayMedia。スライド・ほかのアプリなどを取り込む）→ 同上
  *   camera  カメラ（Web カメラ・キャプチャーボード。getUserMedia）→ 同上
- *   web     YouTube / ニコニコの埋め込み（<iframe> をキャンバスの上に重ねる。中身は別のサイトなので
- *           WebGL には取り込めない → 揺れ・フラッシュの演出は掛からず、CSS で濃さ・重ね方・明るさ・暗転だけ合わせる）
- * 動画の中の点滅は、このソフトでは制限できない（パネルと本番前チェックで注意を出す）。 */
+ * 動画の中の点滅は、このソフトでは制限できない（パネルと本番前チェックで注意を出す）。
+ * YouTube・ニコニコの埋め込みはやめた（埋め込みの規約で、プレーヤーの見た目を変える・ほかの映像と重ねる・
+ * リンクを効かなくすることが禁じられていて、VJ の重ね方と両立しないため。2026-10-14）。 */
 (function (VJ) {
   'use strict';
 
-  /** YouTube / ニコニコの URL → { provider, id, start, embed, origin }（読めなければ null） */
-  function parseWebUrl(raw) {
-    const s = String(raw || '').trim();
-    if (!s) return null;
-    let u;
-    try { u = new URL(/^https?:\/\//i.test(s) ? s : 'https://' + s); } catch (e) { return null; }
-    const host = u.hostname.replace(/^(www|m|music)\./, '');
-    const secs = (v) => {
-      if (!v) return 0;
-      const m = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s?)?$/.exec(String(v));
-      return m ? (+m[1] || 0) * 3600 + (+m[2] || 0) * 60 + (+m[3] || 0) : 0;
-    };
-    let id = '';
-    if (host === 'youtu.be') id = u.pathname.slice(1).split('/')[0];
-    else if (host === 'youtube.com' || host === 'youtube-nocookie.com') {
-      const p = u.pathname.split('/').filter(Boolean);
-      if (p[0] === 'watch') id = u.searchParams.get('v') || '';
-      else if (['embed', 'shorts', 'live', 'v'].includes(p[0])) id = p[1] || '';
-    }
-    if (id && /^[\w-]{11}$/.test(id)) {
-      const start = secs(u.searchParams.get('t') || u.searchParams.get('start'));
-      const q = new URLSearchParams({ autoplay: '1', mute: '1', loop: '1', playlist: id, controls: '0', playsinline: '1', rel: '0', enablejsapi: '1', iv_load_policy: '3', disablekb: '1', fs: '0' });
-      if (start) q.set('start', String(start));
-      return { provider: 'youtube', id, start, embed: `https://www.youtube-nocookie.com/embed/${id}?${q}`, origin: 'https://www.youtube-nocookie.com' };
-    }
-    if (host === 'nicovideo.jp' || host === 'nico.ms' || host === 'sp.nicovideo.jp' || host === 'embed.nicovideo.jp') {
-      const m = /((?:sm|so|nm)\d+)/.exec(u.pathname);
-      if (!m) return null;
-      const start = secs(u.searchParams.get('from') || u.searchParams.get('t'));
-      const q = new URLSearchParams({ jsapi: '1', playerId: '1' });
-      if (start) q.set('from', String(start));
-      return { provider: 'niconico', id: m[1], start, embed: `https://embed.nicovideo.jp/watch/${m[1]}?${q}`, origin: 'https://embed.nicovideo.jp' };
-    }
-    return null;
-  }
-
   const media = {
-    parseWebUrl,
     app: null,
     kind: '', // いま出しているもの
     status: '', // 表示用の状態（下の state()）
@@ -6067,17 +6223,15 @@ void main() {
     videoKey: '',
     capVideo: null, // 取り込みの <video>
     stream: null,
-    web: null, // { box, inner, iframe, info, url }
-    webMuted: true,
     _loadSeq: 0,
 
     /** いま出すメディア（ShowController.effectiveMedia：曲の指定 → 一覧から選んだもの → 設定のメディア） */
     _eff(app) {
       if (app.show && app.show.effectiveMedia) return app.show.effectiveMedia();
       const o = app.settings.overlay || {};
-      return { kind: o.mediaKind || 'image', image: o.image || '', key: o.videoKey || '', url: o.webUrl || '', cameraId: o.cameraId || '', mirror: !!o.cameraMirror };
+      return { kind: o.mediaKind || 'image', image: o.image || '', key: o.videoKey || '', cameraId: o.cameraId || '', mirror: !!o.cameraMirror };
     },
-    _sig(e) { return [e.kind, e.key, e.url, e.cameraId, e.image ? e.image.length + ':' + e.image.slice(-24) : ''].join('|'); },
+    _sig(e) { return [e.kind, e.key, e.cameraId, e.image ? e.image.length + ':' + e.image.slice(-24) : ''].join('|'); },
 
     /** 設定・曲に合わせて、メディアを用意する・片付ける（設定を反映するたび・出すメディアが変わったときに呼ばれる） */
     sync(app) {
@@ -6095,7 +6249,6 @@ void main() {
       if (kind !== 'image') { r.setOverlayImage(''); media._imgSeq++; }
       if (kind !== 'video' && kind !== 'capture' && kind !== 'camera') r.setOverlayVideo(null);
       if (kind !== 'video') media._dropVideo();
-      if (kind !== 'web') media._dropWeb();
       if (kind === 'image') {
         if (eff.image) { media._imgSeq++; r.setOverlayImage(eff.image); } else if (eff.key) media._imageFromKey(eff.key);
         else r.setOverlayImage('');
@@ -6119,9 +6272,6 @@ void main() {
         // カメラは出すときに開く（開いたあとは O で消しても開いたまま：すぐ出せるように）
         if (on || media.cam) media._syncCamera(eff);
         else { media.kind = ''; media.status = 'stopped'; }
-      } else if (kind === 'web') {
-        media._syncWeb(eff.url, o.videoSound);
-        if (media.web) media.web.box.hidden = !on;
       } else {
         media.kind = '';
         media.status = 'empty';
@@ -6350,80 +6500,8 @@ void main() {
       return true;
     },
 
-    // ---------------------------------------------------------------- YouTube / ニコニコ
-    _syncWeb(url, sound) {
-      const info = parseWebUrl(url);
-      if (!info) { media._dropWeb(); media.status = url ? 'badurl' : 'empty'; return; }
-      if (media.web && media.web.url === info.embed) {
-        if (media.webMuted === !!sound) media.webCmd(sound ? 'unmute' : 'mute');
-        return;
-      }
-      media._dropWeb();
-      const box = document.createElement('div');
-      box.id = 'web-overlay';
-      box.style.cssText = 'position:fixed;overflow:hidden;pointer-events:none;z-index:1;left:0;top:0;width:0;height:0';
-      const inner = document.createElement('div');
-      inner.style.cssText = 'position:absolute;left:50%;top:50%;overflow:hidden';
-      const ifr = document.createElement('iframe');
-      ifr.src = info.embed;
-      ifr.allow = 'autoplay; encrypted-media; picture-in-picture';
-      ifr.referrerPolicy = 'strict-origin-when-cross-origin';
-      ifr.setAttribute('frameborder', '0');
-      ifr.style.cssText = 'position:absolute;border:0;pointer-events:none';
-      ifr.title = info.provider;
-      inner.appendChild(ifr);
-      box.appendChild(inner);
-      document.body.appendChild(box);
-      media.web = { box, inner, iframe: ifr, info, url: info.embed, layout: '' };
-      media.webMuted = true;
-      media.kind = 'web';
-      media.status = 'loading';
-      ifr.addEventListener('load', () => {
-        if (!media.web || media.web.iframe !== ifr) return;
-        media.status = 'playing';
-        // YouTube：命令を受けてもらうための合図。ニコニコ：読み込みが終わった通知（loadComplete）を待って再生する
-        if (info.provider === 'youtube') media._post({ event: 'listening', id: 'momosai' });
-        setTimeout(() => { if (media.web && media.web.iframe === ifr) { media.webCmd('play'); if (sound) media.webCmd('unmute'); } }, 800);
-      });
-    },
-
-    _dropWeb() {
-      if (media.web) media.web.box.remove();
-      media.web = null;
-      if (media.kind === 'web') media.kind = '';
-    },
-
-    _post(msg) {
-      const w = media.web;
-      if (!w || !w.iframe.contentWindow) return false;
-      try {
-        if (w.info.provider === 'youtube') w.iframe.contentWindow.postMessage(typeof msg === 'string' ? msg : JSON.stringify(msg), w.info.origin);
-        else w.iframe.contentWindow.postMessage(msg, w.info.origin);
-        return true;
-      } catch (e) {
-        return false;
-      }
-    },
-
-    /** 再生の操作：play / pause / restart / mute / unmute（動画ファイル・YouTube・ニコニコ） */
+    /** 動画ファイルの操作：play / pause / restart / mute / unmute（パネルの ▶ ⏸ ⏮ から。2 画面のときは出力ウィンドウで） */
     webCmd(name) {
-      const w = media.web;
-      if (w) {
-        if (name === 'mute' || name === 'unmute') media.webMuted = name === 'mute';
-        if (w.info.provider === 'youtube') {
-          const yt = { play: ['playVideo'], pause: ['pauseVideo'], restart: ['seekTo', [w.info.start || 0, true]], mute: ['mute'], unmute: ['unMute'] }[name];
-          if (!yt) return false;
-          media._post({ event: 'command', func: yt[0], args: yt[1] || [] });
-          if (name === 'restart') media._post({ event: 'command', func: 'playVideo', args: [] });
-          return true;
-        }
-        const nico = { play: { eventName: 'play' }, pause: { eventName: 'pause' }, restart: { eventName: 'seek', data: { time: (w.info.start || 0) * 1000 } },
-          mute: { eventName: 'mute', data: { mute: true } }, unmute: { eventName: 'mute', data: { mute: false } } }[name];
-        if (!nico) return false;
-        media._post(Object.assign({ sourceConnectorType: 1, playerId: '1' }, nico));
-        if (name === 'restart') media._post({ eventName: 'play', sourceConnectorType: 1, playerId: '1' });
-        return true;
-      }
       const v = media.video;
       if (!v) return false;
       if (name === 'play') { v._userPaused = false; v.play().catch(() => {}); } else if (name === 'pause') { v._userPaused = true; v.pause(); } else if (name === 'restart') { v.currentTime = 0; v._userPaused = false; v.play().catch(() => {}); } else if (name === 'mute') v.muted = true;
@@ -6432,15 +6510,7 @@ void main() {
       return true;
     },
 
-    /** ニコニコの埋め込みからの通知（読み込み完了で再生・終わったら最初から＝ループ） */
-    _onNico(d) {
-      const w = media.web;
-      if (!w || w.info.provider !== 'niconico' || !d || typeof d.eventName !== 'string') return;
-      if (d.eventName === 'loadComplete') { media.webCmd(media.webMuted ? 'mute' : 'unmute'); media.webCmd('play'); }
-      else if (d.eventName === 'playerStatusChange' && d.data && d.data.playerStatus === 4) media.webCmd('restart');
-    },
-
-    /** 毎フレーム（描画のあと）：O キーでの ON/OFF に合わせて動画を止める・動かす。埋め込みの位置・大きさ・濃さを映像に合わせる */
+    /** 毎フレーム（描画のあと）：O キーでの ON/OFF・曲が変わってメディアが変わったときに用意し直す。カメラを開き直す */
     frame(fr) {
       const app = media.app;
       if (!app || (VJ.link && VJ.link.role === 'control')) return;
@@ -6454,38 +6524,6 @@ void main() {
         media._camUpgradeAt = performance.now() + 5000;
         media._openCamera(c0.id, { upgrade: true }).catch(() => {});
       }
-      const w = media.web;
-      if (!w) return;
-      const r = app.renderer, c = r.canvas, s = app.settings, o = s.overlay;
-      const show = !!s.overlayOn && !!fr && !!fr.ovWeb;
-      if (!show) { if (!w.box.hidden) w.box.hidden = true; return; }
-      const k = (c.clientWidth || c.width) / Math.max(1, c.width);
-      const [cx, cy, aw, ah] = r.area;
-      const out = r.output, rot = out.rotate || 0, rot90 = rot === 90 || rot === 270;
-      const lw = rot90 ? ah : aw, lh = rot90 ? aw : ah;
-      // 16:9 の動画を論理の画面に合わせる（stretch は枠いっぱい。黒い帯は埋め込み側が付ける）
-      const A = lw / lh, a = 16 / 9;
-      let vw = lw, vh = lh;
-      if (o.imageFit !== 'stretch') {
-        if ((o.imageFit === 'cover') === (a > A)) vw = lh * a; else vh = lw / a;
-      }
-      const left = (cx - aw / 2) * k, top = (c.height - cy - ah / 2) * k;
-      const blend = o.imageBlend === 'add' ? 'plus-lighter' : o.imageBlend === 'screen' ? 'screen' : 'normal';
-      const op = Math.max(0, Math.min(1, fr.ovWeb.alpha * (1 - (fr.black || 0))));
-      const bri = Math.max(0, Math.min(1, fr.master === undefined ? 1 : fr.master));
-      const sig = [left, top, aw * k, ah * k, lw * k, lh * k, vw * k, vh * k, rot, out.flipH, out.flipV, blend, op.toFixed(3), bri.toFixed(2)].join(',');
-      if (w.box.hidden) w.box.hidden = false;
-      if (sig === w.layout) return;
-      w.layout = sig;
-      const bs = w.box.style, is = w.inner.style, fs = w.iframe.style;
-      bs.left = left + 'px'; bs.top = top + 'px'; bs.width = aw * k + 'px'; bs.height = ah * k + 'px';
-      bs.opacity = String(op);
-      bs.mixBlendMode = blend;
-      bs.filter = bri < 0.999 ? `brightness(${bri})` : '';
-      is.width = lw * k + 'px'; is.height = lh * k + 'px';
-      is.transform = `translate(-50%, -50%) scale(${out.flipH ? -1 : 1}, ${out.flipV ? -1 : 1}) rotate(${rot}deg)`;
-      fs.width = vw * k + 'px'; fs.height = vh * k + 'px';
-      fs.left = (lw - vw) * k / 2 + 'px'; fs.top = (lh - vh) * k / 2 + 'px';
     },
 
     /** このウィンドウでは出さない（2 画面にしたとき：出力ウィンドウが受け持つ） */
@@ -6493,7 +6531,6 @@ void main() {
       media.stopCapture(true);
       media.stopCamera(true);
       media._dropVideo();
-      media._dropWeb();
       if (media.app) { media.app.renderer.setOverlayVideo(null); media.app.renderer.setOverlayImage(''); }
       media._lastOn = undefined;
       media.status = '';
@@ -6513,16 +6550,6 @@ void main() {
       };
     },
   };
-
-  if (typeof window !== 'undefined') {
-    window.addEventListener('message', (e) => {
-      const w = media.web;
-      if (!w || e.source !== w.iframe.contentWindow) return;
-      let d = e.data;
-      if (typeof d === 'string') { try { d = JSON.parse(d); } catch (err) { return; } }
-      if (w.info.provider === 'niconico') media._onNico(d);
-    });
-  }
 
   VJ.media = media;
 })(globalThis.VJ = globalThis.VJ || {});
@@ -8907,13 +8934,13 @@ void main() {
 </script>
 <script>/* src/show/medialib.js */
 /* メディアの一覧（曲ごとのメディア・キューで使う）。DOM は使わない（単体テストから呼べる）。
- * 1 件 = { id, name, kind: image / video / web / camera, key（画像・動画の中身。mediastore.js の鍵）, url（YouTube / ニコニコ）,
- *          cameraId（カメラ）, mirror（カメラの左右反転） }。中身（画像・動画）は大きいので設定には入れず、鍵だけを持つ。
+ * 1 件 = { id, name, kind: image / video / camera, key（画像・動画の中身。mediastore.js の鍵）,
+ *          cameraId（カメラ）, mirror（カメラの左右反転） }。YouTube・ニコニコ（web）はやめたので、古い一覧にあっても外す。中身（画像・動画）は大きいので設定には入れず、鍵だけを持つ。
  * セットリストでは「m:名前」「m:3」（一覧の 3 番目）「m:off」（その曲はメディアを出さない）で指定する。 */
 (function (VJ) {
   'use strict';
 
-  const KINDS = ['image', 'video', 'web', 'camera'];
+  const KINDS = ['image', 'video', 'camera'];
   const MAX = 40;
   /** 名前の比べ方：セットリストを読むときと同じに全角の数字・空白・記号をそろえ、大文字小文字・前後の空白は無視 */
   const norm = (x) => (VJ.setlist ? VJ.setlist.normalize(String(x || '')) : String(x || '')).trim().toLowerCase();
@@ -8928,10 +8955,6 @@ void main() {
     if (kind === 'image' || kind === 'video') {
       if (typeof x.key !== 'string' || !/^[\w-]{1,64}$/.test(x.key)) return null;
       out.key = x.key;
-    }
-    if (kind === 'web') {
-      if (typeof x.url !== 'string' || !/^https:\/\//.test(x.url)) return null;
-      out.url = x.url.slice(0, 500);
     }
     if (kind === 'camera') {
       out.cameraId = typeof x.cameraId === 'string' ? x.cameraId.slice(0, 200) : '';
@@ -9479,6 +9502,8 @@ void main() {
       this.state.auto = !!s.auto;
       this.state.master = clamp(+s.master || 1, 0.2, 1);
       this.state.sens = clamp(s.sensitivity | 0, -5, 5);
+      // 曲の指定で出していたメディアを、操作者がパネルで消した：次の曲で「戻す」ことはしない
+      if (this._songOn && !s.overlayOn) this._songOn = false;
       // settings.paletteIdx は常に「いま使っているパレット」（曲ごとのパレットも反映される）。
       // 変わったとき（バンドの色など）は自動の色替えの時計も戻す（すぐに上書きしないように）。
       // 同じ色のまま（ほかの設定の変更）なら、色を移している途中を止めない
@@ -9662,6 +9687,7 @@ void main() {
       if (i >= songs.length) {
         this.state.endState = true;
         this.state.songIdx = songs.length;
+        this._restoreSongOverlay();
         this._applyScene('title');
         this.state.text = null;
         this._toast(t('終演: {0}', this.endText()));
@@ -9678,6 +9704,7 @@ void main() {
       if (i < 0) {
         this.state.songIdx = -1;
         this.state.text = null;
+        this._restoreSongOverlay();
         this._applyScene('title');
         this._toast(t('開演前（バンド名）'));
         return;
@@ -9701,7 +9728,10 @@ void main() {
       this._mediaManual = false;
       this._mediaSigAt = this._mediaSig();
       const sm = song.media ? VJ.mediaLib.find(this.settings, song.media) : null;
-      if (sm && !sm.off) this.settings.overlayOn = true;
+      // 消してあったメディアを曲の指定で出したときは、指定の無い曲（と m:off の曲）で、消した状態に戻す
+      // （O で隠しておいたパネルの画像が、あとの曲で勝手に出ないように）。その間に操作者が出す・消す・選ぶをしたら戻さない
+      if (sm && !sm.off) { if (!this.settings.overlayOn) { this.settings.overlayOn = true; this._songOn = true; } }
+      else this._restoreSongOverlay();
       if (!song.notitle) this.showSongTitle();
       this._toast(`M${i + 1} ${song.title}`);
       this._session();
@@ -9789,33 +9819,45 @@ void main() {
       if (v !== this.state.sens) this.nudgeSensitivity(v - this.state.sens);
     }
     /** いま出すメディア：曲の指定（セットリストの m:…）→ メディアの一覧から選んだもの → 設定のメディア。
-     *  { kind: image / video / capture / web / camera / '', image（data URL）, key（保存場所の鍵）, url, cameraId, mirror, name, song } */
+     *  { kind: image / video / capture / camera / '', image（data URL）, key（保存場所の鍵）, cameraId, mirror, name, song } */
     effectiveMedia() {
       const s = this.settings, o = s.overlay || {};
       const song = this.currentSong();
       // 曲が始まってから設定のメディアが変わった（パネルで選んだ・キュー）→ 次の曲までは曲の指定より優先
-      if (!this._mediaManual && this._mediaSigAt !== undefined && this._mediaSig() !== this._mediaSigAt) this._mediaManual = true;
+      if (!this._mediaManual && this._mediaSigAt !== undefined && this._mediaSig() !== this._mediaSigAt) { this._mediaManual = true; this._songOn = false; }
       let it = song && song.media && !this._mediaManual ? VJ.mediaLib.find(s, song.media) : null;
       if (it && it.off) return { kind: '', song: true };
       const fromSong = !!it;
       if (!it && o.mediaKind === 'lib') it = VJ.mediaLib.byId(s, o.libId);
-      if (it) return { kind: it.kind, image: '', key: it.key || '', url: it.url || '', cameraId: it.cameraId || '', mirror: !!it.mirror, name: it.name, song: fromSong };
+      if (it) return { kind: it.kind, image: '', key: it.key || '', cameraId: it.cameraId || '', mirror: !!it.mirror, name: it.name, song: fromSong };
       if (o.mediaKind === 'lib') return { kind: '' }; // 一覧から消えた
       const kind = o.mediaKind || 'image';
-      return { kind, image: o.image || '', key: kind === 'video' ? o.videoKey || '' : '', url: o.webUrl || '', cameraId: o.cameraId || '', mirror: !!o.cameraMirror, name: '', song: false };
+      return { kind, image: o.image || '', key: kind === 'video' ? o.videoKey || '' : '', cameraId: o.cameraId || '', mirror: !!o.cameraMirror, name: '', song: false };
     }
     /** 設定のメディア（どれを出すか）の目印。出す・消す（overlayOn）は含めない */
     _mediaSig() {
       const o = this.settings.overlay || {};
-      return [o.mediaKind, o.libId, (o.image || '').length, (o.image || '').slice(-16), o.videoKey, o.webUrl, o.cameraId, !!o.cameraMirror].join('|');
+      return [o.mediaKind, o.libId, (o.image || '').length, (o.image || '').slice(-16), o.videoKey, o.cameraId, !!o.cameraMirror].join('|');
     }
     /** 操作者がメディアを選んだ（一覧の ▶・キュー）：この曲の m:… より優先する（次の曲で戻る） */
-    overrideSongMedia() { this._mediaManual = true; }
-    /** メディアのオーバーレイ（画像・動画・画面の取り込み・YouTube / ニコニコ）を出す・消す（O） */
-    toggleOverlay() { this.setOverlay(!this.settings.overlayOn); }
+    overrideSongMedia() { this._mediaManual = true; this._songOn = false; }
+    /** 曲の指定（m:…）で出していたメディアを、もとの「消している」状態に戻す（その間に操作者が出す・消す・選ぶをしていなければ） */
+    _restoreSongOverlay() {
+      if (!this._songOn) return;
+      this._songOn = false;
+      this.settings.overlayOn = false;
+    }
+    /** メディアのオーバーレイ（画像・動画・画面の取り込み・カメラ）を出す・消す（O）。
+     *  曲の指定が「出さない」（m:off）で何も出ていないときは、ON のままでも 1 回で設定のメディアを出す */
+    toggleOverlay() {
+      const e = this.settings.overlayOn ? this.effectiveMedia() : null;
+      if (e && e.song && !e.kind) { this._mediaManual = true; this._songOn = false; this._toast(t('メディア: ON')); return; }
+      this.setOverlay(!this.settings.overlayOn);
+    }
     /** メディアを出す / 消す（スマホ・OSC・キューの「出す」から）。曲の指定が「出さない」（m:off）でも、出すときは設定のメディアを出す */
     setOverlay(on) {
       on = !!on;
+      this._songOn = false; // 操作者が決めた：次の曲でも、そのままにする
       if (on) {
         const e = this.effectiveMedia();
         if (e.song && !e.kind) this._mediaManual = true;
@@ -10071,6 +10113,7 @@ void main() {
       s.pending = null;
       s.beforeTest = null;
       this.director.silentFrom = null;
+      this._restoreSongOverlay();
       this._applyScene('title');
       this._toast(t('出演：{0}', this.bandName() || '—'));
       return true;
@@ -10169,7 +10212,7 @@ void main() {
       } else {
         fr.overlay = null;
       }
-      // メディア：画像・動画・画面の取り込み・カメラは仕上げで重ねる。YouTube / ニコニコは media.js がキャンバスの上に重ねる
+      // メディア：画像・動画・画面の取り込み・カメラは仕上げで重ねる
       const eff = ovOn ? this.effectiveMedia() : null;
       const kind = eff ? eff.kind : '';
       const mA = this._ovA.media;
@@ -10183,13 +10226,6 @@ void main() {
         fr.ovImage = oi;
       } else {
         fr.ovImage = null;
-      }
-      if (mediaOn && kind === 'web' && eff.url) {
-        const ow = fr._ow || (fr._ow = { alpha: 0 });
-        ow.alpha = clamp(+o.imageOpacity || 0, 0, 1) * mA;
-        fr.ovWeb = ow;
-      } else {
-        fr.ovWeb = null;
       }
       const ot = ovOn && getText && this._ovA.text > 0.001 ? this.overlayText(undefined, true) : null;
       if (ot && ot[0] && o.textOpacity > 0) {
@@ -12024,7 +12060,8 @@ p { margin: 4px 0 0; color: #444; }
 </script>
 <script>/* src/ui/sections.js */
 /* パネルの ①〜⑦ を折りたためるように。見出しを押すと開閉し、閉じた見出しは設定（panelFold）に覚える。
- * 「すべて開く / すべて閉じる」と、ガイド・本番前チェックから飛ぶときは自動で開く（open）。 */
+ * 「すべて開く / すべて閉じる」と、ガイド・本番前チェックから飛ぶときは自動で開く（open）。
+ * パネルの上の目次（①〜⑦ へ飛ぶ。いま見ている項目に印）と、説明の文を出す / 隠す（panelHelp）もここ。 */
 (function (VJ) {
   'use strict';
   const $ = (id) => document.getElementById(id);
@@ -12039,7 +12076,34 @@ p { margin: 4px 0 0; color: #444; }
       }
       $('psec-open-all').addEventListener('click', () => sections.setAll(false));
       $('psec-close-all').addEventListener('click', () => sections.setAll(true));
+      $('psec-help').addEventListener('click', () => {
+        const s = app.settings;
+        s.panelHelp = s.panelHelp === false;
+        sections.render();
+        VJ.panel.save();
+      });
+      // 目次・いまの状態を押すと、その項目へ（閉じていたら開く）
+      $('panel-top').addEventListener('click', (e) => {
+        const b = e.target.closest('button[data-go]');
+        if (b) sections.go(+b.dataset.go);
+      });
+      // 上に残る部分の高さ（飛んだ先の見出しが、その下に隠れないように）
+      const panel = $('panel'), top = $('panel-top');
+      const measure = () => {
+        const sticky = getComputedStyle(top).position === 'sticky';
+        panel.style.setProperty('--top-h', (sticky ? top.offsetHeight : 0) + 'px');
+        sections.mark();
+      };
+      if (typeof ResizeObserver !== 'undefined') new ResizeObserver(measure).observe(top);
+      window.addEventListener('resize', measure);
+      let queued = false;
+      panel.addEventListener('scroll', () => {
+        if (queued) return;
+        queued = true;
+        requestAnimationFrame(() => { queued = false; sections.mark(); });
+      }, { passive: true });
       sections.render();
+      measure();
     },
 
     list() { return Array.from(document.querySelectorAll('#panel .psec')); },
@@ -12071,13 +12135,53 @@ p { margin: 4px 0 0; color: #444; }
       VJ.panel.save();
     },
 
+    /** n 番の項目を開いて、そこまでスクロールし、見出しを少し光らせる */
+    go(n) {
+      const sec = document.querySelector(`#panel .psec[data-sec="${n}"]`);
+      if (!sec) return;
+      sections.open(n);
+      sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const h = sec.querySelector('h2');
+      h.classList.remove('flash-h');
+      void h.offsetWidth;
+      h.classList.add('flash-h');
+    },
+
+    /** 目次に、いま見ている項目の印を付ける（パネルの上の端にいちばん近い項目） */
+    mark() {
+      const panel = $('panel'), nav = $('pnav');
+      if (!panel || !nav) return;
+      const line = panel.getBoundingClientRect().top + (parseFloat(panel.style.getPropertyValue('--top-h')) || 0) + 24;
+      let cur = 0;
+      for (const sec of sections.list()) {
+        if (sec.getBoundingClientRect().top <= line) cur = +sec.dataset.sec;
+      }
+      // いちばん下まで来たら、最後の項目（短い項目は、上の端まで届かない）
+      if (panel.scrollTop > 0 && panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 4) {
+        const all = sections.list();
+        const last = all[all.length - 1];
+        if (last && last.getBoundingClientRect().top < panel.getBoundingClientRect().bottom) cur = Math.max(cur, +last.dataset.sec);
+      }
+      if (cur === sections._cur) return;
+      sections._cur = cur;
+      for (const b of nav.querySelectorAll('button[data-go]')) b.classList.toggle('on', +b.dataset.go === cur);
+    },
+
     render() {
-      const f = sections.fold();
+      const f = sections.fold(), s = sections.app.settings;
       for (const sec of sections.list()) {
         const closed = !!f[sec.dataset.sec];
         sec.classList.toggle('closed', closed);
         sec.querySelector('.psec-btn').setAttribute('aria-expanded', String(!closed));
+        const nb = document.querySelector(`#pnav button[data-go="${sec.dataset.sec}"]`);
+        if (nb) nb.classList.toggle('closed', closed);
       }
+      // 説明の文（.help）を出す / 隠す
+      const help = s.panelHelp !== false;
+      $('panel').classList.toggle('nohelp', !help);
+      const hb = $('psec-help'), label = VJ.t(help ? '説明を隠す' : '説明を表示');
+      if (hb.textContent !== label) hb.textContent = label;
+      sections.mark();
     },
   };
 
@@ -12128,15 +12232,7 @@ p { margin: 4px 0 0; color: #444; }
     },
 
     /** パネルの n 番の見出しまでスクロールして、少し光らせる（閉じていたら開く） */
-    scrollTo(n) {
-      const h = Array.from(document.querySelectorAll('#panel h2')).find((x) => x.textContent.trim().startsWith('①②③④⑤⑥⑦'[n - 1]));
-      if (!h) return;
-      if (VJ.sections) VJ.sections.open(n);
-      h.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      h.classList.remove('flash-h');
-      void h.offsetWidth;
-      h.classList.add('flash-h');
-    },
+    scrollTo(n) { VJ.sections.go(n); },
 
     /** 手順が終わったか（パネルの更新ごと。一度終わったものは戻さない） */
     check(f) {
@@ -12239,9 +12335,9 @@ p { margin: 4px 0 0; color: #444; }
         else if (c.media && c.media !== 'on' && c.media !== 'off') lost.push(c.name || '?');
       }
       const ms = remote ? ls.media || {} : VJ.media.state();
-      const moving = ['video', 'capture', 'web'].filter((k) => used.has(k));
+      const moving = ['video', 'capture'].filter((k) => used.has(k));
       if (moving.length) {
-        const names = moving.map((k) => ({ video: t('動画ファイル'), capture: t('画面・タブの取り込み'), web: 'YouTube / ' + t('ニコニコ') }[k])).join(t('・'));
+        const names = moving.map((k) => ({ video: t('動画ファイル'), capture: t('画面・タブの取り込み') }[k])).join(t('・'));
         add('warn', t('メディアに{0}を使っています。動画の中の点滅はフラッシュの上限で制限できないので、事前に確認してください', names));
       }
       if (s.overlayOn && baseKind === 'capture' && !ms.capture) add('warn', t('画面の取り込みが止まっています（⑤ のメディア）'));
@@ -12252,7 +12348,6 @@ p { margin: 4px 0 0; color: #444; }
         else if (ms.status === 'camerror') add('bad', t('カメラを開けません：{0}', ms.error || ''));
         else add('warn', t('カメラが開いていません（⑤ のメディアで「カメラを開く」）'));
       } else if (used.has('camera')) add('info', t('曲・キューでカメラを使います。リハで一度出して、許可・映り方を確かめてください'));
-      if (used.has('web')) add('info', t('YouTube / ニコニコはインターネットが必要です。会場の回線で再生できるか確かめてください'));
       if (lost.length) add('warn', t('メディアの一覧にないメディアを指定しています：{0}（③ のセットリスト・⑥ のキュー）', [...new Set(lost)].join(t('・'))));
       // スリープ
       if (VJ.compat.features().wakeLock) add('ok', t('「ショー開始」で画面のスリープを止めます'));
@@ -12470,7 +12565,7 @@ p { margin: 4px 0 0; color: #444; }
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const t = (...a) => VJ.t(...a);
-  const KIND_TAG = { image: 'IMG', video: 'VIDEO', web: 'WEB', camera: 'CAM' };
+  const KIND_TAG = { image: 'IMG', video: 'VIDEO', camera: 'CAM' };
 
   /** data URL → Blob（fetch を使わない：古い環境・file:// でも動くように） */
   function dataUrlToBlob(url) {
@@ -12607,11 +12702,6 @@ p { margin: 4px 0 0; color: #444; }
       if (kind === 'video') {
         if (!o.videoKey) { toast(t('動画が選ばれていません')); return null; }
         return ui.add({ kind: 'video', key: o.videoKey, name: String(o.videoName || '').replace(/\.[^.]+$/, '') || t('動画') });
-      }
-      if (kind === 'web') {
-        const info = VJ.media.parseWebUrl(o.webUrl);
-        if (!info) { toast(t('YouTube / ニコニコの URL ではありません')); return null; }
-        return ui.add({ kind: 'web', url: o.webUrl, name: (info.provider === 'youtube' ? 'YouTube ' : t('ニコニコ') + ' ') + info.id });
       }
       if (kind === 'camera') return ui.add({ kind: 'camera', cameraId: o.cameraId || '', mirror: !!o.cameraMirror, name: o.cameraLabel || t('カメラ') });
       if (kind === 'capture') { toast(t('画面・タブの取り込みは一覧に入れられません')); return null; }
@@ -13174,6 +13264,7 @@ p { margin: 4px 0 0; color: #444; }
       $('lh').classList.toggle('on', perfNow - L.h < 120);
       $('la').classList.toggle('on', perfNow - L.a < 200);
       $('lb').classList.toggle('on', perfNow - L.b < 120);
+      panel.renderStrip(f, m);
       // 激しさが自動のとき、いまの段階を表示
       const sh = panel.app.show, lvName = ['控えめ', 'ふつう', '激しい', '最大'][sh.state.intLv];
       const nowTxt = +panel.app.settings.intensity < 0 && lvName ? t('いま：{0}', t(lvName)) : '';
@@ -13191,6 +13282,27 @@ p { margin: 4px 0 0; color: #444; }
         if ($('sp-follow').checked && panel.app.show.state && panel.app.show.state.sceneId !== panel._spScene) panel.renderSceneParams();
         if (perfNow - (panel._ioT || 0) > 500) { panel._ioT = perfNow; panel.renderIo(); }
       }
+    },
+
+    /** パネルの上の「いまの状態」（入力と音量・テンポ・オート / 暗転 / ロック・シーン・曲）。どの項目を見ていても分かるように
+     *  上に残す。変わったところだけ書く（20Hz） */
+    renderStrip(f, m) {
+      const app = panel.app, sh = app.show, st = sh.state || {}, es = app.engine.status;
+      const set = (id, txt) => { const el = $(id); if (el.textContent !== txt) el.textContent = txt; };
+      const cls = (id, name, on) => { const el = $(id); if (el.classList.contains(name) !== !!on) el.classList.toggle(name, !!on); };
+      const dot = es === 'running' ? 'ok' : es === 'error' ? 'bad' : es === 'idle' ? '' : 'warn';
+      for (const k of ['ok', 'warn', 'bad']) cls('ps-dot', k, k === dot);
+      set('ps-in', es === 'running' ? t('入力中') : es === 'error' ? t('エラー') : es === 'idle' ? t('未開始') : es === 'starting' ? t('開始中…') : t('再接続中…'));
+      const db = es === 'running' && m ? Math.max(m.l, m.mono ? -120 : m.r) : -120;
+      $('ps-lv').style.width = Math.max(0, Math.min(100, ((db + 60) / 60) * 100)) + '%';
+      set('ps-bpm', f && f.bpm && f.beatConf > 0.2 ? `${Math.round(f.bpm)} BPM` : '— BPM');
+      cls('ps-auto', 'on', st.auto);
+      for (const [id, on] of [['ps-black', st.blackout], ['ps-lock', st.locked]]) { cls(id, 'on', on); cls(id, 'alert', on); }
+      const sc = VJ.scenes.byId[st.sceneId], pd = st.pending && VJ.scenes.byId[st.pending.id];
+      const key = (d) => (d.key ? d.key.replace('s', '⇧') + ' ' : '');
+      set('ps-scene', (sc ? key(sc) + VJ.sceneName(sc) : '') + (pd ? ' → ' + VJ.sceneName(pd) : ''));
+      const song = sh.currentSong ? sh.currentSong() : null;
+      set('ps-song', song ? `M${st.songIdx + 1} ${song.title}` : st.endState ? t('（終演）') : t('（開演前）'));
     },
 
     applyShow(immediate) {
@@ -13487,12 +13599,9 @@ p { margin: 4px 0 0; color: #444; }
         panel.syncOverlay(); apply();
       });
       $('ov-vloop').addEventListener('change', () => { s.overlay.videoLoop = $('ov-vloop').checked; apply(); });
-      $('ov-vsound').addEventListener('change', () => { s.overlay.videoSound = $('ov-vsound').checked; $('ov-wsound').checked = s.overlay.videoSound; apply(); });
-      $('ov-wsound').addEventListener('change', () => { s.overlay.videoSound = $('ov-wsound').checked; $('ov-vsound').checked = s.overlay.videoSound; apply(); });
+      $('ov-vsound').addEventListener('change', () => { s.overlay.videoSound = $('ov-vsound').checked; apply(); });
       $('btn-ov-capture').addEventListener('click', () => panel.startCapture());
       $('btn-ov-capstop').addEventListener('click', () => { panel.app.mediaCall('stopCapture').catch(() => {}); });
-      $('btn-ov-web').addEventListener('click', () => panel.setWebUrl($('ov-web').value));
-      $('ov-web').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); panel.setWebUrl($('ov-web').value); } });
       $('ov-play').addEventListener('click', (e) => {
         const b = e.target.closest('button[data-mcmd]');
         if (b) panel.app.mediaCall('webCmd', b.dataset.mcmd).catch(() => {});
@@ -13567,7 +13676,7 @@ p { margin: 4px 0 0; color: #444; }
       document.querySelectorAll('input[name=ov-kind]').forEach((r) => { r.checked = r.value === kind; });
       document.querySelectorAll('#overlay-box .ov-pane').forEach((p) => { p.hidden = p.dataset.kind !== kind; });
       const shown = libItem ? libItem.kind : kind;
-      $('ov-play').hidden = shown !== 'video' && shown !== 'web';
+      $('ov-play').hidden = shown !== 'video';
       $('ov-vwarn').hidden = shown === 'image' || shown === 'camera';
       // 一覧から選ぶ欄
       const ls = $('ov-lib');
@@ -13587,9 +13696,8 @@ p { margin: 4px 0 0; color: #444; }
       sel.value = o.scene;
       if (sel.selectedIndex < 0) sel.value = '';
       for (const [id, key] of [['ov-fit', 'imageFit'], ['ov-imgblend', 'imageBlend'], ['ov-sceneblend', 'sceneBlend'], ['ov-corner', 'corner']]) $(id).value = o[key];
-      for (const [id, key] of [['ov-clock', 'clock'], ['ov-band', 'band'], ['ov-song', 'song'], ['ov-vloop', 'videoLoop'], ['ov-vsound', 'videoSound'], ['ov-wsound', 'videoSound']]) $(id).checked = !!o[key];
+      for (const [id, key] of [['ov-clock', 'clock'], ['ov-band', 'band'], ['ov-song', 'song'], ['ov-vloop', 'videoLoop'], ['ov-vsound', 'videoSound']]) $(id).checked = !!o[key];
       if ($('ov-text').value !== o.text) $('ov-text').value = o.text;
-      if (document.activeElement !== $('ov-web') && $('ov-web').value !== o.webUrl) $('ov-web').value = o.webUrl;
       $('ov-vname').textContent = o.videoName ? t('動画：{0}', o.videoName) : t('動画が選ばれていません');
       for (const [id, key] of [['ov-imgop', 'imageOpacity'], ['ov-sceneop', 'sceneOpacity'], ['ov-textop', 'textOpacity'], ['ov-textsize', 'textSize']]) {
         $(id).value = o[key];
@@ -13615,7 +13723,6 @@ p { margin: 4px 0 0; color: #444; }
       if (!s.overlayOn) txt = t('メディアは OFF（O キーで表示）');
       else if (kind === 'video') txt = ({ loading: t('読み込み中…'), playing: t('再生中'), paused: t('一時停止中'), ended: t('終わりました（⏮ で最初から）'), missing: t('動画が見つかりません。もう一度選んでください'), error: t('この動画は再生できません（MP4・WebM がおすすめ）'), empty: t('動画が選ばれていません') })[st.status] || '';
       else if (kind === 'capture') txt = st.capture ? t('取り込み中：{0}', st.label || '') : t('取り込んでいません（「取り込む画面・タブを選ぶ」）');
-      else if (kind === 'web') txt = ({ loading: t('読み込み中…'), playing: t('表示中（動かないときは ▶）'), badurl: t('YouTube / ニコニコの URL ではありません'), empty: t('URL を入れて「表示」') })[st.status] || '';
       else if (kind === 'camera') {
         txt = st.camera ? t('カメラ：{0}', st.cameraLabel || t('使用中')) + (st.error ? ' — ' + st.error : '')
           : ({ loading: t('カメラを開いています…（許可を聞かれたら「許可」）'), camerror: t('カメラを開けません：{0}', st.error || ''), lost: t('カメラが外れました。つなぎ直すと戻ります') })[st.status] || t('カメラは止まっています（「カメラを開く」）');
@@ -13624,7 +13731,7 @@ p { margin: 4px 0 0; color: #444; }
       // 曲の指定（m:…）・一覧から出しているときは、その名前も
       if (s.overlayOn && st.name) txt = (st.song ? t('曲の指定：{0}', st.name) : t('一覧：{0}', st.name)) + (txt ? ' — ' + txt : '');
       if ($('ov-status').textContent !== txt) $('ov-status').textContent = txt;
-      $('ov-play').hidden = !(kind === 'video' || kind === 'web');
+      $('ov-play').hidden = kind !== 'video';
       if ($('ov-play').hidden && txt && s.overlayOn) {
         // 再生ボタンが無いときも状態の文字は見せる（ボタンの行ごと隠れないように、文字だけの行にする）
         $('ov-play').hidden = false;
@@ -13666,19 +13773,6 @@ p { margin: 4px 0 0; color: #444; }
       panel.app.ui.toast(saved ? t('メディアに動画を入れました（O で表示・非表示）') : t('動画を保存できませんでした。このウィンドウを閉じるまで使えます'), saved ? undefined : 'warn');
     },
 
-    /** YouTube / ニコニコの URL をメディアにする */
-    setWebUrl(raw) {
-      const url = String(raw || '').trim();
-      if (!VJ.media.parseWebUrl(url)) { panel.app.ui.toast(t('YouTube / ニコニコの URL ではありません'), 'warn'); return false; }
-      const s = panel.app.settings;
-      s.overlay.webUrl = /^https:\/\//i.test(url) ? url : 'https://' + url.replace(/^http:\/\//i, '');
-      s.overlay.mediaKind = 'web';
-      s.overlayOn = true;
-      panel.syncOverlay();
-      panel.applyShow(true);
-      return true;
-    },
-
     /** 「貼り付け」ボタン：クリップボードの画像を読む（許可を聞かれることがある） */
     async pasteImage() {
       const cb = navigator.clipboard;
@@ -13694,7 +13788,7 @@ p { margin: 4px 0 0; color: #444; }
       }
     },
 
-    /** Ctrl+V：画像・動画のファイル、YouTube / ニコニコの URL を、メディアにする（文字の欄に文字を貼るときはそのまま） */
+    /** Ctrl+V：画像・動画のファイルを、メディアにする（文字の欄に文字を貼るときはそのまま） */
     onPaste(e) {
       if (VJ.link.role === 'output') return;
       const cd = e.clipboardData;
@@ -13706,8 +13800,7 @@ p { margin: 4px 0 0; color: #444; }
       const text = cd.getData('text/plain') || '';
       if (editable && (text || !(img || vid))) return;
       if (img) { e.preventDefault(); panel.setOverlayImageFile(img); return; }
-      if (vid) { e.preventDefault(); panel.setOverlayVideoFile(vid); return; }
-      if (!editable && VJ.media.parseWebUrl(text)) { e.preventDefault(); panel.setWebUrl(text); }
+      if (vid) { e.preventDefault(); panel.setOverlayVideoFile(vid); }
     },
 
     /** 画面・タブの取り込みを始める（2 画面のときは出力ウィンドウに選ぶ画面が出る） */
@@ -13729,7 +13822,7 @@ p { margin: 4px 0 0; color: #444; }
 
     /** メディアの種類の名前 */
     mediaKindName(kind) {
-      return ({ image: t('画像'), video: t('動画'), web: 'YouTube / ' + t('ニコニコ'), camera: t('カメラ'), capture: t('画面の取り込み') })[kind] || '';
+      return ({ image: t('画像'), video: t('動画'), camera: t('カメラ'), capture: t('画面の取り込み') })[kind] || '';
     },
 
     /** カメラの一覧を作り直す（描画しているウィンドウで調べる：許可はそちらで出しているので名前が分かる） */
@@ -13786,7 +13879,10 @@ p { margin: 4px 0 0; color: #444; }
       }
     },
 
+    _notes: [],
+
     renderWarnings() {
+      panel._notes.push(...VJ.storage.takeNotes().filter((n) => !panel._notes.includes(n)));
       const app = panel.app, w = [];
       if (VJ.compat.browser !== 'chromium') {
         const miss = VJ.compat.missing();
@@ -13796,10 +13892,19 @@ p { margin: 4px 0 0; color: #444; }
       if (r.software) w.push(t('GPU が使われていません（ソフトウェア描画）。Chrome の 設定 → システム →「グラフィック アクセラレーションが使用可能な場合は使用する」を ON にして再起動してください。'));
       if (r.failed.length) w.push(t('一部のシーンを読み込めませんでした（自動的に飛ばします）：') + r.failed.join(', '));
       try {
-        if (location.protocol === 'file:' && /[^\x00-\x7f]/.test(decodeURIComponent(location.pathname))) {
+        const p = location.protocol === 'file:' ? decodeURIComponent(location.pathname) : '';
+        // OneDrive・Dropbox などの同期されるフォルダ：起動スクリプトの設定の保存場所（.vj-profile）もフォルダの中にあるので、
+        // Chrome が使っている最中のファイルが同期され続ける（単体アプリの設定は別の場所なので関係ない）
+        if (VJ.params.app !== '1' && VJ.compat.syncedPath(p)) {
+          w.push(t('このフォルダは OneDrive などの同期されるフォルダの中にあります。設定の保存場所（.vj-profile）も同期の対象になり、使っている最中のファイルが同期され続けます。本番の PC では C:\\momosai-vj のような、同期されない英数字だけの場所に置くのがおすすめです。'));
+        } else if (/[^\x00-\x7f]/.test(p)) {
           w.push(t('フォルダ名に日本語などが含まれています。念のため C:\\momosai-vj のような英数字だけの場所に置くのがおすすめです。'));
         }
       } catch (e) { /* noop */ }
+      // 読み込んだ設定についての知らせ（このウィンドウを閉じるまで出す）
+      for (const n of panel._notes) {
+        if (n === 'web-removed') w.push(t('YouTube・ニコニコの埋め込みはなくなりました（埋め込みの規約に沿えないため）。使っていたメディアは画像に戻し、メディアの一覧からも外しました。曲の m:… に残っていれば、本番前チェックに出ます。'));
+      }
       $('warnings').innerHTML = w.map((x) => `<div class="warnbox">⚠ ${esc(x)}</div>`).join('');
     },
 
@@ -13874,6 +13979,7 @@ p { margin: 4px 0 0; color: #444; }
       // 入力欄の更新で何度も反映しないように、最後に 1 回だけ（2 画面のときは出力側へ送る回数も減る）
       panel._bulk = true;
       try { panel._replace(ns); } finally { panel._bulk = false; }
+      panel.renderWarnings(); // 読み込んだ設定についての知らせ（YouTube・ニコニコをやめた など）
       panel.applyShow(true);
       VJ.storage.save(panel.app.settings);
     },
@@ -14044,7 +14150,7 @@ p { margin: 4px 0 0; color: #444; }
       }
       app.renderer.setOutput(s.output);
       app.renderer.setLogo(s.logo);
-      VJ.media.sync(app); // メディアのオーバーレイ（画像・動画・画面の取り込み・YouTube / ニコニコ）
+      VJ.media.sync(app); // メディアのオーバーレイ（画像・動画・画面の取り込み・カメラ）
       app.renderer.setMaxScale(s.maxScale);
       if (!app.paused) { VJ.net.apply(app); VJ.dmx.apply(app); }
       if (link.role === 'output' && VJ.i18n.resolve(s.lang) !== VJ.i18n.lang) VJ.i18n.setLang(VJ.i18n.resolve(s.lang));

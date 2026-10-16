@@ -1,11 +1,11 @@
 /* メディアの一覧（曲ごとのメディア・キューで使う）。DOM は使わない（単体テストから呼べる）。
- * 1 件 = { id, name, kind: image / video / web / camera, key（画像・動画の中身。mediastore.js の鍵）, url（YouTube / ニコニコ）,
- *          cameraId（カメラ）, mirror（カメラの左右反転） }。中身（画像・動画）は大きいので設定には入れず、鍵だけを持つ。
+ * 1 件 = { id, name, kind: image / video / camera, key（画像・動画の中身。mediastore.js の鍵）,
+ *          cameraId（カメラ）, mirror（カメラの左右反転） }。YouTube・ニコニコ（web）はやめたので、古い一覧にあっても外す。中身（画像・動画）は大きいので設定には入れず、鍵だけを持つ。
  * セットリストでは「m:名前」「m:3」（一覧の 3 番目）「m:off」（その曲はメディアを出さない）で指定する。 */
 (function (VJ) {
   'use strict';
 
-  const KINDS = ['image', 'video', 'web', 'camera'];
+  const KINDS = ['image', 'video', 'camera'];
   const MAX = 40;
   /** 名前の比べ方：セットリストを読むときと同じに全角の数字・空白・記号をそろえ、大文字小文字・前後の空白は無視 */
   const norm = (x) => (VJ.setlist ? VJ.setlist.normalize(String(x || '')) : String(x || '')).trim().toLowerCase();
@@ -20,10 +20,6 @@
     if (kind === 'image' || kind === 'video') {
       if (typeof x.key !== 'string' || !/^[\w-]{1,64}$/.test(x.key)) return null;
       out.key = x.key;
-    }
-    if (kind === 'web') {
-      if (typeof x.url !== 'string' || !/^https:\/\//.test(x.url)) return null;
-      out.url = x.url.slice(0, 500);
     }
     if (kind === 'camera') {
       out.cameraId = typeof x.cameraId === 'string' ? x.cameraId.slice(0, 200) : '';

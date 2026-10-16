@@ -42,6 +42,7 @@
       this.onSensitivity = null;
       this.now = 0;
       this.sceneStates = {};
+      this._media = VJ.mediaState.create(); // 曲のメディア（m:…）と操作者の選択（mediastate.js）
       this.palFloat = new Float32Array(12);
       this._palFrom = new Float32Array(12);
       this._palTo = new Float32Array(12);
@@ -88,6 +89,8 @@
       this.state.auto = !!s.auto;
       this.state.master = clamp(+s.master || 1, 0.2, 1);
       this.state.sens = clamp(s.sensitivity | 0, -5, 5);
+      // 曲の指定で出していたメディアを、操作者がパネルで消した：次の曲で「戻す」ことはしない
+      VJ.mediaState.settingsApplied(this._media, s);
       // settings.paletteIdx は常に「いま使っているパレット」（曲ごとのパレットも反映される）。
       // 変わったとき（バンドの色など）は自動の色替えの時計も戻す（すぐに上書きしないように）。
       // 同じ色のまま（ほかの設定の変更）なら、色を移している途中を止めない
@@ -234,8 +237,7 @@
       if (typeof x.paletteIdx === 'number') this.setPalette(x.paletteIdx);
       this._applyScene(VJ.scenes.byId[x.sceneId] && this.sceneAvailable(x.sceneId) ? x.sceneId : 'title');
       // 曲のメディア（m:…）は、ここからの設定の変更で「操作者が選んだ」と見る
-      this._mediaManual = false;
-      this._mediaSigAt = this._mediaSig();
+      VJ.mediaState.resume(this._media, this.settings);
       const song = this.currentSong();
       this._toast(song ? t('M{0} {1} から再開', this.state.songIdx + 1, song.title) : t('再開しました'));
       return true;
@@ -271,6 +273,7 @@
       if (i >= songs.length) {
         this.state.endState = true;
         this.state.songIdx = songs.length;
+        VJ.mediaState.restore(this._media, this.settings);
         this._applyScene('title');
         this.state.text = null;
         this._toast(t('終演: {0}', this.endText()));
@@ -287,6 +290,7 @@
       if (i < 0) {
         this.state.songIdx = -1;
         this.state.text = null;
+        VJ.mediaState.restore(this._media, this.settings);
         this._applyScene('title');
         this._toast(t('開演前（バンド名）'));
         return;
@@ -306,11 +310,10 @@
       this.director.silentFrom = null;
       this.director.mcOverride = true; // 操作者が選んだ：この MC の間はタイトルに戻さない
       if (this.onSongStart) this.onSongStart(i);
-      // 曲にメディアの指定（m:…）があれば出す。曲の途中で操作者がメディアを選んだら、次の曲まではそちらを出す
-      this._mediaManual = false;
-      this._mediaSigAt = this._mediaSig();
-      const sm = song.media ? VJ.mediaLib.find(this.settings, song.media) : null;
-      if (sm && !sm.off) this.settings.overlayOn = true;
+      // 曲にメディアの指定（m:…）があれば出す。曲の途中で操作者がメディアを選んだら、次の曲まではそちらを出す。
+      // 消してあったメディアを曲の指定で出したときは、指定の無い曲（と m:off の曲）で、消した状態に戻す
+      // （O で隠しておいたパネルの画像が、あとの曲で勝手に出ないように）。その間に操作者が出す・消す・選ぶをしたら戻さない
+      VJ.mediaState.songStart(this._media, this.settings, song);
       if (!song.notitle) this.showSongTitle();
       this._toast(`M${i + 1} ${song.title}`);
       this._session();
@@ -397,41 +400,21 @@
       const v = clamp(Math.round(step), -5, 5);
       if (v !== this.state.sens) this.nudgeSensitivity(v - this.state.sens);
     }
-    /** いま出すメディア：曲の指定（セットリストの m:…）→ メディアの一覧から選んだもの → 設定のメディア。
-     *  { kind: image / video / capture / web / camera / '', image（data URL）, key（保存場所の鍵）, url, cameraId, mirror, name, song } */
-    effectiveMedia() {
-      const s = this.settings, o = s.overlay || {};
-      const song = this.currentSong();
-      // 曲が始まってから設定のメディアが変わった（パネルで選んだ・キュー）→ 次の曲までは曲の指定より優先
-      if (!this._mediaManual && this._mediaSigAt !== undefined && this._mediaSig() !== this._mediaSigAt) this._mediaManual = true;
-      let it = song && song.media && !this._mediaManual ? VJ.mediaLib.find(s, song.media) : null;
-      if (it && it.off) return { kind: '', song: true };
-      const fromSong = !!it;
-      if (!it && o.mediaKind === 'lib') it = VJ.mediaLib.byId(s, o.libId);
-      if (it) return { kind: it.kind, image: '', key: it.key || '', url: it.url || '', cameraId: it.cameraId || '', mirror: !!it.mirror, name: it.name, song: fromSong };
-      if (o.mediaKind === 'lib') return { kind: '' }; // 一覧から消えた
-      const kind = o.mediaKind || 'image';
-      return { kind, image: o.image || '', key: kind === 'video' ? o.videoKey || '' : '', url: o.webUrl || '', cameraId: o.cameraId || '', mirror: !!o.cameraMirror, name: '', song: false };
-    }
-    /** 設定のメディア（どれを出すか）の目印。出す・消す（overlayOn）は含めない */
-    _mediaSig() {
-      const o = this.settings.overlay || {};
-      return [o.mediaKind, o.libId, (o.image || '').length, (o.image || '').slice(-16), o.videoKey, o.webUrl, o.cameraId, !!o.cameraMirror].join('|');
-    }
+    /** いま出すメディア：曲の指定（セットリストの m:…）→ メディアの一覧から選んだもの → 設定のメディア（mediastate.js）。
+     *  { kind: image / video / capture / camera / '', image（data URL）, key（保存場所の鍵）, cameraId, mirror, name, song } */
+    effectiveMedia() { return VJ.mediaState.effective(this._media, this.settings, this.currentSong()); }
     /** 操作者がメディアを選んだ（一覧の ▶・キュー）：この曲の m:… より優先する（次の曲で戻る） */
-    overrideSongMedia() { this._mediaManual = true; }
-    /** メディアのオーバーレイ（画像・動画・画面の取り込み・YouTube / ニコニコ）を出す・消す（O） */
-    toggleOverlay() { this.setOverlay(!this.settings.overlayOn); }
+    overrideSongMedia() { VJ.mediaState.override(this._media); }
+    /** メディアのオーバーレイ（画像・動画・画面の取り込み・カメラ）を出す・消す（O）。
+     *  曲の指定が「出さない」（m:off）で何も出ていないときは、ON のままでも 1 回で設定のメディアを出す */
+    toggleOverlay() {
+      const r = VJ.mediaState.toggle(this._media, this.settings, this.currentSong());
+      if (r) this._toast(r === 'off' ? t('メディア: OFF') : t('メディア: ON'));
+    }
     /** メディアを出す / 消す（スマホ・OSC・キューの「出す」から）。曲の指定が「出さない」（m:off）でも、出すときは設定のメディアを出す */
     setOverlay(on) {
-      on = !!on;
-      if (on) {
-        const e = this.effectiveMedia();
-        if (e.song && !e.kind) this._mediaManual = true;
-      }
-      if (on === !!this.settings.overlayOn) return;
-      this.settings.overlayOn = on;
-      this._toast(on ? t('メディア: ON') : t('メディア: OFF'));
+      const r = VJ.mediaState.set(this._media, this.settings, this.currentSong(), on);
+      if (r) this._toast(r === 'on' ? t('メディア: ON') : t('メディア: OFF'));
     }
     /** シーンのオーバーレイ（別のシーンを重ねる）を出す・消す（Shift+O） */
     toggleSceneOverlay() {
@@ -680,6 +663,7 @@
       s.pending = null;
       s.beforeTest = null;
       this.director.silentFrom = null;
+      VJ.mediaState.restore(this._media, this.settings);
       this._applyScene('title');
       this._toast(t('出演：{0}', this.bandName() || '—'));
       return true;
@@ -778,7 +762,7 @@
       } else {
         fr.overlay = null;
       }
-      // メディア：画像・動画・画面の取り込み・カメラは仕上げで重ねる。YouTube / ニコニコは media.js がキャンバスの上に重ねる
+      // メディア：画像・動画・画面の取り込み・カメラは仕上げで重ねる
       const eff = ovOn ? this.effectiveMedia() : null;
       const kind = eff ? eff.kind : '';
       const mA = this._ovA.media;
@@ -792,13 +776,6 @@
         fr.ovImage = oi;
       } else {
         fr.ovImage = null;
-      }
-      if (mediaOn && kind === 'web' && eff.url) {
-        const ow = fr._ow || (fr._ow = { alpha: 0 });
-        ow.alpha = clamp(+o.imageOpacity || 0, 0, 1) * mA;
-        fr.ovWeb = ow;
-      } else {
-        fr.ovWeb = null;
       }
       const ot = ovOn && getText && this._ovA.text > 0.001 ? this.overlayText(undefined, true) : null;
       if (ot && ot[0] && o.textOpacity > 0) {

@@ -29,7 +29,6 @@ const makeImage = (page, color) => page.evaluate(async (color) => {
   const g = c.getContext('2d'); g.fillStyle = color; g.fillRect(0, 0, 64, 36);
   window.__img = new File([await new Promise((r) => c.toBlob(r, 'image/png'))], 'logo.png', { type: 'image/png' });
 }, color);
-const statusText = (page) => page.evaluate(() => document.getElementById('ov-status').textContent);
 
 test('カメラ：選んで開くと映像に重なる。左右反転・止める（勝手に開き直さない）・外れたら開き直す・本番前チェック', async () => {
   const { page, errors } = await openApp(browser, DIST, 'test=1', { width: 1280, height: 900 });
@@ -136,7 +135,8 @@ test('メディアの一覧：入れる・曲ごとに切り替える（m:…）
   await page.waitForFunction(() => /メディアの一覧にないメディア/.test(document.getElementById('precheck').textContent));
   // 再読み込み：一覧と中身（この PC に保存）が残る。動画の中身は消えている
   const keys = await page.evaluate(() => VJ.mediaLib.keys(VJ.app.settings));
-  await page.waitForTimeout(400);
+  // 保存されてから（0.3 秒後。PC が重いと遅れる）
+  await page.waitForFunction(() => JSON.stringify(JSON.parse(localStorage.getItem('momosai-vj/v1') || '{}').mediaLib) === JSON.stringify(VJ.app.settings.mediaLib));
   await page.reload();
   await page.waitForFunction(() => window.VJ && VJ.app && VJ.app.renderer);
   assert.equal(await page.evaluate(() => VJ.app.settings.mediaLib.length), 2);
@@ -195,8 +195,8 @@ test('キュー：いまの状態を入れる → Alt+数字・ボタンでま�
   await page.click('#cue-edit button[data-act=del][data-i="1"]');
   await page.click('#cue-edit button[data-act=del-yes][data-i="1"]');
   assert.equal(await page.evaluate(() => VJ.app.settings.cues.length), 1);
-  // 再読み込みで残る
-  await page.waitForTimeout(400);
+  // 再読み込みで残る（保存されてから）
+  await page.waitForFunction(() => (JSON.parse(localStorage.getItem('momosai-vj/v1') || '{}').cues || []).length === 1);
   await page.reload();
   await page.waitForFunction(() => window.VJ && VJ.app && VJ.app.renderer);
   assert.equal(await page.evaluate(() => VJ.app.settings.cues.length), 1);

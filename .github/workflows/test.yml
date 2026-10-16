@@ -1,0 +1,53 @@
+# push・プルリクエストのたびに、静的解析・単体テスト・E2E を流す。
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # 静的解析・ビルド（全スクリプトの構文の確認を含む）・単体テスト（Node だけで動く）
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm run fixtures
+      - run: npm run test:unit
+
+  # E2E：配布用の HTML を file:// で開き、偽のマイク・ソフトウェア描画の Chromium で確かめる
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: npm run fixtures
+      - run: npm run test:e2e
+      - name: 失敗したときの画像を残す
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts
+          path: test/artifacts/
+          if-no-files-found: ignore

@@ -34,6 +34,22 @@ test('英語の辞書：コード中の翻訳する文がすべて辞書にあ�
   assert.deepEqual(missing, []);
 });
 
+test('英語の辞書：どこからも使われていない項目が無い（ソース・index.html のどこかに原文がある）', () => {
+  // ソースの文字列の中の \' \" \\ は、元の文字に戻してから探す。空白の違い（改行・字下げ）は無視する
+  const norm = (s) => s.replace(/\s+/g, ' ').trim();
+  let corpus = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  const walk = (dir) => {
+    for (const f of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, f.name);
+      if (f.isDirectory()) walk(p);
+      else if (f.name.endsWith('.js') && f.name !== 'i18n-en.js') corpus += '\n' + fs.readFileSync(p, 'utf8').replace(/\\(['"\\])/g, '$1');
+    }
+  };
+  walk(path.join(ROOT, 'src'));
+  corpus = norm(corpus);
+  assert.deepEqual(Object.keys(VJ.i18n.en).filter((k) => !corpus.includes(norm(k))), []);
+});
+
 test('英語の辞書：{0} などの置き換えの数が原文と同じ・訳に日本語が混ざっていない', () => {
   for (const [ja, en] of Object.entries(VJ.i18n.en)) {
     const ph = (s) => (s.match(/\{\d\}/g) || []).sort().join();

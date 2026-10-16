@@ -49,7 +49,14 @@
         try { m = JSON.parse(e.data); } catch (err) { return; }
         if (!m || typeof m !== 'object') return;
         if (m.t === 'info') {
-          net.info = { pin: String(m.pin || ''), urls: Array.isArray(m.urls) ? m.urls.map(String) : [], oscPort: m.oscPort | 0, phones: m.phones | 0, port: m.port | 0 };
+          // スマホの許可（ブリッジ）：approval 許可がいるか・trusted 鍵つきでつないでいるか・pending 許可待ち・devices 許可したスマホ
+          const list = (a, f) => (Array.isArray(a) ? a : []).filter((x) => x && typeof x.id === 'string' && /^[0-9a-f]{1,32}$/.test(x.id)).slice(0, 20).map(f);
+          net.info = {
+            pin: String(m.pin || ''), urls: Array.isArray(m.urls) ? m.urls.map(String) : [], oscPort: m.oscPort | 0, phones: m.phones | 0, port: m.port | 0,
+            approval: !!m.approval, trusted: !!m.trusted,
+            pending: list(m.pending, (x) => ({ id: x.id, name: String(x.name || '').slice(0, 40), addr: String(x.addr || '').slice(0, 64) })),
+            devices: list(m.devices, (x) => ({ id: x.id, name: String(x.name || '').slice(0, 40), online: !!x.online })),
+          };
           // スマホ用の QR コード（SVG）。形を確かめて、画像として表示する
           net.qr = (Array.isArray(m.qr) ? m.qr : []).filter((q) => q && typeof q.url === 'string' && typeof q.svg === 'string' && /^<svg[\s>]/.test(q.svg) && q.svg.length < 100000)
             .slice(0, 3).map((q) => ({ url: q.url, img: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(q.svg) }));
@@ -186,6 +193,10 @@
 
     /** パネル表示用 */
     state() { return { status: net.status, info: net.info, error: net.error || '' }; },
+    /** スマホを許可する（ok）・断る。ブリッジは、鍵つきでつないだときだけ受け付ける */
+    approve(id, ok) { net.send({ t: 'approve', id: String(id), ok: !!ok }); },
+    /** 許可したスマホを外す（切れて、次からまた許可がいる） */
+    forget(id) { net.send({ t: 'forget', id: String(id) }); },
     /** スマホ用の QR コード [{ url, img }]（状態の通知には入れない。大きいので必要なときだけ） */
     qrCodes() { return net.status === 'on' && net.info ? net.qr || [] : []; },
   };

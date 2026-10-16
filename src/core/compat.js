@@ -8,8 +8,13 @@
     : /Edg\//.test(ua) || /Chrome\/|Chromium\//.test(ua) ? 'chromium'
     : /Safari\//.test(ua) ? 'safari' : 'other';
 
+  // Chrome / Edge の版（Chromium 系でなければ 0）。これより古いと、使っている機能（画面の音の直接の読み取りなど）が足りない
+  const chromeVersion = browser === 'chromium' ? +((/(?:Chrome|Chromium)\/(\d+)/.exec(ua) || [])[1] || 0) : 0;
+
   const compat = {
     browser,
+    chromeVersion,
+    MIN_CHROME: 116,
     windows: /Windows/.test(ua),
     get name() { return { chromium: 'Chrome / Edge', firefox: 'Firefox', safari: 'Safari', other: VJ.t('このブラウザ') }[browser]; },
 
@@ -46,6 +51,14 @@
       if (!f.screenDetails) out.push('出力ウィンドウをプロジェクター側へ自動で移す');
       if (!f.fullscreen) out.push('全画面');
       return out.map((x) => VJ.t(x));
+    },
+
+    /** ファイルの場所（location.pathname を戻したもの）が、OneDrive・Dropbox などの同期されるフォルダの中か。
+     *  起動スクリプトの設定の保存場所（.vj-profile）は配布フォルダの中にあるので、同期されるフォルダに置くと、
+     *  Chrome が使っている最中のファイルが同期され続ける */
+    syncedPath(p) {
+      p = String(p || '').replace(/\\/g, '/');
+      return /\/(OneDrive[^/]*|Dropbox[^/]*|Google ?Drive|iCloud ?Drive|Box)\//i.test(p) || /\/Library\/(Mobile Documents|CloudStorage)\//.test(p);
     },
 
     fullscreenElement() {

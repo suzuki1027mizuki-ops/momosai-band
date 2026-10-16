@@ -1,88 +1,39 @@
 /* 設定の保存・読み込み（localStorage + JSON ファイル書き出し/取り込み）。 */
-(function (VJ) {
+(function (/** @type {VJNamespace} */ VJ) {
   'use strict';
 
   const KEY = 'momosai-vj/v1';
+  const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
   // 出演バンドの一覧（ロゴを含むので大きい）は別に保存し、変わったときだけ書く（キー操作のたびに数 MB を書かないように）
   const BANDS_KEY = KEY + '/bands';
   let savedBands = { ref: null, ver: -1 };
+  // 大きい画像（ロゴ・メディアの画像。合わせて 1MB を超える）も別に保存し、変わったときだけ書く。
+  // 設定と一緒に書くと、キー操作のたびに 1 フレーム分（十数 ms）描画が止まる
+  const BIG = [
+    { key: KEY + '/logo', get: (s) => (typeof s.logo === 'string' ? s.logo : ''), put: (o, v) => { if (!o.logo) o.logo = v; } },
+    { key: KEY + '/ovimg', get: (s) => (isObj(s.overlay) && typeof s.overlay.image === 'string' ? s.overlay.image : ''), put: (o, v) => { if (isObj(o.overlay) && !o.overlay.image) o.overlay.image = v; } },
+  ];
+  let savedBig = BIG.map(() => null); // 最後に保存した中身（null = まだ分からない）
+  // 読み込んだ設定について、利用者に一度だけ知らせること（'web-removed' など）。パネルが takeNotes で受け取る
+  const notes = new Set();
 
-  const clone = (v) => JSON.parse(JSON.stringify(v));
-  const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
-
-  /** 既定値に、保存されていた値を型が合うものだけ重ねる。既定値のオブジェクトは共有しない（複製する） */
+  /** 既定値に、保存されていた値を重ねる。型・範囲・選択肢・文字数は schema.js の決まりで直す（壊れた設定ファイル・
+   *  手で書き換えた設定・ちがう版の設定でも動くように）。既定値のオブジェクトは共有しない（複製する） */
   function merge(base, src) {
-    const out = clone(base);
-    if (!isObj(src)) return out;
-    for (const k of Object.keys(base)) {
-      if (!(k in src)) continue;
-      const bv = base[k], sv = src[k];
-      if (Array.isArray(bv)) {
-        // 出演バンドの一覧は長さが変わる（中身は sanitize で確かめる）
-        if (Array.isArray(sv) && (sv.length === bv.length || k === 'bands' || k === 'mediaLib' || k === 'cues')) out[k] = clone(sv);
-      } else if (isObj(bv)) {
-        if (isObj(sv)) out[k] = clone(sv);
-      } else if (typeof bv === typeof sv && (typeof sv !== 'number' || isFinite(sv))) {
-        out[k] = sv;
-      }
+    if (!isObj(src)) src = null;
+    const out = VJ.settingsSchema.apply(base, src);
+    if (src) {
+      // YouTube・ニコニコの埋め込みはやめた：使っていた設定なら、パネルで一度だけ知らせる（メディアは画像に、一覧からは外れる）
+      if ((isObj(src.overlay) && src.overlay.mediaKind === 'web') || (Array.isArray(src.mediaLib) && src.mediaLib.some((x) => isObj(x) && x.kind === 'web'))) notes.add('web-removed');
+      // 古い設定：オーバーレイの ON/OFF が 1 つだったときは、シーンのオーバーレイもそれに合わせる
+      if (!('ovSceneOn' in src) && typeof src.overlayOn === 'boolean') out.ovSceneOn = src.overlayOn;
     }
-    // 古い設定：オーバーレイの ON/OFF が 1 つだったときは、シーンのオーバーレイもそれに合わせる
-    if (!('ovSceneOn' in src) && typeof src.overlayOn === 'boolean') out.ovSceneOn = src.overlayOn;
-    return sanitize(out);
+    // 出演バンドの一覧と、いまのバンドの番号（bands.js）
+    if (VJ.bands) VJ.bands.ensure(out);
+    return out;
   }
 
-  const TRANSITIONS = ['fade', 'wipe', 'iris', 'blinds', 'zoom', 'slide', 'glitch', 'mosaic', 'random'];
-
-  /** 中身の形も確かめる（壊れた設定ファイルで動かなくならないように） */
-  function sanitize(s) {
-    const sp = {};
-    for (const [id, v] of Object.entries(s.sceneParams || {})) {
-      if (Array.isArray(v) && v.length <= 4 && v.every((x) => typeof x === 'number' && isFinite(x))) sp[id] = v;
-    }
-    s.sceneParams = sp;
-    const mm = {};
-    for (const [k, v] of Object.entries(s.midiMap || {})) if (/^[nc]\d{1,3}$/.test(k) && typeof v === 'string') mm[k] = v;
-    s.midiMap = mm;
-    const as = {};
-    for (const [k, v] of Object.entries(s.autoScenes || {})) if (typeof v === 'boolean') as[k] = v;
-    s.autoScenes = as;
-    if (!s.messages.every((m) => typeof m === 'string')) s.messages = s.messages.map((m) => (typeof m === 'string' ? m : ''));
-    const pf = {};
-    for (const [k, v] of Object.entries(s.panelFold || {})) if (/^[1-9]$/.test(k) && v === true) pf[k] = true;
-    s.panelFold = pf;
-    if (!TRANSITIONS.includes(s.transition)) s.transition = 'fade';
-    s.flashLimit = Math.max(0, Math.min(30, Math.round(s.flashLimit)));
-    s.intensity = Math.max(-1, Math.min(3, Math.round(s.intensity))); // -1 = 自動
-    // オーバーレイ：無い項目・型の違う項目は既定値に（あとから増えた項目が古い設定に無くても動くように）
-    const od = VJ.defaultSettings.overlay, ov = {};
-    for (const k of Object.keys(od)) ov[k] = isObj(s.overlay) && typeof s.overlay[k] === typeof od[k] && (typeof od[k] !== 'number' || isFinite(s.overlay[k])) ? s.overlay[k] : od[k];
-    const pick = (v, list, d) => (list.includes(v) ? v : d);
-    ov.imageFit = pick(ov.imageFit, ['contain', 'cover', 'stretch'], od.imageFit);
-    ov.imageBlend = pick(ov.imageBlend, ['normal', 'add', 'screen'], od.imageBlend);
-    ov.mediaKind = pick(ov.mediaKind, ['image', 'video', 'capture', 'web', 'camera', 'lib'], od.mediaKind);
-    ov.libId = /^[\w-]{0,40}$/.test(ov.libId) ? ov.libId : '';
-    ov.cameraId = ov.cameraId.slice(0, 200);
-    ov.cameraLabel = ov.cameraLabel.slice(0, 200);
-    ov.videoKey = /^[\w-]{1,64}$/.test(ov.videoKey) ? ov.videoKey : '';
-    ov.videoName = ov.videoName.slice(0, 200);
-    ov.webUrl = /^https:\/\//.test(ov.webUrl) ? ov.webUrl.slice(0, 500) : '';
-    ov.sceneBlend = pick(ov.sceneBlend, ['screen', 'add'], od.sceneBlend);
-    ov.corner = pick(ov.corner, ['tl', 'tr', 'bl', 'br'], od.corner);
-    ov.imageOpacity = Math.max(0, Math.min(1, ov.imageOpacity));
-    ov.sceneOpacity = Math.max(0, Math.min(1, ov.sceneOpacity));
-    ov.textOpacity = Math.max(0, Math.min(1, ov.textOpacity));
-    ov.textSize = Math.max(0.5, Math.min(2, ov.textSize));
-    if (!/^data:image\//.test(ov.image)) ov.image = '';
-    s.overlay = ov;
-    // メディアの一覧・キュー
-    if (VJ.mediaLib) {
-      const seen = new Set();
-      s.mediaLib = (Array.isArray(s.mediaLib) ? s.mediaLib : []).map(VJ.mediaLib.clean).filter((x) => x && !seen.has(x.id) && seen.add(x.id)).slice(0, VJ.mediaLib.MAX);
-    }
-    if (VJ.cues) s.cues = (Array.isArray(s.cues) ? s.cues : []).map(VJ.cues.clean).filter(Boolean).slice(0, VJ.cues.MAX);
-    if (VJ.bands) VJ.bands.ensure(s);
-    return s;
-  }
+  const TRANSITIONS = VJ.settingsSchema.schema.transition.oneOf;
 
   const storage = {
     KEY,
@@ -95,6 +46,13 @@
         if (obj && typeof obj === 'object' && !Array.isArray(obj.bands)) {
           const b = localStorage.getItem(BANDS_KEY);
           if (b) { try { obj.bands = JSON.parse(b); } catch (e) { /* 壊れていたら一覧は無しで */ } }
+        }
+        // 別に保存した大きい画像を戻す（古い保存では設定の中に入っている：そのまま使い、次の保存で分ける）
+        if (isObj(obj)) {
+          BIG.forEach((b, i) => {
+            const v = localStorage.getItem(b.key);
+            if (v && !b.get(obj)) { b.put(obj, v); if (b.get(obj) === v) savedBig[i] = v; }
+          });
         }
         return merge(VJ.defaultSettings, obj);
       } catch (e) {
@@ -110,6 +68,15 @@
         if (!globalThis.localStorage) return true;
         const rest = Object.assign({}, settings);
         delete rest.bands;
+        // 大きい画像は先に別の場所へ（変わったときだけ）。設定の方には入れない
+        BIG.forEach((b, i) => {
+          const v = b.get(settings);
+          if (savedBig[i] === v) return;
+          if (v) localStorage.setItem(b.key, v); else localStorage.removeItem(b.key);
+          savedBig[i] = v;
+        });
+        rest.logo = '';
+        if (isObj(settings.overlay)) rest.overlay = Object.assign({}, settings.overlay, { image: '' });
         localStorage.setItem(KEY, JSON.stringify(rest));
         const ver = VJ.bands ? VJ.bands.version : 0;
         if (settings.bands !== savedBands.ref || ver !== savedBands.ver) {
@@ -119,12 +86,20 @@
         return true;
       } catch (e) {
         savedBands = { ref: null, ver: -1 };
+        savedBig = BIG.map(() => null);
         return false;
       }
     },
     reset() {
-      try { if (globalThis.localStorage) { localStorage.removeItem(KEY); localStorage.removeItem(BANDS_KEY); } } catch (e) { /* noop */ }
+      try {
+        if (globalThis.localStorage) {
+          localStorage.removeItem(KEY);
+          localStorage.removeItem(BANDS_KEY);
+          for (const b of BIG) localStorage.removeItem(b.key);
+        }
+      } catch (e) { /* noop */ }
       savedBands = { ref: null, ver: -1 };
+      savedBig = BIG.map(() => null);
       return merge(VJ.defaultSettings, null);
     },
     /** JSON 文字列から読み込み（不正なキーは無視） */
@@ -137,6 +112,12 @@
       const known = isObj(o) ? Object.keys(VJ.defaultSettings).filter((k) => k in o).length : 0;
       if (!isObj(o) || (o.v !== 1 && known < 3)) throw new Error(VJ.t ? VJ.t('MOMOSAI VJ の設定ファイルではありません') : 'not a settings file');
       return merge(VJ.defaultSettings, o);
+    },
+    /** 読み込んだ設定について、利用者に知らせること（一度だけ）。['web-removed'] など */
+    takeNotes() {
+      const out = [...notes];
+      notes.clear();
+      return out;
     },
     toJSON(settings) {
       return JSON.stringify(settings, null, 2);

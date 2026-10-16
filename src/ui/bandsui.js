@@ -5,7 +5,7 @@
 (function (VJ) {
   'use strict';
   const $ = (id) => document.getElementById(id);
-  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const { html, raw } = VJ.dom; // 値を必ずエスケープする HTML（dom.js）
   const t = (...a) => VJ.t(...a);
   const CONFIRM_SEC = 3;
 
@@ -173,32 +173,32 @@
       const c = ui._confirm && ui._confirm.i < n && !(ui._confirm.act === 'switch' && ui._confirm.i === s.bandIdx) ? ui._confirm : null;
       ui._confirm = c;
       const name = (i) => VJ.bands.nameOf(s, i) || t('（名前なし）');
-      const confirmHtml = (b) => (!c || c.i !== b.i ? '' : `<div class="band-confirm"><span data-i18n-skip>${esc(c.act === 'del'
+      const confirmHtml = (b) => (!c || c.i !== b.i ? '' : html`<div class="band-confirm"><span data-i18n-skip>${c.act === 'del'
         ? (b.current ? t('出演中の「{0}」を消しますか？（隣のバンドに切り替わり、タイトルに戻ります）', name(b.i)) : t('「{0}」を一覧から消しますか？（セットリスト・ロゴも消えます）', name(b.i)))
-        : t('「{0}」に切り替えますか？（いまの演奏はタイトルに戻ります）', name(b.i)))}</span>`
-        + `<button data-cf="yes">${esc(c.act === 'del' ? t('消す') : t('切り替える'))}</button><button data-cf="no">${esc(t('やめる'))}</button></div>`);
+        : t('「{0}」に切り替えますか？（いまの演奏はタイトルに戻ります）', name(b.i))}</span>`
+        + html`<button data-cf="yes">${c.act === 'del' ? t('消す') : t('切り替える')}</button><button data-cf="no">${t('やめる')}</button></div>`);
       // 名前・時刻・セットリストは入力された文字なので訳さない
-      $('band-list').innerHTML = list.map((b) => `<div class="band-row${b.current ? ' on' : ''}${ui._editing === b.i ? ' editing' : ''}" data-i="${b.i}">`
-        + `<span class="bi">${b.i + 1}</span><span class="bt" data-i18n-skip>${esc(b.start || '')}</span>`
-        + `<span class="bn" data-i18n-skip>${esc(b.name || t('（名前なし）'))}</span>`
-        + `<span class="bs">${esc(t('{0} 曲', b.songs))}${b.current ? ' · ' + esc(t('出演中')) : ''}</span>`
-        + `<button data-act="edit" title="${esc(b.current ? t('下の欄で編集') : t('切り替えずに編集'))}">✎</button>`
-        + `<button data-act="up" title="${esc(t('上へ'))}"${b.i === 0 ? ' disabled' : ''}>▲</button>`
-        + `<button data-act="down" title="${esc(t('下へ'))}"${b.i === n - 1 ? ' disabled' : ''}>▼</button>`
-        + `<button data-act="del" title="${esc(t('消す'))}"${n < 2 ? ' disabled' : ''}>✕</button></div>`
-        + confirmHtml(b) + (ui._editing === b.i ? ui._editHtml(b.i) : '')).join('');
+      VJ.dom.set($('band-list'), list.map((b) => html`<div class="band-row${b.current ? ' on' : ''}${ui._editing === b.i ? ' editing' : ''}" data-i="${b.i}">`
+        + html`<span class="bi">${b.i + 1}</span><span class="bt" data-i18n-skip>${b.start || ''}</span>`
+        + html`<span class="bn" data-i18n-skip>${b.name || t('（名前なし）')}</span>`
+        + html`<span class="bs">${t('{0} 曲', b.songs)}${b.current ? ' · ' + t('出演中') : ''}</span>`
+        + html`<button data-act="edit" title="${b.current ? t('下の欄で編集') : t('切り替えずに編集')}">✎</button>`
+        + html`<button data-act="up" title="${t('上へ')}"${b.i === 0 ? raw(' disabled') : ''}>▲</button>`
+        + html`<button data-act="down" title="${t('下へ')}"${b.i === n - 1 ? raw(' disabled') : ''}>▼</button>`
+        + html`<button data-act="del" title="${t('消す')}"${n < 2 ? raw(' disabled') : ''}>✕</button></div>`
+        + confirmHtml(b) + (ui._editing === b.i ? ui._editHtml(b.i) : '')).map(raw));
       $('band-next').disabled = n < 2;
     },
 
     /** 出演中でないバンドをその場で編集する欄（名前・開演時刻・セットリスト） */
     _editHtml(i) {
       const b = VJ.bands.get(ui.app.settings, i) || {};
-      return `<div class="band-edit" data-i18n-skip>`
-        + `<div class="row"><input type="text" data-bf="bandName" value="${esc(b.bandName || '')}" placeholder="${esc(t('バンド名'))}" style="flex: 1; width: auto">`
-        + `<span>${esc(t('開演'))}</span><input type="time" data-bf="countdownTo" value="${esc(b.countdownTo || '')}"></div>`
-        + `<textarea data-bf="setlistText" spellcheck="false" placeholder="${esc(t('1 行 1 曲（曲名 | シーン | パレット）'))}">${esc(b.setlistText || '')}</textarea>`
-        + `<div class="row"><span class="hint">${esc(t('ロゴ・音楽のタイプ・色・テロップは、出演中にしてから下の欄で'))}</span>`
-        + `<button data-act="edit-close">${esc(t('閉じる'))}</button></div></div>`;
+      return html`<div class="band-edit" data-i18n-skip>`
+        + html`<div class="row"><input type="text" data-bf="bandName" value="${b.bandName || ''}" placeholder="${t('バンド名')}" style="flex: 1; width: auto">`
+        + html`<span>${t('開演')}</span><input type="time" data-bf="countdownTo" value="${b.countdownTo || ''}"></div>`
+        + html`<textarea data-bf="setlistText" spellcheck="false" placeholder="${t('1 行 1 曲（曲名 | シーン | パレット）')}">${b.setlistText || ''}</textarea>`
+        + html`<div class="row"><span class="hint">${t('ロゴ・音楽のタイプ・色・テロップは、出演中にしてから下の欄で')}</span>`
+        + html`<button data-act="edit-close">${t('閉じる')}</button></div></div>`;
     },
 
     /** 一覧の行の名前・時刻・曲数だけを更新（編集中の欄は残す） */

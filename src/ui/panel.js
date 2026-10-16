@@ -1,6 +1,8 @@
 /* 設定パネル（開始画面兼用）。映像は背後で動き続けるので、設定しながら見え方を確認できる。
  * 操作はすべて app 経由（app.show / app.engine / app.applySettings）。出力ウィンドウ（2 画面）のときは
- * app.show・app.engine がリモコン（link.js）に差し替わるので、このファイルは同じまま動く。 */
+ * app.show・app.engine がリモコン（link.js）に差し替わるので、このファイルは同じまま動く。
+ * 節ごとのメソッドは panel-input.js（①②）・panel-overlay.js（ロゴ・メディア）・panel-io.js（⑦・MIDI）・
+ * panel-settings.js（書き出し・読み込み・設定を映し直す）にある（どれも VJ.panel にメソッドを足す）。 */
 (function (VJ) {
   'use strict';
   const $ = (id) => document.getElementById(id);
@@ -219,6 +221,9 @@
 
       // ⑥ 本番・再開
       $('btn-show').addEventListener('click', () => panel.startShow());
+      $('btn-log').addEventListener('click', () => panel.exportLog());
+      // 本番の操作：キーと同じ関数（keys.js の run。ロック中は暗転だけ）。2 画面でも、操作ウィンドウのキーと同じ道で届く
+      document.querySelectorAll('.live-ctl button[data-key]').forEach((b) => b.addEventListener('click', () => VJ.keys.run(app, b.dataset.key)));
       $('panel-close').addEventListener('click', () => panel.toggle(false));
       $('btn-resume').addEventListener('click', () => { app.show.restoreSession(panel._resume); $('resume-box').hidden = true; });
       $('btn-resume-no').addEventListener('click', () => { $('resume-box').hidden = true; });
@@ -249,81 +254,6 @@
       panel.app.engine.on((st, msg) => panel.renderStatus(st, msg));
     },
 
-    _srcChanged() {
-      const src = panel.source();
-      $('mic-opts').hidden = src !== 'mic';
-      $('demo-opts').hidden = src !== 'demo';
-      $('display-opts').hidden = src !== 'display';
-      $('file-opts').hidden = src !== 'file';
-      $('monitor-row').hidden = src === 'mic' || src === 'display';
-    },
-
-    source() {
-      const r = document.querySelector('input[name=src]:checked');
-      return r ? r.value : 'mic';
-    },
-
-    async refreshDevices() {
-      const sel = $('device'), s = panel.app.settings;
-      let devs = [];
-      try { devs = await panel.app.engine.listDevices(); } catch (e) { devs = []; }
-      const opts = [`<option value="">${esc(t('（既定のデバイス）'))}</option>`];
-      devs.forEach((d, i) => {
-        if (d.deviceId === 'default' || d.deviceId === '') return;
-        opts.push(`<option value="${esc(d.deviceId)}">${esc(d.label || t('入力デバイス {0}（開始すると名前が出ます）', i + 1))}</option>`);
-      });
-      sel.innerHTML = opts.join('');
-      // 保存されたデバイス（ID → 名前の順で探す）。「既定」は先頭の選択肢に対応
-      let pick = devs.find((d) => d.deviceId === s.deviceId && d.deviceId !== 'default');
-      if (!pick && s.deviceLabel) pick = devs.find((d) => d.label === s.deviceLabel && d.deviceId !== 'default');
-      sel.value = pick ? pick.deviceId : '';
-      if (sel.selectedIndex < 0) sel.value = '';
-    },
-
-    /** 入力の開始。opts を省略するとパネルの選択から作る */
-    async startAudio(given) {
-      const app = panel.app, s = app.settings;
-      const src = given ? given.source : panel.source();
-      const opts = Object.assign({ source: src, deviceId: $('device').value || s.deviceId, deviceLabel: s.deviceLabel, channel: s.channel, monitor: s.monitor, demo: s.demoKind }, given || {});
-      if (src === 'file' && !opts.files) {
-        if (!panel.files.length) { panel.renderStatus('error', t('音声ファイルを選んでください（複数選ぶと順番に再生）')); return false; }
-        opts.files = [];
-        for (const f of panel.files) opts.files.push({ name: f.name, data: await f.arrayBuffer() });
-      }
-      $('btn-start').disabled = true;
-      try {
-        await app.startAudio(opts);
-        s.lastSource = src;
-        if (src === 'mic') {
-          s.deviceId = app.engine.opts.deviceId;
-          s.deviceLabel = app.engine.opts.deviceLabel;
-          await panel.refreshDevices();
-        }
-        panel.save();
-        $('btn-start').textContent = t('↻ 入力を切り替え / 再開始');
-        $('btn-skip').hidden = !(src === 'file' && opts.files && opts.files.length > 1);
-        return true;
-      } catch (e) {
-        return false;
-      } finally {
-        $('btn-start').disabled = false;
-      }
-    },
-
-    renderStatus(st, msg) {
-      const el = $('audio-status'), e = panel.app.engine;
-      // 入力中でも「PC の音が届いていません」のような注意が付いているときは注意の色で
-      const note = st === 'running' && msg && e.opts.source === 'display';
-      el.className = 'status ' + (note ? 'warn' : st === 'running' ? 'ok' : st === 'error' ? 'bad' : st === 'idle' ? '' : 'warn');
-      if (st === 'running') {
-        const d = e.diagnostics();
-        el.textContent = t('入力中：{0}（{1}Hz / {2}ch）', d.device, d.sampleRate, d.channels) + (msg ? ' — ' + msg : '');
-      } else if (st === 'starting') el.textContent = msg || t('開始中…（マイクや画面共有の許可を求められたら「許可」）');
-      else if (st === 'error') el.textContent = msg || t('エラー');
-      else if (st === 'lost' || st === 'reconnecting') el.textContent = msg || t('再接続中…');
-      else el.textContent = t('まだ開始していません');
-    },
-
     /** メーター・テンポ表示（20Hz） */
     tick(f, perfNow) {
       if (!panel.visible || perfNow - panel._meterT < 50) return;
@@ -342,6 +272,7 @@
       $('lh').classList.toggle('on', perfNow - L.h < 120);
       $('la').classList.toggle('on', perfNow - L.a < 200);
       $('lb').classList.toggle('on', perfNow - L.b < 120);
+      panel.renderStrip(f, m);
       // 激しさが自動のとき、いまの段階を表示
       const sh = panel.app.show, lvName = ['控えめ', 'ふつう', '激しい', '最大'][sh.state.intLv];
       const nowTxt = +panel.app.settings.intensity < 0 && lvName ? t('いま：{0}', t(lvName)) : '';
@@ -361,6 +292,33 @@
       }
     },
 
+    /** パネルの上の「いまの状態」（入力と音量・テンポ・オート / 暗転 / ロック・シーン・曲）。どの項目を見ていても分かるように
+     *  上に残す。変わったところだけ書く（20Hz） */
+    renderStrip(f, m) {
+      const app = panel.app, sh = app.show, st = sh.state || {}, es = app.engine.status;
+      const set = (id, txt) => { const el = $(id); if (el.textContent !== txt) el.textContent = txt; };
+      const cls = (id, name, on) => { const el = $(id); if (el.classList.contains(name) !== !!on) el.classList.toggle(name, !!on); };
+      const dot = es === 'running' ? 'ok' : es === 'error' ? 'bad' : es === 'idle' ? '' : 'warn';
+      for (const k of ['ok', 'warn', 'bad']) cls('ps-dot', k, k === dot);
+      set('ps-in', es === 'running' ? t('入力中') : es === 'error' ? t('エラー') : es === 'idle' ? t('未開始') : es === 'starting' ? t('開始中…') : t('再接続中…'));
+      const db = es === 'running' && m ? Math.max(m.l, m.mono ? -120 : m.r) : -120;
+      $('ps-lv').style.width = Math.max(0, Math.min(100, ((db + 60) / 60) * 100)) + '%';
+      set('ps-bpm', f && f.bpm && f.beatConf > 0.2 ? `${Math.round(f.bpm)} BPM` : '— BPM');
+      cls('ps-auto', 'on', st.auto);
+      for (const [id, on] of [['ps-black', st.blackout], ['ps-lock', st.locked]]) { cls(id, 'on', on); cls(id, 'alert', on); }
+      const sc = VJ.scenes.byId[st.sceneId], pd = st.pending && VJ.scenes.byId[st.pending.id];
+      const key = (d) => (d.key ? d.key.replace('s', '⇧') + ' ' : '');
+      set('ps-scene', (sc ? key(sc) + VJ.sceneName(sc) : '') + (pd ? ' → ' + VJ.sceneName(pd) : ''));
+      const song = sh.currentSong ? sh.currentSong() : null;
+      const songText = song ? `M${st.songIdx + 1} ${song.title}` : st.endState ? t('（終演）') : t('（開演前）');
+      set('ps-song', songText);
+      // ⑥ 本番の操作：いまの曲・暗転・オート・メディア
+      set('live-song', songText);
+      cls('live-black', 'on', st.blackout);
+      cls('live-auto', 'on', st.auto);
+      cls('live-media', 'on', app.settings.overlayOn);
+    },
+
     applyShow(immediate) {
       clearTimeout(panel._prevT);
       const run = () => {
@@ -371,14 +329,6 @@
       };
       if (immediate) run(); else panel._prevT = setTimeout(run, 200);
     },
-
-    renderProfile() {
-      const p = VJ.profileById(panel.app.settings.profile);
-      $('profile-desc').textContent = VJ.profileDesc(p);
-    },
-
-    /** セットリストの表（setlisted.js。入力中は作り直さない） */
-    renderSetlist() { VJ.setlistEd.render(); },
 
     renderCustom() {
       const s = panel.app.settings, el = $('custom-colors');
@@ -444,94 +394,6 @@
       panel.renderIo(); // 訳し直した説明文の中の受信ポート番号（#osc-in）を入れ直す
     },
 
-    /** ⑦ 外部連携（ブリッジ・OSC・DMX） */
-    bindIo() {
-      const s = panel.app.settings;
-      const sub = (k, def) => { if (!s[k] || typeof s[k] !== 'object') s[k] = Object.assign({}, def); return s[k]; };
-      const D = VJ.defaultSettings;
-      const changed = () => { panel.renderIo(); panel.applyShow(true); };
-      const bindIn = (id, obj, key, conv, ev) => {
-        const el = $(id);
-        const o = () => sub(obj, D[obj]);
-        if (el.type === 'checkbox') el.checked = !!o()[key]; else el.value = o()[key];
-        el.addEventListener(ev || 'change', () => { o()[key] = el.type === 'checkbox' ? el.checked : conv ? conv(el.value) : el.value; changed(); });
-      };
-      bindIn('net-on', 'net', 'enabled');
-      bindIn('net-url', 'net', 'url', (v) => v.trim());
-      bindIn('osc-on', 'osc', 'enabled');
-      bindIn('osc-host', 'osc', 'host', (v) => v.trim());
-      bindIn('osc-port', 'osc', 'port', (v) => Math.max(1, Math.min(65535, Math.round(+v) || 9001)));
-      bindIn('osc-rate', 'osc', 'rate', (v) => +v);
-      bindIn('dmx-on', 'dmx', 'enabled');
-      bindIn('dmx-out', 'dmx', 'out');
-      bindIn('dmx-host', 'dmx', 'host', (v) => v.trim());
-      bindIn('dmx-uni', 'dmx', 'universe', (v) => Math.max(0, Math.min(32767, Math.round(+v) || 0)));
-      bindIn('dmx-type', 'dmx', 'type');
-      bindIn('dmx-count', 'dmx', 'count', (v) => Math.max(1, Math.min(128, Math.round(+v) || 1)));
-      bindIn('dmx-start', 'dmx', 'start', (v) => Math.max(1, Math.min(512, Math.round(+v) || 1)));
-      bindIn('dmx-flash', 'dmx', 'flash');
-      for (const k of ['max', 'pulse']) {
-        const el = $('dmx-' + k), v = $('dmx-' + k + '-v');
-        el.value = sub('dmx', D.dmx)[k];
-        v.textContent = Math.round(el.value * 100) + '%';
-        el.addEventListener('input', () => { s.dmx[k] = +el.value; v.textContent = Math.round(el.value * 100) + '%'; panel.applyShow(); });
-      }
-      $('btn-qr').addEventListener('click', async () => {
-        const box = $('net-qr');
-        if (!box.hidden) { box.hidden = true; $('btn-qr').textContent = t('スマホ用の QR コードを表示'); return; }
-        let codes = [];
-        try { codes = (await panel.app.netQr()) || []; } catch (e) { codes = []; }
-        // 鍵なしでつないでいる（暗証番号・QR を受け取っていない）ときは、ブリッジの /qr のページを開く（この PC からだけ見られる）
-        const io = VJ.link.role === 'control' ? (VJ.link.lastStatus && VJ.link.lastStatus.io) || {} : { net: VJ.net.state() };
-        const ni = io.net && io.net.info;
-        if (!codes.length && ni && !ni.pin && ni.port) { window.open(`http://127.0.0.1:${ni.port | 0}/qr`, '_blank'); return; }
-        if (!codes.length) { panel.app.ui.toast(t('QR コードを作れません（ブリッジにつながっていないか、LAN に接続されていません）'), 'warn'); return; }
-        box.innerHTML = codes.map((q) => `<figure><img src="${esc(q.img)}" alt="QR"><figcaption data-i18n-skip>${esc(q.url)}</figcaption></figure>`).join('')
-          + `<div class="hint">${esc(t('スマホのカメラで読み取ると、暗証番号を入れずにつながります。QR には暗証番号が入っているので、観客から見えるところでは表示しないでください。'))}</div>`;
-        box.hidden = false;
-        $('btn-qr').textContent = t('QR コードを隠す');
-      });
-      $('dmx-port').addEventListener('click', async () => {
-        try {
-          const port = await VJ.dmx.chooseSerial();
-          if (VJ.link.role === 'control') await VJ.link.request({ t: 'cmd', target: 'dmx', name: 'openGranted', args: [port.getInfo ? port.getInfo() : null] });
-          else await VJ.dmx.openSerial(port);
-          panel.renderIo();
-        } catch (e) {
-          if (e && e.name !== 'NotFoundError') panel.app.ui.toast('USB-DMX: ' + e.message, 'warn');
-        }
-      });
-      panel.renderIo();
-    },
-
-    /** 外部連携の表示（ブリッジの暗証番号・スマホの URL・DMX の状態） */
-    renderIo() {
-      const s = panel.app.settings, d = s.dmx || {};
-      $('dmx-art').hidden = d.out !== 'artnet';
-      $('dmx-usb').hidden = d.out === 'artnet';
-      const io = VJ.link.role === 'control' ? (VJ.link.lastStatus && VJ.link.lastStatus.io) || {} : { net: VJ.net.state(), dmx: VJ.dmx.state() };
-      const n = io.net || { status: 'off' };
-      const el = $('net-status');
-      if (!(n.status === 'on' && n.info)) { $('btn-qr').hidden = true; $('net-qr').hidden = true; $('btn-qr').textContent = t('スマホ用の QR コードを表示'); }
-      if (!(s.net && s.net.enabled)) { el.className = 'status'; el.textContent = t('つないでいません'); }
-      else if (n.status === 'on' && n.info) {
-        el.className = 'status ok';
-        const urlTxt = n.info.urls.length ? n.info.urls.join(' / ') : t('（LAN に接続されていません）');
-        el.textContent = (n.info.pin ? t('ブリッジに接続中。スマホで {0} を開き、暗証番号 {1} を入力', urlTxt, n.info.pin)
-          : t('ブリッジに接続中。スマホで {0} を開き、ブリッジの画面に出ている暗証番号を入力（下のボタンで QR のページを開けます）', urlTxt))
-          + t('（接続中のスマホ {0} 台・OSC 受信 {1} 番）', n.info.phones, n.info.oscPort);
-        if ($('osc-in')) $('osc-in').textContent = n.info.oscPort || '—';
-        $('btn-qr').hidden = false;
-      } else {
-        el.className = 'status warn';
-        el.textContent = n.status === 'connecting' ? t('接続中…') : t('ブリッジが見つかりません（起動しているか、アドレスを確認）。2 秒ごとに再接続します');
-      }
-      const m = io.dmx || { status: 'off' };
-      const label = { off: t('使っていません'), on: t('送信中（{0} フレーム）', m.sent), 'wait-bridge': t('ブリッジにつながるのを待っています（Art-Net はブリッジ経由）'), 'no-port': t('「USB-DMX を選ぶ」を押してください'), error: t('エラー：') + (m.error || '') };
-      $('dmx-status').textContent = d.enabled ? label[m.status] || m.status : t('使っていません');
-      $('dmx-status').className = 'status ' + (!d.enabled ? '' : m.status === 'on' ? 'ok' : m.status === 'error' ? 'bad' : 'warn');
-    },
-
     /** シーンごとの調整（スライダー）。force で値も作り直す */
     renderSceneParams(force) {
       const s = panel.app.settings, sel = $('sp-scene');
@@ -556,405 +418,10 @@
       }));
     },
 
-    async enableMidi() {
-      const ok = await VJ.midi.init(panel.app);
-      VJ.midi.onchange = () => panel.renderMidiStatus(true);
-      panel.renderMidiStatus(ok);
-      return ok;
-    },
-
-    renderMidiStatus(ok) {
-      $('midi-status').textContent = ok
-        ? (VJ.midi.inputs.length ? t('接続中：') + VJ.midi.inputs.join(', ') : t('MIDI 機器が見つかりません（つなぐと自動で認識）'))
-        : t('この環境では MIDI を使えません');
-    },
-
-    /** MIDI の割り当て一覧（学習ボタン付き） */
-    renderMidiMap() {
-      const s = panel.app.settings, map = VJ.midi.map(s);
-      const keyOf = (id) => Object.keys(map).filter((k) => map[k] === id);
-      const learning = VJ.midi.learning && VJ.midi.learning.action;
-      $('midi-map').innerHTML = VJ.midi.actions().map((a) => `<span>${esc(a.name)}</span><span class="k">${esc(keyOf(a.id).map(VJ.midi.keyLabel).join(' / ') || '—')}</span>`
-        + `<button data-act="${esc(a.id)}" class="${learning === a.id ? 'wait' : ''}">${esc(learning === a.id ? t('待機中…') : t('学習'))}</button>`).join('');
-      $('midi-map').querySelectorAll('button').forEach((b) => b.addEventListener('click', async () => {
-        const act = b.dataset.act;
-        if (VJ.midi.learning && VJ.midi.learning.action === act) { VJ.midi.cancelLearn(); panel.renderMidiMap(); return; }
-        if (!(await panel.enableMidi())) return;
-        VJ.midi.learn(act, (key) => {
-          VJ.midi.assign(s, key, act);
-          panel.save();
-          panel.renderMidiMap();
-          panel.app.ui.toast(`MIDI: ${VJ.midi.keyLabel(key)} → ${VJ.midi.actions().find((x) => x.id === act).name}`);
-        });
-        panel.renderMidiMap();
-      }));
-    },
-
-    renderLogo() {
-      const s = panel.app.settings, img = $('logo-preview');
-      img.hidden = !s.logo;
-      if (s.logo) img.src = s.logo; else img.removeAttribute('src');
-    },
-
-    /** ロゴ画像を読み込み、長辺 1024px 以下に縮めて data URL にする（設定に保存できる大きさに。
-     *  出演バンドごとにロゴを持つので、大きいときは WebP にして 1 枚 400KB 程度までにする） */
-    async loadLogo(e) {
-      const f = e.target.files[0];
-      if (!f) return;
-      try {
-        const out = await panel._readImage(f, 1024, 4e5);
-        panel.app.settings.logo = out;
-        if (panel.app.settings.logoMode === 'off') { panel.app.settings.logoMode = 'title'; $('opt-logomode').value = 'title'; }
-        panel.renderLogo();
-        panel.applyShow(true);
-      } catch (err) {
-        panel.app.ui.toast(t('ロゴ画像を読み込めませんでした：') + err.message, 'warn');
-      }
-    },
-
-    /** 画像ファイルを読み、長辺 maxSide px 以下に縮めて data URL にする。maxLen 文字を超えるときは WebP にして小さくする
-     *  （透明度は残る） */
-    async _readImage(f, maxSide, maxLen) {
-      const url = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(f); });
-      const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error(t('画像を読み込めません'))); i.src = url; });
-      const k = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
-      const c = document.createElement('canvas');
-      c.width = Math.max(1, Math.round(img.naturalWidth * k));
-      c.height = Math.max(1, Math.round(img.naturalHeight * k));
-      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      let out = c.toDataURL('image/png');
-      for (const q of [0.92, 0.8, 0.65]) {
-        if (out.length <= maxLen) break;
-        const w = c.toDataURL('image/webp', q);
-        if (w.startsWith('data:image/webp') && w.length < out.length) out = w;
-      }
-      return out;
-    },
-
-    /** オーバーレイの欄（メディア・シーン・文字）。設定の中身は読み込みなどで入れ替わるので、毎回 settings から読む */
-    initOverlay() {
-      const s = panel.app.settings;
-      const apply = () => panel.applyShow(true);
-      const pct = (x) => Math.round(x * 100) + '%';
-      // メディア
-      $('ov-on').addEventListener('change', () => { s.overlayOn = $('ov-on').checked; apply(); });
-      document.querySelectorAll('input[name=ov-kind]').forEach((r) => r.addEventListener('change', () => {
-        s.overlay.mediaKind = r.value;
-        s.overlayOn = true;
-        panel.syncOverlay();
-        apply();
-      }));
-      $('ov-file').addEventListener('change', (e) => { if (e.target.files[0]) panel.setOverlayImageFile(e.target.files[0]); });
-      $('btn-ov-paste').addEventListener('click', () => panel.pasteImage());
-      $('btn-ov-clear').addEventListener('click', () => { s.overlay.image = ''; $('ov-file').value = ''; panel.syncOverlay(); apply(); });
-      $('ov-vfile').addEventListener('change', (e) => { if (e.target.files[0]) panel.setOverlayVideoFile(e.target.files[0]); });
-      $('btn-ov-vclear').addEventListener('click', () => {
-        const old = s.overlay.videoKey;
-        s.overlay.videoKey = ''; s.overlay.videoName = ''; $('ov-vfile').value = '';
-        panel.releaseMediaKey(old);
-        panel.syncOverlay(); apply();
-      });
-      $('ov-vloop').addEventListener('change', () => { s.overlay.videoLoop = $('ov-vloop').checked; apply(); });
-      $('ov-vsound').addEventListener('change', () => { s.overlay.videoSound = $('ov-vsound').checked; $('ov-wsound').checked = s.overlay.videoSound; apply(); });
-      $('ov-wsound').addEventListener('change', () => { s.overlay.videoSound = $('ov-wsound').checked; $('ov-vsound').checked = s.overlay.videoSound; apply(); });
-      $('btn-ov-capture').addEventListener('click', () => panel.startCapture());
-      $('btn-ov-capstop').addEventListener('click', () => { panel.app.mediaCall('stopCapture').catch(() => {}); });
-      $('btn-ov-web').addEventListener('click', () => panel.setWebUrl($('ov-web').value));
-      $('ov-web').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); panel.setWebUrl($('ov-web').value); } });
-      $('ov-play').addEventListener('click', (e) => {
-        const b = e.target.closest('button[data-mcmd]');
-        if (b) panel.app.mediaCall('webCmd', b.dataset.mcmd).catch(() => {});
-      });
-      // カメラ
-      $('ov-cam').addEventListener('change', () => {
-        const opt = $('ov-cam').selectedOptions[0];
-        s.overlay.cameraId = $('ov-cam').value;
-        s.overlay.cameraLabel = opt && opt.value ? opt.textContent.slice(0, 200) : '';
-        apply();
-      });
-      $('btn-ov-camrefresh').addEventListener('click', () => panel.refreshCameras());
-      $('btn-ov-camopen').addEventListener('click', () => panel.openCamera());
-      $('btn-ov-camstop').addEventListener('click', () => { panel.app.mediaCall('stopCamera').catch(() => {}); setTimeout(() => panel.renderMediaStatus(true), 300); });
-      $('ov-cammirror').addEventListener('change', () => { s.overlay.cameraMirror = $('ov-cammirror').checked; apply(); });
-      // 一覧から
-      $('ov-lib').addEventListener('change', () => { s.overlay.libId = $('ov-lib').value; s.overlay.mediaKind = 'lib'; s.overlayOn = true; panel.syncOverlay(); apply(); });
-      for (const [id, key] of [['ov-fit', 'imageFit'], ['ov-imgblend', 'imageBlend'], ['ov-scene', 'scene'], ['ov-sceneblend', 'sceneBlend'], ['ov-corner', 'corner']]) {
-        $(id).addEventListener('change', () => { s.overlay[key] = $(id).value; apply(); });
-      }
-      // シーン・文字
-      $('ovs-on').addEventListener('change', () => { s.ovSceneOn = $('ovs-on').checked; apply(); });
-      $('ovt-on').addEventListener('change', () => { s.overlay.textOn = $('ovt-on').checked; apply(); });
-      for (const [id, key] of [['ov-clock', 'clock'], ['ov-band', 'band'], ['ov-song', 'song']]) {
-        $(id).addEventListener('change', () => { s.overlay[key] = $(id).checked; apply(); });
-      }
-      $('ov-text').addEventListener('input', () => { s.overlay.text = $('ov-text').value; panel.applyShow(); });
-      for (const [id, key] of [['ov-imgop', 'imageOpacity'], ['ov-sceneop', 'sceneOpacity'], ['ov-textop', 'textOpacity'], ['ov-textsize', 'textSize']]) {
-        $(id).addEventListener('input', () => { s.overlay[key] = +$(id).value; $(id + '-v').textContent = pct(+$(id).value); apply(); });
-      }
-      // 貼り付け（Ctrl+V）と、ファイルを落としたとき（落とした先のページへ移ってショーが止まらないように、どこに落としても受ける）
-      document.addEventListener('paste', (e) => panel.onPaste(e));
-      const box = $('overlay-box');
-      document.addEventListener('dragover', (e) => {
-        if (!e.dataTransfer || !Array.from(e.dataTransfer.types || []).includes('Files')) return;
-        if (e.target.closest && e.target.closest('input[type=file]')) return;
-        e.preventDefault();
-        box.classList.toggle('drop', !!(e.target.closest && e.target.closest('#overlay-box')));
-        $('medialib-box').classList.toggle('drop', !!(e.target.closest && e.target.closest('#medialib-box')));
-      });
-      document.addEventListener('dragleave', (e) => { if (!e.relatedTarget) { box.classList.remove('drop'); $('medialib-box').classList.remove('drop'); } });
-      document.addEventListener('drop', (e) => {
-        box.classList.remove('drop');
-        $('medialib-box').classList.remove('drop');
-        if (!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return;
-        if (e.target.closest && e.target.closest('input[type=file]')) return; // ファイルの欄はそのまま
-        e.preventDefault();
-        // メディアの一覧の欄に落としたときは、まとめて一覧に入れる
-        if (e.target.closest && e.target.closest('#medialib-box')) { VJ.mediaLibUI.addFiles(Array.from(e.dataTransfer.files)); return; }
-        const f = Array.from(e.dataTransfer.files).find((x) => /^(image|video)\//.test(x.type) || /\.(mp4|webm|mov|m4v)$/i.test(x.name));
-        if (!f) { panel.app.ui.toast(t('画像か動画のファイルを落としてください（音声ファイルは ① の「音声ファイル」で）'), 'warn'); return; }
-        if (/^image\//.test(f.type)) panel.setOverlayImageFile(f); else panel.setOverlayVideoFile(f);
-      });
-      // 透過ウィンドウ（ほかの画面の上に重ねる）は単体アプリだけ
-      const inApp = VJ.params.app === '1';
-      $('glass-row').hidden = !inApp;
-      $('glass-hint').hidden = inApp;
-      $('btn-glass').addEventListener('click', () => VJ.link.openOutput(panel.app, { glass: true }));
-      panel.syncOverlay();
-    },
-
-    /** オーバーレイの欄を設定に合わせる（シーンの選択肢は表示の言語で作り直す） */
-    syncOverlay() {
-      const s = panel.app.settings, o = s.overlay;
-      const pct = (x) => Math.round(x * 100) + '%';
-      $('ov-on').checked = !!s.overlayOn;
-      $('ovs-on').checked = !!s.ovSceneOn;
-      $('ovt-on').checked = !!o.textOn;
-      const kind = o.mediaKind || 'image';
-      const lib = VJ.mediaLib.list(s), libItem = kind === 'lib' ? VJ.mediaLib.byId(s, o.libId) : null;
-      $('ov-kind-lib').hidden = !lib.length && kind !== 'lib';
-      document.querySelectorAll('input[name=ov-kind]').forEach((r) => { r.checked = r.value === kind; });
-      document.querySelectorAll('#overlay-box .ov-pane').forEach((p) => { p.hidden = p.dataset.kind !== kind; });
-      const shown = libItem ? libItem.kind : kind;
-      $('ov-play').hidden = shown !== 'video' && shown !== 'web';
-      $('ov-vwarn').hidden = shown === 'image' || shown === 'camera';
-      // 一覧から選ぶ欄
-      const ls = $('ov-lib');
-      ls.innerHTML = (libItem ? '' : `<option value="">${esc(kind === 'lib' && o.libId ? t('（消えたメディア）') : t('選んでください'))}</option>`)
-        + lib.map((x, i) => `<option value="${esc(x.id)}">m${i + 1} ${esc(x.name || panel.mediaKindName(x.kind))}</option>`).join('');
-      ls.value = libItem ? libItem.id : '';
-      // カメラ
-      $('ov-cammirror').checked = !!o.cameraMirror;
-      const cs = $('ov-cam');
-      if (o.cameraId && !Array.from(cs.options).some((x) => x.value === o.cameraId)) {
-        cs.add(new Option(o.cameraLabel || t('前に選んだカメラ'), o.cameraId));
-      }
-      if (cs.value !== o.cameraId) cs.value = o.cameraId || '';
-      const sel = $('ov-scene');
-      sel.innerHTML = `<option value="">${esc(t('重ねない'))}</option>` + VJ.scenes.list.filter((d) => !d.hidden && d.id !== 'title')
-        .map((d) => `<option value="${d.id}">${esc(d.key.replace('s', 'Shift+'))} ${esc(VJ.sceneName(d))}</option>`).join('');
-      sel.value = o.scene;
-      if (sel.selectedIndex < 0) sel.value = '';
-      for (const [id, key] of [['ov-fit', 'imageFit'], ['ov-imgblend', 'imageBlend'], ['ov-sceneblend', 'sceneBlend'], ['ov-corner', 'corner']]) $(id).value = o[key];
-      for (const [id, key] of [['ov-clock', 'clock'], ['ov-band', 'band'], ['ov-song', 'song'], ['ov-vloop', 'videoLoop'], ['ov-vsound', 'videoSound'], ['ov-wsound', 'videoSound']]) $(id).checked = !!o[key];
-      if ($('ov-text').value !== o.text) $('ov-text').value = o.text;
-      if (document.activeElement !== $('ov-web') && $('ov-web').value !== o.webUrl) $('ov-web').value = o.webUrl;
-      $('ov-vname').textContent = o.videoName ? t('動画：{0}', o.videoName) : t('動画が選ばれていません');
-      for (const [id, key] of [['ov-imgop', 'imageOpacity'], ['ov-sceneop', 'sceneOpacity'], ['ov-textop', 'textOpacity'], ['ov-textsize', 'textSize']]) {
-        $(id).value = o[key];
-        $(id + '-v').textContent = pct(o[key]);
-      }
-      const img = $('ov-preview');
-      img.hidden = !o.image;
-      if (o.image) img.src = o.image; else img.removeAttribute('src');
-      if (VJ.mediaLibUI) VJ.mediaLibUI.render();
-      panel.renderMediaStatus(true);
-    },
-
-    /** メディアの状態（再生中・取り込み中・読めない など）を表示（パネルの更新から、1 秒に 4 回まで） */
-    renderMediaStatus(force) {
-      const now = performance.now();
-      if (!force && now - (panel._mstT || 0) < 250) return;
-      panel._mstT = now;
-      const s = panel.app.settings;
-      const st = VJ.link.role === 'control' ? (VJ.link.lastStatus && VJ.link.lastStatus.media) || {} : VJ.media.state();
-      // 実際に出ているもの（曲の m:… ・一覧から選んだもの）の種類で書く
-      const kind = st.kind !== undefined ? st.kind : s.overlay.mediaKind || 'image';
-      let txt = '';
-      if (!s.overlayOn) txt = t('メディアは OFF（O キーで表示）');
-      else if (kind === 'video') txt = ({ loading: t('読み込み中…'), playing: t('再生中'), paused: t('一時停止中'), ended: t('終わりました（⏮ で最初から）'), missing: t('動画が見つかりません。もう一度選んでください'), error: t('この動画は再生できません（MP4・WebM がおすすめ）'), empty: t('動画が選ばれていません') })[st.status] || '';
-      else if (kind === 'capture') txt = st.capture ? t('取り込み中：{0}', st.label || '') : t('取り込んでいません（「取り込む画面・タブを選ぶ」）');
-      else if (kind === 'web') txt = ({ loading: t('読み込み中…'), playing: t('表示中（動かないときは ▶）'), badurl: t('YouTube / ニコニコの URL ではありません'), empty: t('URL を入れて「表示」') })[st.status] || '';
-      else if (kind === 'camera') {
-        txt = st.camera ? t('カメラ：{0}', st.cameraLabel || t('使用中')) + (st.error ? ' — ' + st.error : '')
-          : ({ loading: t('カメラを開いています…（許可を聞かれたら「許可」）'), camerror: t('カメラを開けません：{0}', st.error || ''), lost: t('カメラが外れました。つなぎ直すと戻ります') })[st.status] || t('カメラは止まっています（「カメラを開く」）');
-      } else if (kind === 'image') txt = st.status === 'missing' ? t('画像が見つかりません。一覧に入れ直してください') : '';
-      else if (s.overlay.mediaKind === 'lib' || st.song) txt = st.song ? t('この曲はメディアを出しません（m:off）') : t('一覧から出すメディアを選んでください');
-      // 曲の指定（m:…）・一覧から出しているときは、その名前も
-      if (s.overlayOn && st.name) txt = (st.song ? t('曲の指定：{0}', st.name) : t('一覧：{0}', st.name)) + (txt ? ' — ' + txt : '');
-      if ($('ov-status').textContent !== txt) $('ov-status').textContent = txt;
-      $('ov-play').hidden = !(kind === 'video' || kind === 'web');
-      if ($('ov-play').hidden && txt && s.overlayOn) {
-        // 再生ボタンが無いときも状態の文字は見せる（ボタンの行ごと隠れないように、文字だけの行にする）
-        $('ov-play').hidden = false;
-        for (const b of $('ov-play').querySelectorAll('button')) b.hidden = true;
-      } else for (const b of $('ov-play').querySelectorAll('button')) b.hidden = false;
-      const cap = document.querySelector('#overlay-box .ov-pane[data-kind=capture] .hint');
-      if (cap && kind === 'capture') cap.dataset.on = st.capture ? '1' : '';
-    },
-
-    /** 画像ファイル（貼り付け・落とした・選んだ）をメディアの画像にする（長辺 1920px 以下・900KB 程度まで） */
-    async setOverlayImageFile(f) {
-      try {
-        const s = panel.app.settings;
-        s.overlay.image = await panel._readImage(f, 1920, 9e5);
-        s.overlay.mediaKind = 'image';
-        s.overlayOn = true;
-        panel.syncOverlay();
-        panel.applyShow(true);
-        panel.app.ui.toast(t('メディアに画像を入れました（O で表示・非表示）'));
-      } catch (err) {
-        panel.app.ui.toast(t('画像を読み込めませんでした：') + err.message, 'warn');
-      }
-    },
-
-    /** 動画ファイルをメディアにする（この PC の保存場所に入れ、2 画面のときは出力ウィンドウへ渡す） */
-    async setOverlayVideoFile(f) {
-      const s = panel.app.settings;
-      const key = VJ.mediaStore.newKey();
-      const saved = await VJ.mediaStore.put(key, f);
-      VJ.link.send({ t: 'media', key, blob: f });
-      const old = s.overlay.videoKey;
-      s.overlay.videoKey = key;
-      s.overlay.videoName = String(f.name || t('動画')).slice(0, 200);
-      s.overlay.mediaKind = 'video';
-      s.overlayOn = true;
-      panel.releaseMediaKey(old);
-      panel.syncOverlay();
-      panel.applyShow(true);
-      panel.app.ui.toast(saved ? t('メディアに動画を入れました（O で表示・非表示）') : t('動画を保存できませんでした。このウィンドウを閉じるまで使えます'), saved ? undefined : 'warn');
-    },
-
-    /** YouTube / ニコニコの URL をメディアにする */
-    setWebUrl(raw) {
-      const url = String(raw || '').trim();
-      if (!VJ.media.parseWebUrl(url)) { panel.app.ui.toast(t('YouTube / ニコニコの URL ではありません'), 'warn'); return false; }
-      const s = panel.app.settings;
-      s.overlay.webUrl = /^https:\/\//i.test(url) ? url : 'https://' + url.replace(/^http:\/\//i, '');
-      s.overlay.mediaKind = 'web';
-      s.overlayOn = true;
-      panel.syncOverlay();
-      panel.applyShow(true);
-      return true;
-    },
-
-    /** 「貼り付け」ボタン：クリップボードの画像を読む（許可を聞かれることがある） */
-    async pasteImage() {
-      const cb = navigator.clipboard;
-      if (!cb || !cb.read) { panel.app.ui.toast(t('この環境ではボタンから貼り付けできません。Ctrl+V で貼り付けてください'), 'warn'); return; }
-      try {
-        for (const it of await cb.read()) {
-          const type = it.types.find((x) => x.startsWith('image/'));
-          if (type) { await panel.setOverlayImageFile(await it.getType(type)); return; }
-        }
-        panel.app.ui.toast(t('クリップボードに画像がありません（画像をコピーしてから）'), 'warn');
-      } catch (e) {
-        panel.app.ui.toast(t('クリップボードを読めませんでした。Ctrl+V で貼り付けてください'), 'warn');
-      }
-    },
-
-    /** Ctrl+V：画像・動画のファイル、YouTube / ニコニコの URL を、メディアにする（文字の欄に文字を貼るときはそのまま） */
-    onPaste(e) {
-      if (VJ.link.role === 'output') return;
-      const cd = e.clipboardData;
-      if (!cd) return;
-      const tg = e.target;
-      const editable = !!tg && (tg.isContentEditable || /^(input|textarea|select)$/i.test(tg.tagName || ''));
-      const files = Array.from(cd.files || []);
-      const img = files.find((f) => /^image\//.test(f.type)), vid = files.find((f) => /^video\//.test(f.type));
-      const text = cd.getData('text/plain') || '';
-      if (editable && (text || !(img || vid))) return;
-      if (img) { e.preventDefault(); panel.setOverlayImageFile(img); return; }
-      if (vid) { e.preventDefault(); panel.setOverlayVideoFile(vid); return; }
-      if (!editable && VJ.media.parseWebUrl(text)) { e.preventDefault(); panel.setWebUrl(text); }
-    },
-
-    /** 画面・タブの取り込みを始める（2 画面のときは出力ウィンドウに選ぶ画面が出る） */
-    async startCapture() {
-      const s = panel.app.settings;
-      s.overlay.mediaKind = 'capture';
-      s.overlayOn = true;
-      panel.syncOverlay();
-      panel.applyShow(true);
-      if (VJ.link.role === 'control') panel.app.ui.toast(t('出力ウィンドウに、取り込む画面を選ぶ画面が出ています'));
-      try {
-        await panel.app.mediaCall('startCapture');
-      } catch (e) {
-        const cancel = e && (e.name === 'NotAllowedError' || e.name === 'AbortError');
-        panel.app.ui.toast(cancel ? t('画面の取り込みがキャンセルされました') : t('画面を取り込めませんでした：') + ((e && e.message) || e), 'warn');
-      }
-      panel.renderMediaStatus(true);
-    },
-
-    /** メディアの種類の名前 */
-    mediaKindName(kind) {
-      return ({ image: t('画像'), video: t('動画'), web: 'YouTube / ' + t('ニコニコ'), camera: t('カメラ'), capture: t('画面の取り込み') })[kind] || '';
-    },
-
-    /** カメラの一覧を作り直す（描画しているウィンドウで調べる：許可はそちらで出しているので名前が分かる） */
-    async refreshCameras() {
-      const cs = $('ov-cam'), o = panel.app.settings.overlay;
-      let list = [];
-      try { list = (await panel.app.mediaCall('listCameras')) || []; } catch (e) { /* noop */ }
-      cs.innerHTML = `<option value="">${esc(t('（既定のカメラ）'))}</option>`
-        + list.filter((d) => d.id).map((d, i) => `<option value="${esc(d.id)}">${esc(d.label || t('カメラ {0}', i + 1))}</option>`).join('');
-      if (o.cameraId && !list.some((d) => d.id === o.cameraId)) cs.add(new Option(t('{0}（見つかりません）', o.cameraLabel || t('前に選んだカメラ')), o.cameraId));
-      cs.value = o.cameraId || '';
-      if (list.length && !list.some((d) => d.label)) panel.app.ui.toast(t('カメラの名前は、一度「カメラを開く」で許可すると出ます'));
-      return list;
-    },
-
-    /** カメラを開いてメディアにする（2 画面のときは出力ウィンドウで開く。許可もそちらで聞かれる） */
-    async openCamera() {
-      const s = panel.app.settings;
-      s.overlay.mediaKind = 'camera';
-      s.overlayOn = true;
-      panel.syncOverlay();
-      panel.applyShow(true);
-      if (VJ.link.role === 'control') panel.app.ui.toast(t('カメラの使用の許可は、出力ウィンドウで聞かれます'));
-      panel.app.show.overrideSongMedia(); // 曲の m:… より、いま開いたカメラを出す（次の曲まで）
-      try {
-        const r = await panel.app.mediaCall('startCamera', s.overlay.cameraId || '');
-        if (r && r.fallback) panel.app.ui.toast(t('選んだカメラが見つからないので、ほかのカメラを使っています'), 'warn');
-        // 許可したあとはカメラの名前が分かるので、一覧を作り直す
-        const n = $('ov-cam').options.length;
-        const list = await panel.refreshCameras();
-        if (r && r.label && !s.overlay.cameraId && list.length > 1 && n <= 1) panel.app.ui.toast(t('カメラが {0} 台あります。使うカメラを選べます', list.length));
-      } catch (e) {
-        const denied = e && e.name === 'NotAllowedError';
-        panel.app.ui.toast(denied ? t('カメラの使用が許可されていません（アドレスバー左のアイコンから許可）') : t('カメラを開けません：{0}', (e && e.message) || e), 'warn');
-      }
-      panel.renderMediaStatus(true);
-    },
-
-    /** 使わなくなった中身（動画を入れ替えた・一覧から消した）を保存場所から消す。いまの動画・一覧のどれかが使っていれば残す */
-    releaseMediaKey(key) {
-      const s = panel.app.settings;
-      if (!key || s.overlay.videoKey === key || VJ.mediaLib.keys(s).includes(key)) return Promise.resolve();
-      return VJ.mediaStore.remove(key);
-    },
-
-    syncOutputUi() {
-      const out = panel.app.settings.output;
-      $('out-rotate').value = String(out.rotate);
-      $('out-fliph').checked = !!out.flipH;
-      $('out-flipv').checked = !!out.flipV;
-      for (const [id, key] of [['out-size', 'size'], ['out-x', 'x'], ['out-y', 'y']]) {
-        $(id).value = out[key];
-        $(id).dispatchEvent(new Event('input'));
-      }
-    },
+    _notes: [],
 
     renderWarnings() {
+      panel._notes.push(...VJ.storage.takeNotes().filter((n) => !panel._notes.includes(n)));
       const app = panel.app, w = [];
       if (VJ.compat.browser !== 'chromium') {
         const miss = VJ.compat.missing();
@@ -964,10 +431,19 @@
       if (r.software) w.push(t('GPU が使われていません（ソフトウェア描画）。Chrome の 設定 → システム →「グラフィック アクセラレーションが使用可能な場合は使用する」を ON にして再起動してください。'));
       if (r.failed.length) w.push(t('一部のシーンを読み込めませんでした（自動的に飛ばします）：') + r.failed.join(', '));
       try {
-        if (location.protocol === 'file:' && /[^\x00-\x7f]/.test(decodeURIComponent(location.pathname))) {
+        const p = location.protocol === 'file:' ? decodeURIComponent(location.pathname) : '';
+        // OneDrive・Dropbox などの同期されるフォルダ：起動スクリプトの設定の保存場所（.vj-profile）もフォルダの中にあるので、
+        // Chrome が使っている最中のファイルが同期され続ける（単体アプリの設定は別の場所なので関係ない）
+        if (VJ.params.app !== '1' && VJ.compat.syncedPath(p)) {
+          w.push(t('このフォルダは OneDrive などの同期されるフォルダの中にあります。設定の保存場所（.vj-profile）も同期の対象になり、使っている最中のファイルが同期され続けます。本番の PC では C:\\momosai-vj のような、同期されない英数字だけの場所に置くのがおすすめです。'));
+        } else if (/[^\x00-\x7f]/.test(p)) {
           w.push(t('フォルダ名に日本語などが含まれています。念のため C:\\momosai-vj のような英数字だけの場所に置くのがおすすめです。'));
         }
       } catch (e) { /* noop */ }
+      // 読み込んだ設定についての知らせ（このウィンドウを閉じるまで出す）
+      for (const n of panel._notes) {
+        if (n === 'web-removed') w.push(t('YouTube・ニコニコの埋め込みはなくなりました（埋め込みの規約に沿えないため）。使っていたメディアは画像に戻し、メディアの一覧からも外しました。曲の m:… に残っていれば、本番前チェックに出ます。'));
+      }
       $('warnings').innerHTML = w.map((x) => `<div class="warnbox">⚠ ${esc(x)}</div>`).join('');
     },
 
@@ -999,6 +475,29 @@
       else app.ui.toast(t('ショー開始 — H でキー一覧 / M で設定'));
     },
 
+    /** 本番の記録を CSV で書き出す（今日の分）。2 画面では、記録している出力ウィンドウに頼む */
+    async exportLog() {
+      const st = $('log-status');
+      try {
+        const r = VJ.link.role === 'control' ? await VJ.link.request({ t: 'cmd', target: 'app', name: 'logRows', args: [] }) : await panel.app.logRows();
+        st.hidden = false;
+        if (!r.rows.length) { st.textContent = t('まだ記録がありません（入力を始めると、1 秒ごとに記録します）'); return; }
+        const day = VJ.recorder.dayOf(r.rows[0].t);
+        const blob = new Blob([VJ.recorder.toCSV(r.rows)], { type: 'text/csv' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `momosai-vj-log-${day}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        st.textContent = t('{0} 行を書き出しました', r.rows.length) + (r.saved ? '' : ' ' + t('（この環境では保存できないので、記録は画面を閉じるまでです）'));
+      } catch (e) {
+        st.hidden = false;
+        st.textContent = t('書き出せませんでした：') + e.message;
+      }
+    },
+
     toggle(force) {
       panel.visible = force === undefined ? !panel.visible : !!force;
       $('panel').hidden = !panel.visible;
@@ -1015,125 +514,6 @@
       }, 300);
     },
 
-    exportSettings() {
-      const blob = new Blob([VJ.storage.toJSON(panel.app.settings)], { type: 'application/json' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'momosai-vj-settings.json';
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-    },
-
-    async importSettings(e) {
-      const f = e.target.files[0];
-      if (!f) return;
-      try {
-        panel.replaceSettings(VJ.storage.fromFile(await f.text()));
-        panel.app.ui.toast(t('設定を読み込みました'));
-      } catch (err) {
-        alert(t('設定ファイルを読み込めませんでした：') + err.message);
-      }
-      e.target.value = '';
-    },
-
-    /** 設定をまるごと入れ替えて画面に反映 */
-    replaceSettings(ns) {
-      // 入力欄の更新で何度も反映しないように、最後に 1 回だけ（2 画面のときは出力側へ送る回数も減る）
-      panel._bulk = true;
-      try { panel._replace(ns); } finally { panel._bulk = false; }
-      panel.applyShow(true);
-      VJ.storage.save(panel.app.settings);
-    },
-
-    /** シーンの切り替えの欄（種類と長さ）を設定に合わせる。長さの選択肢に無い秒数（設定ファイル）は足す */
-    syncTransition() {
-      const s = panel.app.settings, cf = +s.crossfade;
-      $('opt-trans').value = cf < 0 ? 'auto' : cf === 0 ? 'cut' : s.transition || 'fade';
-      if ($('opt-trans').selectedIndex < 0) $('opt-trans').value = 'fade';
-      const sel = $('opt-xfade');
-      if (cf > 0) {
-        const v = String(Math.min(4, cf));
-        if (!Array.from(sel.options).some((o) => o.value === v)) sel.add(new Option(t('{0} 秒', v), v));
-        sel.value = v;
-      } else if (sel.selectedIndex < 0) sel.value = '0.5';
-      sel.disabled = cf <= 0;
-    },
-
-    /** フラッシュの上限・激しさの表示（設定ファイルの値が選択肢に無ければ足す）と、推奨を超えたときの警告 */
-    syncFlashLimit() {
-      const s = panel.app.settings, sel = $('opt-flashlimit');
-      const v = String(s.flashLimit);
-      if (!Array.from(sel.options).some((o) => o.value === v)) sel.add(new Option(t('1 秒に {0} 回', v), v));
-      sel.value = v;
-      sel.disabled = !!s.noFlash;
-      $('flashlimit-warn').hidden = !!s.noFlash || !VJ.safety.overSafe(s.flashLimit);
-      $('opt-intensity').value = String(s.intensity);
-    },
-
-    _replace(ns) {
-      const s = panel.app.settings;
-      for (const k of Object.keys(ns)) s[k] = ns[k];
-      s.output = Object.assign({}, OUT_DEFAULT, s.output || {});
-      $('band').value = s.bandName;
-      $('setlist').value = s.setlistText;
-      $('channel').value = s.channel;
-      $('monitor').checked = s.monitor;
-      $('opt-profile').value = VJ.profileById(s.profile).id;
-      panel.renderProfile();
-      for (const [id, key] of [['opt-auto', 'auto'], ['opt-autoflash', 'autoFlash'], ['opt-noflash', 'noFlash'], ['opt-toast', 'toast'],
-        ['opt-latsq', 'latencySquare'], ['opt-autostart', 'autoStart'], ['opt-desync', 'desynchronized'], ['opt-speechtitle', 'speechTitle'],
-        ['opt-palauto', 'paletteAuto']]) $(id).checked = !!s[key];
-      panel.syncTransition();
-      panel.syncFlashLimit();
-      $('demo-kind').value = ['band', 'sing', 'speech'].includes(s.demoKind) ? s.demoKind : 'band';
-      $('opt-lang').value = ['auto', 'ja', 'en'].includes(s.lang) ? s.lang : 'auto';
-      if (VJ.i18n.resolve(s.lang) !== VJ.i18n.lang) panel.setLang(s.lang);
-      for (const [id, key] of [['opt-sens', 'sensitivity'], ['opt-react', 'react'], ['opt-master', 'master'], ['opt-scale', 'maxScale'], ['opt-gate', 'gateDb']]) {
-        $(id).value = s[key];
-        $(id).dispatchEvent(new Event('input'));
-      }
-      $('opt-fps').value = String(s.fpsCap || 0);
-      $('opt-palette').value = s.paletteIdx;
-      panel.app.show.setPalette(s.paletteIdx | 0);
-      $('opt-logomode').value = s.logoMode;
-      $('opt-logocorner').value = s.logoCorner;
-      for (let i = 0; i < 3; i++) $('msg-' + i).value = s.messages[i] || '';
-      $('opt-countdown').value = s.countdownTo || '';
-      panel.renderCustom();
-      panel.renderAutoScenes();
-      panel.renderSceneParams(true);
-      panel.syncOverlay();
-      if (VJ.cuesUI) VJ.cuesUI.render(true);
-      VJ.sections.render();
-      if ($('midi-map-box').open) panel.renderMidiMap();
-      for (const [id, o, k] of [['net-on', 'net', 'enabled'], ['net-url', 'net', 'url'], ['osc-on', 'osc', 'enabled'], ['osc-host', 'osc', 'host'], ['osc-port', 'osc', 'port'], ['osc-rate', 'osc', 'rate'],
-        ['dmx-on', 'dmx', 'enabled'], ['dmx-out', 'dmx', 'out'], ['dmx-host', 'dmx', 'host'], ['dmx-uni', 'dmx', 'universe'], ['dmx-type', 'dmx', 'type'], ['dmx-count', 'dmx', 'count'],
-        ['dmx-start', 'dmx', 'start'], ['dmx-flash', 'dmx', 'flash'], ['dmx-max', 'dmx', 'max'], ['dmx-pulse', 'dmx', 'pulse']]) {
-        const v = (s[o] || {})[k];
-        if ($(id).type === 'checkbox') $(id).checked = !!v; else $(id).value = v === undefined ? '' : v;
-      }
-      for (const k of ['max', 'pulse']) $('dmx-' + k + '-v').textContent = Math.round($('dmx-' + k).value * 100) + '%';
-      panel.renderIo();
-      panel.renderLogo();
-      panel.syncOutputUi();
-    },
-
-    /** キー操作などで変わった設定をパネルの表示に反映（出力ウィンドウからの通知など） */
-    syncFromSettings() {
-      const s = panel.app.settings;
-      if (+$('opt-palette').value !== (s.paletteIdx | 0)) { $('opt-palette').value = s.paletteIdx; panel.renderCustom(); }
-      for (const [id, key] of [['opt-sens', 'sensitivity'], ['opt-master', 'master']]) {
-        if (+$(id).value !== +s[key]) { $(id).value = s[key]; $(id + '-v').textContent = key === 'master' ? Math.round(s[key] * 100) + '%' : (s[key] > 0 ? '+' : '') + s[key]; }
-      }
-      $('opt-auto').checked = !!s.auto;
-      $('ov-on').checked = !!s.overlayOn;
-      $('ovs-on').checked = !!s.ovSceneOn;
-      // 取り込みを始めた・やめた（出力ウィンドウ・キーから）ときなど、メディアの種類が変わったら欄を合わせる
-      const kind = s.overlay.mediaKind || 'image';
-      const r = document.querySelector('input[name=ov-kind]:checked');
-      if (!r || r.value !== kind || (kind === 'lib' && $('ov-lib').value !== s.overlay.libId)) panel.syncOverlay();
-    },
   };
 
   VJ.panel = panel;

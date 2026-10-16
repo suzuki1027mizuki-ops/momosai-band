@@ -65,13 +65,15 @@
         if (link._logoSent === s.logo) { delete msg.logo; keep.logo = true; } else link._logoSent = s.logo;
         const img = s.overlay && s.overlay.image;
         if (img && link._ovImgSent === img) { msg.overlay = Object.assign({}, s.overlay, { image: '' }); keep.ovImage = true; } else link._ovImgSent = img;
-        link.send({ t: 'settings', settings: msg, keep });
+        // 出力側でも変わる設定（パレット・感度など）は、出力側の値と違うときだけ（行き違いで古い値に戻さない）
+        link.send({ t: 'settings', settings: link._settingsMessage(msg, s), keep });
         return;
       }
       app.renderer.setOutput(s.output);
       app.renderer.setLogo(s.logo);
-      VJ.media.sync(app); // メディアのオーバーレイ（画像・動画・画面の取り込み・YouTube / ニコニコ）
+      VJ.media.sync(app); // メディアのオーバーレイ（画像・動画・画面の取り込み・カメラ）
       app.renderer.setMaxScale(s.maxScale);
+      app.renderer.setFlashGuard(s.flashLimit, s.noFlash); // 重ねた映像の点滅の見張り
       if (!app.paused) { VJ.net.apply(app); VJ.dmx.apply(app); }
       if (link.role === 'output' && VJ.i18n.resolve(s.lang) !== VJ.i18n.lang) VJ.i18n.setLang(VJ.i18n.resolve(s.lang));
     };
@@ -136,6 +138,28 @@
       toastT = setTimeout(() => { toastEl.className = kind || ''; }, 1200);
     };
     app.show.on(toast);
+
+    // 本番の記録（recorder.js）：解析しているウィンドウで（1 画面ならこの画面、2 画面なら出力ウィンドウ）。
+    // 出来事は、パネルに出る知らせ（シーン・曲・メディア・暗転など）・入力の状態・例外から
+    const rec = (app.recorder = new VJ.Recorder());
+    const R = VJ.recorder;
+    app.show.on((msg) => rec.event(Date.now(), msg));
+    app.engine.on((st, msg) => rec.event(Date.now(), VJ.t('入力：{0}', st) + (msg ? ' ' + msg : '')));
+    window.addEventListener('error', (e) => rec.error(Date.now(), (e && (e.message || (e.error && e.error.message))) || 'error'));
+    window.addEventListener('unhandledrejection', (e) => rec.error(Date.now(), (e && e.reason && (e.reason.message || String(e.reason))) || 'rejection'));
+    // 1 分ごとに、その 1 分の分だけ保存（全体を毎回書かない）。閉じるときにも。古い日は消す
+    const saveLog = () => { const rows = rec.takeUnsaved(); return rows.length ? R.logStore.append(rows) : Promise.resolve(true); };
+    setInterval(saveLog, 60000);
+    window.addEventListener('pagehide', saveLog);
+    R.logStore.prune(Date.now());
+    /** 今日の記録（保存した分と、まだ保存していない分）。2 画面では操作ウィンドウから頼まれる */
+    app.logRows = async () => {
+      await saveLog();
+      const day = R.dayOf(Date.now());
+      const cur = rec.cur ? [rec._row(rec.cur)] : [];
+      const rows = R.logStore.ok ? (await R.logStore.readDay(day)).concat(cur) : rec.snapshot().filter((r) => R.dayOf(r.t) === day);
+      return { rows, saved: R.logStore.ok };
+    };
 
     const help = document.getElementById('help');
     app.ui = {
@@ -254,6 +278,16 @@
         VJ.net.frame(app, f, ts);
         VJ.dmx.tick(app, f, ts);
         if (app.onFrame) app.onFrame(ts, engine.ctx ? engine.ctx.currentTime : 0, f);
+        // 本番の記録（数を足すだけ。1 秒ごとに 1 行）
+        const st = app.show.state, song = app.show.currentSong();
+        app.recorder.frame(Date.now(), app._recTs ? ts - app._recTs : 0, {
+          input: engine.status === 'running' ? engine.opts.source + (engine.diag && engine.diag.device ? ':' + engine.diag.device : '') : engine.status,
+          meter: engine.meter, flags: f.onsetFlags, bpm: f.bpm, beatConf: f.beatConf, speech: f.speech, melodic: f.melodic,
+          scale: app.renderer.scale, denied: app.show.limiter.denied, scene: st.sceneId,
+          song: song ? `M${st.songIdx + 1} ${song.title}` : st.endState ? 'end' : '',
+          media: app.settings.overlayOn ? VJ.media.kind || '' : '', guard: app.renderer.ovGuardState(),
+        });
+        app._recTs = ts;
         app.errorsInRow = 0;
         // 次の曲名のテクスチャを先に作っておく（曲頭での引っかかり防止）
         if (ts > prefetchAt) {
@@ -378,7 +412,13 @@
         const iv = [];
         for (let k = 1; k < recs.length; k++) iv.push(recs[k][0] - recs[k - 1][0]);
         iv.sort((a, b) => a - b);
-        return { n: lat.length, expected: s.onsets.kick.length, median: lat[Math.floor(lat.length / 2)], mean, sd, max: lat[lat.length - 1], frameInterval: iv[Math.floor(iv.length / 2)], diag: engine.diagnostics() };
+        // 描画の間隔の中央値・90% 点・50ms（3 フレーム）を超えた数（PC が重くて描画が詰まっていたかの手がかり。
+        // ヘッドレスのブラウザは 2 フレームに 1 回の間隔（33ms）がふつうに混じるので、それより長いものを数える）
+        return {
+          n: lat.length, expected: s.onsets.kick.length, median: lat[Math.floor(lat.length / 2)], mean, sd, max: lat[lat.length - 1],
+          frameInterval: iv[Math.floor(iv.length / 2)], frameP90: iv[Math.floor(iv.length * 0.9)], longFrames: iv.filter((x) => x > 50).length, frames: iv.length,
+          diag: engine.diagnostics(),
+        };
       },
     };
     return testing;

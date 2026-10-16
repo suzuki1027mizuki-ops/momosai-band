@@ -16,6 +16,11 @@
       this.failed = {};
       this.lost = false;
       this.frame = 0;
+      // 重ねた映像（動画・取り込み・カメラ）の点滅の見張り（safety.js）。_ovGain：映像の濃さに掛ける値
+      this.ovGuard = new VJ.safety.OverlayGuard(12);
+      this.ovGuardOn = true; // テスト用（見張りを止めて、ないときと比べる）
+      this._ovGain = 1;
+      this._ovT = 0;
       this.intervals = new Float32Array(120);
       this.intIdx = 0;
       this.lastFrameT = 0;
@@ -79,9 +84,92 @@
       if (this.ovVideo) { const v = this.ovVideo; this.ovVideo = null; this.setOverlayVideo(v); }
       this.slots = null;
       this.ovSlot = null;
+      this._ovm = null; // 重ねた映像の点滅の見張り：縮小の描画先と読み出し（使うときに作る）
       this.tw = 0; this.th = 0;
       this._compileAll();
     }
+
+    /** 重ねた映像の点滅の見張りの上限（設定 flashLimit。0 = 制限なし）と「フラッシュを一切使わない」 */
+    setFlashGuard(limit, noFlash) { this.ovGuard.setLimit(limit, noFlash); }
+
+    /** 見張りの準備：映像を 32x18 に縮めて描く描画先・プログラムと、待たずに読み出すためのバッファ（WebGL2 の PBO と fence）。
+     *  使えない環境では null（見張らない。状態に 'off' と出す） */
+    _ovmInit() {
+      const gl = this.gl;
+      try {
+        if (typeof gl.fenceSync !== 'function') return null;
+        const W = 32, H = 18;
+        const p = new G.Program(gl, '#version 300 es\nprecision mediump float;\nuniform sampler2D u_tex;\nuniform vec2 u_res;\nout vec4 o;\n'
+          + 'void main() { o = vec4(texture(u_tex, gl_FragCoord.xy / u_res).rgb, 1.0); }', 'ovguard').finish();
+        const fb = G.target(gl, W, H, false);
+        const slots = [0, 1, 2].map(() => {
+          const pbo = gl.createBuffer();
+          gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo);
+          gl.bufferData(gl.PIXEL_PACK_BUFFER, W * H * 4, gl.STREAM_READ);
+          return { pbo, fence: null, t: 0, alpha: 0 };
+        });
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+        const lut = new Float32Array(256);
+        for (let i = 0; i < 256; i++) { const c = i / 255; lut[i] = c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+        return { W, H, p, fb, slots, queue: [], px: new Uint8Array(W * H * 4), lut, lum: new Array(12) };
+      } catch (e) {
+        if (globalThis.console) console.warn('ovguard: ' + e.message);
+        return null;
+      }
+    }
+
+    /** 見張り：終わった読み出しを受け取り、新しいフレームが来たら縮めて読み出しを頼む（描画は待たない）。
+     *  t：秒、alpha：いまの映像の濃さ（見張りの倍率を掛ける前）、fresh：このフレームで新しい映像が届いた */
+    _ovGuardStep(t, alpha, fresh) {
+      const gl = this.gl;
+      if (this._ovm === null) this._ovm = this._ovmInit() || false;
+      const m = this._ovm;
+      if (!m) return;
+      // 届いた読み出し（古い順）
+      while (m.queue.length) {
+        const s = m.queue[0];
+        const r = gl.clientWaitSync(s.fence, 0, 0);
+        if (r === gl.TIMEOUT_EXPIRED) break;
+        m.queue.shift();
+        gl.deleteSync(s.fence);
+        s.fence = null;
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, s.pbo);
+        gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, m.px);
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+        // 4x3 の領域ごとの相対輝度（画素ごとに sRGB → 線形にして Rec.709 で合成）
+        const { W, H, px, lut, lum } = m;
+        lum.fill(0);
+        for (let y = 0; y < H; y++) {
+          const gy = Math.min(2, Math.floor((y * 3) / H));
+          for (let x = 0; x < W; x++) {
+            const i = (y * W + x) * 4;
+            lum[gy * 4 + Math.min(3, Math.floor((x * 4) / W))] += 0.2126 * lut[px[i]] + 0.7152 * lut[px[i + 1]] + 0.0722 * lut[px[i + 2]];
+          }
+        }
+        const per = (W / 4) * (H / 3);
+        for (let g = 0; g < 12; g++) lum[g] /= per;
+        this.ovGuard.push(s.t, lum, s.alpha);
+      }
+      if (!fresh || !this.ovVid || !this.ovVid.ready) return;
+      const s = m.slots.find((x) => !x.fence);
+      if (!s) return; // 読み出しが追いつかない：このフレームは見ない
+      gl.bindFramebuffer(gl.FRAMEBUFFER, m.fb.fb);
+      gl.viewport(0, 0, m.W, m.H);
+      m.p.use();
+      m.p.tex('u_tex', this.ovVid.tex);
+      m.p.set('u_res', [m.W, m.H]);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, s.pbo);
+      gl.readPixels(0, 0, m.W, m.H, gl.RGBA, gl.UNSIGNED_BYTE, 0);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+      s.fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+      s.t = t;
+      s.alpha = alpha;
+      m.queue.push(s);
+    }
+
+    /** 見張りの状態：'dim'（濃さを下げている）/ 'strong'（制限なしで強い点滅）/ 'off'（この環境では見張れない）/ '' */
+    ovGuardState() { return this._ovm === false ? 'off' : this.ovGuard.state(); }
 
     _compileAll() {
       const gl = this.gl;
@@ -191,12 +279,12 @@
       }
     }
 
-    /** 動画の新しいフレームをテクスチャへ（フレームの通知が来ない環境でも 1 秒に 4 回は送る） */
+    /** 動画の新しいフレームをテクスチャへ（フレームの通知が来ない環境でも 1 秒に 4 回は送る）。送ったら true */
     _uploadVideo() {
       const v = this.ovVideo, t = this.ovVid;
-      if (!v || !t || v.readyState < 2 || !v.videoWidth) return;
+      if (!v || !t || v.readyState < 2 || !v.videoWidth) return false;
       const now = performance.now();
-      if (!this._vidNew && t.ready && now - this._vidUp < 250) return;
+      if (!this._vidNew && t.ready && now - this._vidUp < 250) return false;
       this._vidNew = false;
       this._vidUp = now;
       const gl = this.gl;
@@ -211,6 +299,7 @@
         t.ready = false;
       }
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+      return t.ready;
     }
 
     /** 画像（data URL）をテクスチャにして this[slot] = { tex, aspect } に入れる。空なら消す */
@@ -332,7 +421,20 @@
       const f = fr.f;
       this._upload(f);
       // オーバーレイの動画の新しいフレーム（テクスチャの割り当てを変えるので、シーン・仕上げの前に）
-      if (fr.ovImage && this.ovVid) this._uploadVideo();
+      const fresh = fr.ovImage && this.ovVid ? this._uploadVideo() : false;
+      // 重ねた映像の点滅の見張り（読み出しは待たない。届いた分で濃さの倍率を決める）
+      const tNow = (now === undefined ? performance.now() : now) / 1000;
+      const dtG = this._ovT ? tNow - this._ovT : 0;
+      this._ovT = tNow;
+      if (fr.ovImage && this.ovVid && this.ovGuardOn) {
+        this._ovGuardStep(tNow, fr.ovImage.alpha, fresh);
+        this._ovGain = this.ovGuard.gain(dtG);
+      } else if (this._ovGain !== 1 || this.ovGuard.lastT >= 0) {
+        // 映像を重ねていない：見張りを初めからにする（次に出すときに、前の映像の点滅を数えない）
+        this.ovGuard.reset();
+        this.ovGuard.g = 1;
+        this._ovGain = 1;
+      }
 
       let def = fr.scene;
       if (!this.programs[def.id]) def = VJ.scenes.byId.title;
@@ -479,7 +581,8 @@
       const src = this.ovVid && this.ovVid.ready ? this.ovVid : this.ovVideo ? null : this.ovImg;
       const oi = fr.ovImage && src ? fr.ovImage : null;
       q.tex('u_ovImg', oi ? src.tex : this.texBlank);
-      q.set('u_ovImgAlpha', oi ? oi.alpha : 0);
+      // 動画・取り込み・カメラは、点滅の見張りの倍率も掛ける（画像は点滅しない）
+      q.set('u_ovImgAlpha', oi ? oi.alpha * (src === this.ovVid ? this._ovGain : 1) : 0);
       if (oi) {
         q.set('u_ovImgMode', oi.mode === 'add' ? 1 : oi.mode === 'screen' ? 2 : 0);
         const A = this.lw / this.lh, a = src.aspect;
@@ -569,6 +672,7 @@
         gpu: this.gpu, software: this.software, hdr: this.hdr, scale: this.scale, fps: this.fps,
         size: [this.canvas.width, this.canvas.height], sceneSize: [this.tw, this.th], logical: [Math.round(this.lw), Math.round(this.lh)],
         failed: Object.keys(this.failed), lost: this.lost, lostCount: this.lostCount || 0,
+        hz: this.vsync ? Math.round(1000 / this.vsync) : 0, // 画面のリフレッシュレートの見積もり（描画の間隔の 10% 点から）
       };
     }
   }

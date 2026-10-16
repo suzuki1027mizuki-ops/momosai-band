@@ -2,7 +2,7 @@
 (function (VJ) {
   'use strict';
   const $ = (id) => document.getElementById(id);
-  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const { html, raw } = VJ.dom; // 値を必ずエスケープする HTML（dom.js）
   const t = (...a) => VJ.t(...a);
   const ICON = { ok: '✅', info: '💡', warn: '⚠️', bad: '❌' };
 
@@ -41,15 +41,7 @@
     },
 
     /** パネルの n 番の見出しまでスクロールして、少し光らせる（閉じていたら開く） */
-    scrollTo(n) {
-      const h = Array.from(document.querySelectorAll('#panel h2')).find((x) => x.textContent.trim().startsWith('①②③④⑤⑥⑦'[n - 1]));
-      if (!h) return;
-      if (VJ.sections) VJ.sections.open(n);
-      h.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      h.classList.remove('flash-h');
-      void h.offsetWidth;
-      h.classList.add('flash-h');
-    },
+    scrollTo(n) { VJ.sections.go(n); },
 
     /** 手順が終わったか（パネルの更新ごと。一度終わったものは戻さない） */
     check(f) {
@@ -72,11 +64,11 @@
       $('btn-guide').classList.toggle('on', !!app.settings.guide);
       if (el.hidden) return;
       const next = guide.done.indexOf(false);
-      el.innerHTML = `<div class="g-head"><b>${esc(t('はじめてのガイド'))}</b><span class="hint">${esc(t('{0} / {1} 完了', guide.done.filter(Boolean).length, STEPS.length))}</span>`
-        + `<button id="guide-close" title="${esc(t('ガイドを閉じる（右上の ? でまた開く）'))}">×</button></div><ol>`
-        + STEPS.map(([title, desc, sec], i) => `<li data-sec="${sec}" class="${guide.done[i] ? 'done' : i === next ? 'next' : ''}">`
-          + `<span class="g-mark">${guide.done[i] ? '✓' : i + 1}</span><span><b>${esc(t(title))}</b><br><span class="hint">${esc(t(desc))}</span></span></li>`).join('')
-        + '</ol>';
+      VJ.dom.set(el, raw(html`<div class="g-head"><b>${t('はじめてのガイド')}</b><span class="hint">${t('{0} / {1} 完了', guide.done.filter(Boolean).length, STEPS.length)}</span>`
+        + html`<button id="guide-close" title="${t('ガイドを閉じる（右上の ? でまた開く）')}">×</button></div><ol>`
+        + html`${STEPS.map(([title, desc, sec], i) => html`<li data-sec="${sec}" class="${guide.done[i] ? 'done' : i === next ? 'next' : ''}">`
+          + html`<span class="g-mark">${guide.done[i] ? '✓' : i + 1}</span><span><b>${t(title)}</b><br><span class="hint">${t(desc)}</span></span></li>`).map(raw)}`
+        + '</ol>'));
       guide._sig = guide.done.join();
     },
 
@@ -110,7 +102,11 @@
       if (!scl) add('info', t('リハで「サウンドチェック」をしておくと安心です（①）'));
       else add(scl.worst === 'bad' ? 'warn' : 'ok', scl.worst === 'bad' ? t('サウンドチェックで問題がありました（① の結果を確認）') : t('サウンドチェック済み'));
       // 映像
-      const r = remote ? { fps: ls.fps, software: false } : app.renderer.info();
+      const r = remote ? { fps: ls.fps, hz: ls.hz, software: false } : app.renderer.info();
+      // 起動時の自己診断：画面のリフレッシュレート（60Hz 未満だと動きがカクつく）・ブラウザの版
+      if (r.hz && r.hz < 55) add('warn', t('画面のリフレッシュレートが {0}Hz くらいのようです（60Hz 未満）。動きがカクつくことがあります。ディスプレイの設定を確かめてください', r.hz));
+      const cv = VJ.compat.chromeVersion;
+      if (cv && cv < VJ.compat.MIN_CHROME) add('warn', t('Chrome / Edge が古いです（{0}）。{1} 以降に更新してください', cv, VJ.compat.MIN_CHROME));
       if (r.software) add('warn', t('GPU が使われていません（ソフトウェア描画）。映像が重くなります'));
       if (r.fps && r.fps < 40) add('warn', t('描画が重いです（{0} fps）。⑤ の「画質上限」を下げるか、フレームレートを 30 に', Math.round(r.fps)));
       else if (r.fps) add('ok', t('描画 {0} fps', Math.round(r.fps)));
@@ -152,11 +148,13 @@
         else if (c.media && c.media !== 'on' && c.media !== 'off') lost.push(c.name || '?');
       }
       const ms = remote ? ls.media || {} : VJ.media.state();
-      const moving = ['video', 'capture', 'web'].filter((k) => used.has(k));
+      const moving = ['video', 'capture'].filter((k) => used.has(k));
       if (moving.length) {
-        const names = moving.map((k) => ({ video: t('動画ファイル'), capture: t('画面・タブの取り込み'), web: 'YouTube / ' + t('ニコニコ') }[k])).join(t('・'));
-        add('warn', t('メディアに{0}を使っています。動画の中の点滅はフラッシュの上限で制限できないので、事前に確認してください', names));
+        const names = moving.map((k) => ({ video: t('動画ファイル'), capture: t('画面・タブの取り込み') }[k])).join(t('・'));
+        add('warn', t('メディアに{0}を使っています。映像の中の点滅が多いときは自動で濃さを下げますが、近似なので、事前に映像を確認してください', names));
       }
+      // カメラ：映る人（出演者・観客）に、撮影して投影することを知らせる
+      if (used.has('camera') || (s.overlayOn && ms.kind === 'camera')) add('info', t('カメラの映像を投影します。映る人（出演者・観客）に知らせ、同意を得てください（会場の掲示・アナウンス）'));
       if (s.overlayOn && baseKind === 'capture' && !ms.capture) add('warn', t('画面の取り込みが止まっています（⑤ のメディア）'));
       if (s.overlayOn && ms.kind === 'video' && (ms.status === 'missing' || ms.status === 'error')) add('bad', t('メディアの動画を読めません（⑤ で選び直す）'));
       if (s.overlayOn && ms.kind === 'image' && ms.status === 'missing') add('bad', t('メディアの画像を読めません（⑤ のメディアの一覧に入れ直す）'));
@@ -165,7 +163,6 @@
         else if (ms.status === 'camerror') add('bad', t('カメラを開けません：{0}', ms.error || ''));
         else add('warn', t('カメラが開いていません（⑤ のメディアで「カメラを開く」）'));
       } else if (used.has('camera')) add('info', t('曲・キューでカメラを使います。リハで一度出して、許可・映り方を確かめてください'));
-      if (used.has('web')) add('info', t('YouTube / ニコニコはインターネットが必要です。会場の回線で再生できるか確かめてください'));
       if (lost.length) add('warn', t('メディアの一覧にないメディアを指定しています：{0}（③ のセットリスト・⑥ のキュー）', [...new Set(lost)].join(t('・'))));
       // スリープ
       if (VJ.compat.features().wakeLock) add('ok', t('「ショー開始」で画面のスリープを止めます'));
@@ -189,8 +186,7 @@
       const items = guide.items();
       const bad = items.filter((i) => i.level === 'bad').length, warn = items.filter((i) => i.level === 'warn').length;
       const head = bad ? t('要対応 {0} 件', bad) + (warn ? ' / ' + t('注意 {0} 件', warn) : '') : warn ? t('注意 {0} 件', warn) : t('準備 OK');
-      $('precheck').innerHTML = `<div class="sc-step ${bad ? 'bad' : warn ? 'warn' : 'ok'}">${esc(head)}</div>`
-        + `<ul class="sc-items">${items.map((i) => `<li class="${i.level}"><span>${ICON[i.level]}</span><span>${esc(i.text)}</span></li>`).join('')}</ul>`;
+      VJ.dom.set($('precheck'), html`<div class="sc-step ${bad ? 'bad' : warn ? 'warn' : 'ok'}">${head}</div><ul class="sc-items">${items.map((i) => html`<li class="${i.level}"><span>${ICON[i.level]}</span><span>${i.text}</span></li>`)}</ul>`);
     },
   };
 
