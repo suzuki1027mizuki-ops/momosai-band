@@ -284,7 +284,10 @@ export async function startBridge(opts = {}) {
   const oscPort = opts.oscPort ?? 9000;
   const host = opts.host ?? '0.0.0.0';
   const oscHost = opts.oscHost ?? '127.0.0.1';
-  const pin = String(opts.pin ?? crypto.randomInt(0, 10000)).padStart(4, '0');
+  // 暗証番号：既定は 6 けた（総当たりに 10 倍強い）。--pin で決めたものは、そのまま（4〜8 けた）
+  const pin = opts.pin !== undefined && opts.pin !== null ? String(opts.pin) : String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+  // スマホの入力欄は数字だけ・8 けたまで
+  if (!/^\d{4,8}$/.test(pin)) throw new Error('暗証番号は 4〜8 けたの数字にしてください: ' + pin);
   // VJ 本体の鍵：/vj?k=… でつないだ VJ 本体にだけ暗証番号と QR を渡す（Origin: null は、ファイルから開いた VJ 本体だけでなく
   // ほかのサイトの「サンドボックスの枠」からも来るので、Origin だけでは見分けられない）
   const vjKey = String(opts.vjKey || crypto.randomBytes(12).toString('hex'));
@@ -308,6 +311,12 @@ export async function startBridge(opts = {}) {
   // 時間がたてば戻る（本番中にブリッジ＝単体アプリを起動し直さなくてよいように）。正しい番号で入れたら数え直す
   const LOCK_TRIES = 10, lockMs = opts.lockMs ?? 60000, LOCK_MAX = 15;
   const fails = new Map(); // IP → { n: 続けて間違えた回数, until: この時刻まで受け付けない, locks: 止めた回数 }
+  // 新しいスマホは VJ 側で許可する（暗証番号を見た人が、勝手に操作できないように）。許可・断る・外すは、鍵つきで
+  // つないだ VJ 本体（/vj?k=…。単体アプリは自動で鍵つき）からだけ受け付ける。鍵つきの VJ 本体がいないときは、
+  // 今までどおり暗証番号だけで入れる（許可できる人がいないため）。許可したスマホは、ブリッジが動いている間は覚える
+  const devices = new Map(); // 端末の鍵 → { id, name }
+  const approval = () => [...vjs].some((v) => v.trusted);
+  const devName = (s) => String(typeof s === 'string' ? s : '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 40) || 'スマホ';
 
   const udp = dgram.createSocket({ type: 'udp4', reuseAddr: true });
   udp.on('error', (e) => log('UDP エラー: ' + e.message));
@@ -345,10 +354,30 @@ export async function startBridge(opts = {}) {
   const urls = () => lanAddresses().map((a) => `http://${a.includes(':') ? `[${a}]` : a}:${boundPort}/`);
   /** VJ 本体へ渡す情報。鍵の無い接続には暗証番号・QR を渡さない（ブリッジの画面か /qr で見てもらう） */
   const info = (trusted) => ({
-    t: 'info', pin: trusted ? pin : '', port: boundPort, oscPort: boundOsc, oscLan: oscHost !== '127.0.0.1', urls: urls(), phones: phones.size,
+    t: 'info', pin: trusted ? pin : '', port: boundPort, oscPort: boundOsc, oscLan: oscHost !== '127.0.0.1', urls: urls(), phones: [...phones].filter((p) => p.authed).length,
     qr: trusted ? urls().slice(0, 3).map((u) => ({ url: u, svg: qrOf(u) })) : [],
+    // スマホの許可：approval（許可がいるか）・pending（許可待ち）・devices（許可したスマホ）。鍵つきの VJ 本体にだけ
+    approval: approval(), trusted,
+    pending: trusted ? [...phones].filter((p) => p.pending).map((p) => ({ id: p.reqId, name: p.devName, addr: p.remote })) : [],
+    devices: trusted ? [...devices.values()].map((d) => ({ id: d.id, name: d.name, online: [...phones].some((p) => p.authed && p.devId === d.id) })) : [],
   });
   const broadcastInfo = () => { for (const v of vjs) v.send(info(v.trusted)); };
+  /** スマホを入れる。issue：VJ 側で許可した（端末の鍵を渡して、次からは許可なしで入れるようにする） */
+  const admit = (ws, issue) => {
+    ws.pending = false;
+    ws.authed = true;
+    let token;
+    if (issue) {
+      token = crypto.randomBytes(16).toString('hex');
+      ws.devId = crypto.randomBytes(6).toString('hex');
+      devices.set(token, { id: ws.devId, name: ws.devName || 'スマホ' });
+    }
+    ws.send(token ? { t: 'auth', ok: true, token } : { t: 'auth', ok: true });
+    if (lastThumbs) ws.send({ t: 'thumbs', d: lastThumbs });
+    if (lastStatus) ws.send({ t: 'status', s: lastStatus });
+    log(`スマホが接続しました（${ws.devName || ''}・${ws.remote}）`);
+    broadcastInfo();
+  };
 
   const server = http.createServer((req, res) => {
     const url = (req.url || '/').split('?')[0];
@@ -424,6 +453,19 @@ ${list.length ? list.map((u) => `<figure style="display:inline-block;margin:10px
         } else if (m.t === 'dmx' && art && Array.isArray(m.d)) {
           out.send(artDmx(art.universe, m.d), 6454, art.host);
           stats.artnet++;
+        } else if ((m.t === 'approve' || m.t === 'forget') && ws.trusted && typeof m.id === 'string') {
+          if (m.t === 'approve') {
+            const p = [...phones].find((x) => x.pending && x.reqId === m.id);
+            if (p && m.ok) admit(p, true);
+            else if (p) { p.pending = false; p.send({ t: 'auth', ok: false, denied: true }); p.close(1008); log(`スマホを断りました（${p.remote}）`); }
+          } else {
+            for (const [tok, d] of devices) {
+              if (d.id !== m.id) continue;
+              devices.delete(tok);
+              for (const p of phones) if (p.devId === d.id) { p.send({ t: 'auth', ok: false, denied: true }); p.close(1008); }
+            }
+          }
+          broadcastInfo();
         } else if (m.t === 'config') {
           const o = m.osc;
           oscOut = o && o.enabled && typeof o.host === 'string' && o.host.length < 256 && portOk(o.port) ? { host: o.host, port: o.port } : null;
@@ -434,6 +476,8 @@ ${list.length ? list.map((u) => `<figure style="display:inline-block;margin:10px
       ws.onclose = () => {
         vjs.delete(ws);
         log('VJ 本体が切断しました');
+        // 鍵つきの VJ 本体がいなくなった：許可できる人がいないので、許可待ちのスマホは暗証番号だけで入れる
+        if (!approval()) for (const p of phones) if (p.pending) admit(p, false);
         // VJ 本体がいなくなったら、スマホに「つながっていない」と知らせる（古い状態のまま操作できるように見えないように）
         if (!vjs.size && lastStatus) {
           lastStatus = Object.assign({}, lastStatus, { connected: false });
@@ -448,14 +492,20 @@ ${list.length ? list.map((u) => `<figure style="display:inline-block;margin:10px
           if (m.t !== 'auth') return;
           const now = Date.now(), f = fails.get(addr) || { n: 0, until: 0, locks: 0 };
           if (f.until > now) { ws.send({ t: 'auth', ok: false, locked: true, wait: Math.ceil((f.until - now) / 1000) }); ws.close(1008); return; }
+          if (ws.pending) return; // 許可を待っている間は、ほかのメッセージを受けない
           if (String(m.pin) === pin) {
             fails.delete(addr);
-            ws.authed = true;
-            ws.send({ t: 'auth', ok: true });
-            if (lastThumbs) ws.send({ t: 'thumbs', d: lastThumbs });
-            if (lastStatus) ws.send({ t: 'status', s: lastStatus });
-            log(`スマホが接続しました（${addr}）`);
-            broadcastInfo();
+            const dev = typeof m.token === 'string' ? devices.get(m.token) : null;
+            ws.devName = devName(m.name);
+            if (dev) { ws.devId = dev.id; admit(ws, false); }
+            else if (!approval()) admit(ws, false);
+            else {
+              ws.pending = true;
+              ws.reqId = crypto.randomBytes(6).toString('hex');
+              ws.send({ t: 'auth', ok: false, pending: true });
+              log(`スマホが許可を待っています（${ws.devName}・${addr}）`);
+              broadcastInfo();
+            }
           } else {
             stats.authFail++;
             f.n++;

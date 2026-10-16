@@ -421,6 +421,8 @@
         else if (d.target === 'app') value = await app[d.name](...(d.args || []));
         else if (d.target === 'ui') value = await app.ui[d.name](...(d.args || []));
         else if (d.target === 'dmx' && (d.name === 'openGranted' || d.name === 'closeSerial')) value = await VJ.dmx[d.name](...(d.args || []).slice(0, 1));
+        // スマホの許可・外す（ブリッジとの接続は出力ウィンドウにある）
+        else if (d.target === 'net' && (d.name === 'approve' || d.name === 'forget')) value = VJ.net[d.name](...(d.args || []).slice(0, 2));
         if (value && typeof value === 'object' && !Array.isArray(value)) value = JSON.parse(JSON.stringify(value));
         if (Array.isArray(value)) value = value.map((x) => (x && typeof x.toJSON === 'function' ? x.toJSON() : x));
       } catch (e) {

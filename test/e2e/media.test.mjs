@@ -116,9 +116,9 @@ test('動画ファイル：メディアに入れると再生されて映像に�
   await page.reload();
   await page.waitForFunction(() => window.VJ && VJ.app && VJ.media && VJ.media.status === 'playing', null, { timeout: 15000 });
   assert.equal(await page.evaluate(() => VJ.app.settings.overlay.mediaKind), 'video');
-  // 本番前チェック：動画の中の点滅は制限できない、の注意
+  // 本番前チェック：映像の中の点滅（多いときは自動で濃さを下げるが、近似なので事前に確かめる）の注意
   await page.click('#btn-precheck');
-  await page.waitForFunction(() => /動画の中の点滅/.test(document.getElementById('precheck').textContent));
+  await page.waitForFunction(() => /映像の中の点滅/.test(document.getElementById('precheck').textContent));
   assert.deepEqual(errors, []);
   await page.close();
 });

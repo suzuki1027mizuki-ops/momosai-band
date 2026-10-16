@@ -27,18 +27,20 @@ const WEIRD = [
 
 const pickOf = (r, list) => list[Math.floor(r() * list.length)];
 
-/** 設定のうち、値を差し替える場所（入れ子は 'overlay.imageFit' のように） */
-function paths(D) {
-  const out = [];
-  for (const k of Object.keys(D)) {
-    const v = D[k];
-    if (v && typeof v === 'object' && !Array.isArray(v) && ['output', 'net', 'osc', 'dmx', 'overlay'].includes(k)) {
-      for (const kk of Object.keys(v)) out.push([k, kk]);
-      out.push([k]);
-    } else out.push([k]);
-  }
-  return out;
-}
+/** 設定のうち、値を差し替える場所（入れ子は 'overlay.imageFit' のように）。今の答えを作ったときの項目に固定する
+ *  （設定の項目が増えても、乱数で選ぶ場所がずれて別の 200 通りにならないように。新しい項目は schema.test.mjs などで確かめる） */
+const PATHS = ['v', 'bandName', 'endText', 'setlistText', 'deviceId', 'deviceLabel', 'channel', 'auto', 'autoFlash', 'toast', 'sensitivity', 'master',
+  'paletteIdx', 'customPalette', 'desynchronized', 'latencySquare', 'monitor', 'maxScale', 'profile', 'gateDb', 'noFlash', 'flashLimit', 'intensity',
+  'paletteAuto', 'react', 'autoScenes', 'fpsCap', 'messages', 'countdownTo', 'logo', 'logoMode', 'logoCorner',
+  'output.rotate', 'output.flipH', 'output.flipV', 'output.size', 'output.x', 'output.y', 'output', 'autoStart', 'lastSource', 'sceneParams',
+  'speechTitle', 'demoKind', 'lang', 'crossfade', 'transition', 'midiMap', 'net.enabled', 'net.url', 'net',
+  'osc.enabled', 'osc.host', 'osc.port', 'osc.rate', 'osc', 'dmx.enabled', 'dmx.out', 'dmx.host', 'dmx.universe', 'dmx.type', 'dmx.count',
+  'dmx.start', 'dmx.max', 'dmx.pulse', 'dmx.flash', 'dmx', 'bands', 'bandIdx', 'bandPalette', 'overlayOn', 'ovSceneOn',
+  'overlay.mediaKind', 'overlay.libId', 'overlay.cameraId', 'overlay.cameraLabel', 'overlay.cameraMirror', 'overlay.image', 'overlay.imageFit',
+  'overlay.imageBlend', 'overlay.imageOpacity', 'overlay.videoKey', 'overlay.videoName', 'overlay.videoLoop', 'overlay.videoSound', 'overlay.scene',
+  'overlay.sceneBlend', 'overlay.sceneOpacity', 'overlay.textOn', 'overlay.clock', 'overlay.band', 'overlay.song', 'overlay.text', 'overlay.corner',
+  'overlay.textSize', 'overlay.textOpacity', 'overlay', 'mediaLib', 'cues', 'guide', 'panelFold', 'panelHelp'];
+const paths = () => PATHS.map((p) => p.split('.'));
 
 function setPath(o, p, v) {
   if (p.length === 1) { o[p[0]] = v; return; }

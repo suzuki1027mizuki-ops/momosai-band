@@ -22,6 +22,14 @@
       };
       bindIn('net-on', 'net', 'enabled');
       bindIn('net-url', 'net', 'url', (v) => v.trim());
+      // スマホの許可・断る・外す（2 画面のときは、ブリッジにつないでいる出力ウィンドウへ）
+      $('net-phones').addEventListener('click', (e) => {
+        const b = e.target.closest('button[data-act]');
+        if (!b) return;
+        const [name, args] = b.dataset.act === 'forget' ? ['forget', [b.dataset.id]] : ['approve', [b.dataset.id, b.dataset.act === 'approve']];
+        if (VJ.link.role === 'control') VJ.link.send({ t: 'cmd', target: 'net', name, args });
+        else VJ.net[name](...args);
+      });
       bindIn('osc-on', 'osc', 'enabled');
       bindIn('osc-host', 'osc', 'host', (v) => v.trim());
       bindIn('osc-port', 'osc', 'port', (v) => Math.max(1, Math.min(65535, Math.round(+v) || 9001)));
@@ -90,10 +98,34 @@
         el.className = 'status warn';
         el.textContent = n.status === 'connecting' ? t('接続中…') : t('ブリッジが見つかりません（起動しているか、アドレスを確認）。2 秒ごとに再接続します');
       }
+      panel.renderPhones(s.net && s.net.enabled && n.status === 'on' ? n.info : null);
       const m = io.dmx || { status: 'off' };
       const label = { off: t('使っていません'), on: t('送信中（{0} フレーム）', m.sent), 'wait-bridge': t('ブリッジにつながるのを待っています（Art-Net はブリッジ経由）'), 'no-port': t('「USB-DMX を選ぶ」を押してください'), error: t('エラー：') + (m.error || '') };
       $('dmx-status').textContent = d.enabled ? label[m.status] || m.status : t('使っていません');
       $('dmx-status').className = 'status ' + (!d.enabled ? '' : m.status === 'on' ? 'ok' : m.status === 'error' ? 'bad' : 'warn');
+    },
+
+    /** スマホの許可待ち・許可したスマホ（ブリッジの info）。変わったときだけ描き直す（押している途中のボタンを消さないように）。
+     *  機種の名前はスマホから来る文字なので、必ずエスケープする（html`…`） */
+    renderPhones(info) {
+      const el = $('net-phones');
+      const sig = JSON.stringify(info ? [info.trusted, info.pending, info.devices, VJ.i18n.lang] : null);
+      if (sig === panel._phonesSig) return;
+      panel._phonesSig = sig;
+      const { html, raw } = VJ.dom;
+      if (!info) { VJ.dom.set(el, ''); el.hidden = true; return; }
+      el.hidden = false;
+      let out = '';
+      if (!info.trusted) out += html`<div class="hint">${t('鍵つきのアドレス（ブリッジの画面に出ている /vj?k=… ）でつなぐと、新しいスマホを VJ 側で許可できます。いまは暗証番号だけで入れます')}</div>`;
+      for (const p of info.pending || []) {
+        out += html`<div class="row phone-req"><span>${t('📱 {0}（{1}）がつなごうとしています', p.name, p.addr)}</span>`
+          + html`<button data-act="approve" data-id="${p.id}">${t('許可')}</button><button data-act="deny" data-id="${p.id}">${t('断る')}</button></div>`;
+      }
+      if ((info.devices || []).length) {
+        out += html`<div class="row"><span class="hint">${t('許可したスマホ')}</span></div>`;
+        for (const d of info.devices) out += html`<div class="row" data-online="${d.online ? 1 : 0}"><span>${d.name}</span><span class="hint">${d.online ? t('つながっています') : t('つながっていません')}</span><button data-act="forget" data-id="${d.id}">${t('外す')}</button></div>`;
+      }
+      VJ.dom.set(el, raw(out));
     },
 
     async enableMidi() {

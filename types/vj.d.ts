@@ -37,6 +37,12 @@ interface VJNamespace {
     limitConfig(n: number): FlashLimitConfig;
     overSafe(n: number): boolean;
     SAFE: number;
+    FlashMeter: new (n: number, thr?: number) => { push(t: number, values: ArrayLike<number>): void; transitions(): number; reset(): void };
+    OverlayGuard: new (regions?: number) => {
+      g: number; target: number; alerts: number; strong: boolean; lastT: number;
+      setLimit(n: number, noFlash: boolean): void; reset(): void;
+      push(t: number, lum: ArrayLike<number>, alpha: number): void; gain(dt: number): number; state(): '' | 'dim' | 'strong';
+    };
   };
 }
 

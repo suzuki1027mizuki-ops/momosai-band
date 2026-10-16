@@ -364,7 +364,11 @@ test('2 画面：出力側で変わった設定を、操作側のほかの変更
 });
 
 test('チェックボックスやスライダーを触った直後でもショーのキーが効く（スライダーの矢印は微調整に使える）', async () => {
-  await page.evaluate(() => { VJ.panel.toggle(true); document.querySelectorAll('#panel details').forEach((d) => { d.open = true; }); });
+  await page.evaluate(() => {
+    VJ.panel.toggle(true);
+    document.querySelectorAll('#panel details').forEach((d) => { d.open = true; });
+    if (!VJ.app.settings.panelAdvanced) VJ.sections.toggleAdvanced(); // 遅延計測用の四角は拡張機能（ふだんは隠れている）
+  });
   // マウスでチェックボックスを押した直後：数字も Space もショーに効く
   await page.click('#opt-latsq');
   await page.waitForTimeout(50);
@@ -427,7 +431,8 @@ test('出力ウィンドウを再読み込みしても、曲の位置と音声�
   await out2.waitForFunction(() => window.VJ && VJ.app && VJ.link.role === 'output', null, { timeout: 30000 });
   await ctrl.waitForFunction(() => VJ.link.role === 'control' && VJ.app.show instanceof VJ.link.RemoteShow && !(VJ.link.local.show instanceof VJ.link.RemoteShow), null, { timeout: 5000 });
   await out2.close();
-  await ctrl.waitForFunction(() => VJ.link.role === 'solo' && !(VJ.app.show instanceof VJ.link.RemoteShow), null, { timeout: 5000 });
+  // 閉じたのに気づくのは 0.5 秒ごとの見張り。PC が重いと遅れるので、長めに待つ
+  await ctrl.waitForFunction(() => VJ.link.role === 'solo' && !(VJ.app.show instanceof VJ.link.RemoteShow), null, { timeout: 15000 });
   await ctrl.close();
 });
 

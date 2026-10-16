@@ -147,8 +147,10 @@
       const moving = ['video', 'capture'].filter((k) => used.has(k));
       if (moving.length) {
         const names = moving.map((k) => ({ video: t('動画ファイル'), capture: t('画面・タブの取り込み') }[k])).join(t('・'));
-        add('warn', t('メディアに{0}を使っています。動画の中の点滅はフラッシュの上限で制限できないので、事前に確認してください', names));
+        add('warn', t('メディアに{0}を使っています。映像の中の点滅が多いときは自動で濃さを下げますが、近似なので、事前に映像を確認してください', names));
       }
+      // カメラ：映る人（出演者・観客）に、撮影して投影することを知らせる
+      if (used.has('camera') || (s.overlayOn && ms.kind === 'camera')) add('info', t('カメラの映像を投影します。映る人（出演者・観客）に知らせ、同意を得てください（会場の掲示・アナウンス）'));
       if (s.overlayOn && baseKind === 'capture' && !ms.capture) add('warn', t('画面の取り込みが止まっています（⑤ のメディア）'));
       if (s.overlayOn && ms.kind === 'video' && (ms.status === 'missing' || ms.status === 'error')) add('bad', t('メディアの動画を読めません（⑤ で選び直す）'));
       if (s.overlayOn && ms.kind === 'image' && ms.status === 'missing') add('bad', t('メディアの画像を読めません（⑤ のメディアの一覧に入れ直す）'));

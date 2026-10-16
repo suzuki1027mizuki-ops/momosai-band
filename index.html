@@ -133,6 +133,13 @@ html.glass, html.glass body, html.glass #stage { background: transparent; }
 #panel .hint { color: var(--muted); font-size: 12.5px; line-height: 1.6; margin: 4px 0; }
 #panel .hint.help { border-left: 2px solid #3a3a64; padding-left: 8px; margin: 6px 0 10px; }
 #panel.nohelp .help { display: none; }
+/* 拡張機能（照明・OSC・MIDI の割り当て・シーンごとの調整・透過ウィンドウ・画質など）は「拡張機能を表示」のときだけ */
+#panel:not(.adv) [data-adv] { display: none !important; }
+#psec-live.on { background: var(--accent); color: #000; }
+/* ⑥ 本番の操作（マウスだけで本番に使えるように） */
+.live-ctl button { min-width: 4.5em; }
+.live-song { flex: 1; min-width: 6em; text-align: center; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live-ctl button.on { outline: 2px solid var(--accent); }
 #panel input[type=text], #panel input[type=number], #panel select, #panel textarea {
   background: var(--field); color: var(--text); border: 1px solid #44446a; border-radius: 7px; padding: 6px 8px; font: inherit; }
 #panel input[type=text], #panel textarea { width: 100%; }
@@ -320,7 +327,7 @@ body.remote-mode #stage { opacity: 0.25; }
     <div class="warnbox resume"><span id="resume-text"></span> <button id="btn-resume">前回の続きから再開</button> <button id="btn-resume-no">いいえ</button></div>
   </div>
   <div id="guide" class="guide" hidden></div>
-  <div class="row psec-all"><button id="psec-help" title="説明の文（左に線のある小さい字）を出す / 隠す">説明を隠す</button><button id="psec-open-all" title="①〜⑦ をすべて開く">すべて開く</button><button id="psec-close-all" title="①〜⑦ をすべて閉じる（見出しを押すと 1 つずつ開きます）">すべて閉じる</button></div>
+  <div class="row psec-all"><button id="psec-help" title="説明の文（左に線のある小さい字）を出す / 隠す">説明を隠す</button><button id="psec-open-all" title="①〜⑦ をすべて開く">すべて開く</button><button id="psec-close-all" title="①〜⑦ をすべて閉じる（見出しを押すと 1 つずつ開きます）">すべて閉じる</button><button id="psec-live" title="⑥ 本番だけを開いて、ほかを閉じる（もう一度押すと元に戻す）" aria-pressed="false">本番だけ表示</button><button id="psec-adv" title="照明・OSC・MIDI の割り当て・シーンごとの調整・透過ウィンドウ・画質などを出す / 隠す">拡張機能を表示</button></div>
 
   <section class="psec" data-sec="1">
   <h2><button type="button" class="psec-btn" aria-expanded="true">① 音声入力</button></h2>
@@ -580,7 +587,7 @@ body.remote-mode #stage { opacity: 0.25; }
       </select>
     </div>
     <div class="row"><span>濃さ</span><input type="range" id="ov-imgop" min="0" max="1" step="0.05"><span id="ov-imgop-v"></span></div>
-    <div class="warnbox" id="ov-vwarn" hidden>⚠ 動画・取り込んだ画面の中の点滅は、このソフトでは制限できません（フラッシュの上限は効きません）。強い点滅のある動画は使わないでください。</div>
+    <div class="warnbox" id="ov-vwarn" hidden>⚠ 動画・取り込んだ画面・カメラの中の点滅が多いときは、自動で濃さを下げます（光過敏対策。近似なので完全ではありません）。強い点滅のある映像は使わないでください。</div>
   </details>
   <details id="medialib-box">
     <summary>メディアの一覧（曲ごと・キューで切り替える）</summary>
@@ -625,9 +632,9 @@ body.remote-mode #stage { opacity: 0.25; }
     <div class="row"><span>文字の濃さ</span><input type="range" id="ov-textop" min="0" max="1" step="0.05"><span id="ov-textop-v"></span></div>
   </details>
   <div class="hint help">テストパターン（G）の間は、メディア・シーン・文字のオーバーレイを出しません。</div>
-  <div class="row" id="glass-row" hidden><button id="btn-glass">ほかの画面の上に重ねて表示（透過ウィンドウ）</button></div>
-  <div class="hint help" id="glass-hint">VJ の映像を透かして、ほかの画面（スライド・動画プレーヤーなど）の上に重ねて表示するのは、単体アプリ版でできます（ブラウザではウィンドウを透明にできません）。</div>
-  <details id="scene-adjust">
+  <div class="row" id="glass-row" data-adv hidden><button id="btn-glass">ほかの画面の上に重ねて表示（透過ウィンドウ）</button></div>
+  <div class="hint help" id="glass-hint" data-adv>VJ の映像を透かして、ほかの画面（スライド・動画プレーヤーなど）の上に重ねて表示するのは、単体アプリ版でできます（ブラウザではウィンドウを透明にできません）。</div>
+  <details id="scene-adjust" data-adv>
     <summary>シーンごとの調整（量・大きさ・速さなど）</summary>
     <div class="row"><select id="sp-scene"></select><label><input type="checkbox" id="sp-follow" checked> 表示中のシーンに合わせる</label></div>
     <div id="sp-params"></div>
@@ -639,26 +646,26 @@ body.remote-mode #stage { opacity: 0.25; }
     <div class="row" id="auto-scenes"></div>
     <div class="row"><span>無音とみなす音量</span><input type="range" id="opt-gate" min="-80" max="-20" step="1"><span id="opt-gate-v"></span></div>
     <div class="hint help">会場のざわざわで反応してしまうときは右へ（大きく）。小さい音に反応しないときは左へ。</div>
-    <div class="row"><span>画質上限</span><input type="range" id="opt-scale" min="0.4" max="1" step="0.05"><span id="opt-scale-v"></span></div>
-    <div class="row">
+    <div class="row" data-adv><span>画質上限</span><input type="range" id="opt-scale" min="0.4" max="1" step="0.05"><span id="opt-scale-v"></span></div>
+    <div class="row" data-adv>
       <span>フレームレート</span>
       <select id="opt-fps"><option value="0">制限なし（推奨）</option><option value="30">30fps（非力な PC 向け）</option></select>
     </div>
     <div class="row">
       <label><input type="checkbox" id="opt-toast"> キー操作を画面に小さく表示</label>
-      <label><input type="checkbox" id="opt-latsq"> 遅延計測用の四角（右下）</label>
+      <label data-adv><input type="checkbox" id="opt-latsq"> 遅延計測用の四角（右下）</label>
     </div>
     <div class="row">
       <label><input type="checkbox" id="opt-autostart"> 起動したら前回の入力で自動的に開始（展示・BGM 用）</label>
     </div>
-    <div class="row">
+    <div class="row" data-adv>
       <label><input type="checkbox" id="opt-desync"> 低遅延描画（desynchronized・要再読み込み）</label>
     </div>
     <div class="row">
       <button id="btn-midi">MIDI コントローラを使う</button>
       <span class="hint" id="midi-status">パッドのノート 36〜41＝シーン1〜6、43＝フラッシュ、44＝暗転（下で変えられます）</span>
     </div>
-    <details id="midi-map-box">
+    <details id="midi-map-box" data-adv>
       <summary>MIDI の割り当てを変える（学習）</summary>
       <div class="hint help">「学習」を押してから、割り当てたいパッド・ボタン・つまみを動かします。</div>
       <div id="midi-map" class="midimap"></div>
@@ -678,6 +685,10 @@ body.remote-mode #stage { opacity: 0.25; }
   <div class="row"><button id="btn-precheck">本番前チェック</button></div>
   <div id="precheck" class="scbox" hidden></div>
   <button class="big" id="btn-show">ショー開始（全画面）</button>
+  <div class="row"><b class="sub">本番の操作</b><span class="hint">キーと同じ動き（ロック中は暗転だけ）</span></div>
+  <div class="row live-ctl"><button data-key="prevSong" title="前の曲（←）">◀ 曲</button><span class="live-song" id="live-song" data-i18n-skip></span><button data-key="nextSong" title="次の曲（→）">曲 ▶</button></div>
+  <div class="row live-ctl"><button data-key="blackout" id="live-black" title="暗転（B）">暗転</button><button data-key="flash" title="フラッシュ（Space）">フラッシュ</button><button data-key="auto" id="live-auto" title="オート（A）">オート</button><button data-key="overlay" id="live-media" title="メディアを出す / 消す（O）">メディア</button></div>
+  <div class="row live-ctl"><button data-key="msg1" title="テロップ 1（Q）">テロップ 1</button><button data-key="msg2" title="テロップ 2（W）">テロップ 2</button><button data-key="msg3" title="テロップ 3（E）">テロップ 3</button><button data-key="band" title="次のバンド（N。演奏中は 2 回押す）">次のバンド</button></div>
   <div class="hint help" data-i18n-html>全画面・スリープ防止・Esc 長押しでのみ解除、がまとめて有効になります。<b>H</b> でキー一覧、<b>M</b> でこのパネル。</div>
   <div class="row"><b class="sub">シーン</b><span class="hint">クリックで切替（次のビートで。もう一度押すとすぐ）</span></div>
   <div class="scene-grid" id="scene-grid"></div>
@@ -698,16 +709,17 @@ body.remote-mode #stage { opacity: 0.25; }
   <div class="hint help" data-i18n-html>スマホからの操作・OSC・Art-Net には「ブリッジ」が要ります。単体アプリには入っています。ブラウザ版は <code>bridge</code> フォルダの起動ファイル（Node.js が必要）で起動します。</div>
   <div class="row"><label><input type="checkbox" id="net-on"> ブリッジにつなぐ</label><input type="text" id="net-url" spellcheck="false" style="flex: 1; width: auto"></div>
   <div class="status" id="net-status">つないでいません</div>
+  <div id="net-phones" hidden></div>
   <div class="row"><button id="btn-qr" hidden>スマホ用の QR コードを表示</button></div>
   <div id="net-qr" class="qrbox" hidden></div>
-  <details>
+  <details data-adv>
     <summary>OSC（照明卓・TouchDesigner・Resolume など）</summary>
     <div class="hint help" data-i18n-html>受信：ブリッジの UDP <b id="osc-in">9000</b> 番。<code>/vj/scene 3</code>・<code>/vj/flash</code>・<code>/vj/blackout 1</code>・<code>/vj/next</code>・<code>/vj/master 0.8</code> など（手順書参照）</div>
     <div class="row"><label><input type="checkbox" id="osc-on"> 音の特徴量を送る</label></div>
     <div class="row"><span>送り先</span><input type="text" id="osc-host" spellcheck="false" style="width: 10em"><span>ポート</span><input type="number" id="osc-port" min="1" max="65535" style="width: 6em">
       <select id="osc-rate"><option value="30">30 回/秒</option><option value="60">60 回/秒</option><option value="15">15 回/秒</option></select></div>
   </details>
-  <details>
+  <details data-adv>
     <summary>照明（DMX）</summary>
     <div class="row">
       <label><input type="checkbox" id="dmx-on"> 照明を映像に合わせて光らせる</label>

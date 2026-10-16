@@ -51,6 +51,51 @@
     return false;
   }
 
+  /** 操作の名前 → 動き。キーとパネルの「本番の操作」のボタンの両方から使う（動きを二重に書かない）。
+   *  shift：Shift を押していたか（前へ・2 段目など） */
+  const ACTIONS = {
+    nextSong: (app) => app.show.nextSong(),
+    prevSong: (app) => app.show.prevSong(),
+    flash: (app) => app.show.flash(0.85, 'key') || app.ui.toast(VJ.t('フラッシュ制限中（光過敏対策）'), 'warn'),
+    strobe: (app) => app.show.setStrobe(true),
+    blackout: (app) => app.show.toggleBlackout(),
+    palette: (app, shift) => app.show.cyclePalette(shift ? -1 : 1),
+    up: (app, shift) => (shift ? app.show.nudgeMaster(1) : app.show.nudgeSensitivity(1)),
+    down: (app, shift) => (shift ? app.show.nudgeMaster(-1) : app.show.nudgeSensitivity(-1)),
+    auto: (app) => app.show.toggleAuto(),
+    songTitle: (app) => app.show.showSongTitle(),
+    band: (app, shift) => { if (VJ.bandsUI) VJ.bandsUI.step(shift ? -1 : 1); },
+    tap: (app) => app.show.tap(),
+    msg1: (app) => app.show.toggleMessage(0),
+    msg2: (app) => app.show.toggleMessage(1),
+    msg3: (app) => app.show.toggleMessage(2),
+    test: (app) => app.show.toggleTestPattern(),
+    overlay: (app, shift) => (shift ? app.show.toggleSceneOverlay() : app.show.toggleOverlay()),
+    fullscreen: (app) => app.ui.enterFullscreen(),
+    hud: (app) => app.ui.toggleHud(),
+    help: (app) => app.ui.toggleHelp(),
+    panel: (app) => app.ui.togglePanel(),
+    lock: (app) => app.show.lock(),
+    resetHint: (app) => app.ui.toast(VJ.t('R を 2 秒長押しでソフトリセット')),
+    close: (app) => app.ui.closeOverlays(),
+  };
+  const CODE_ACTION = {
+    ArrowRight: 'nextSong', ArrowLeft: 'prevSong', Space: 'flash', KeyS: 'strobe', KeyB: 'blackout', KeyC: 'palette',
+    ArrowUp: 'up', ArrowDown: 'down', KeyA: 'auto', KeyT: 'songTitle', KeyN: 'band', Enter: 'tap', NumpadEnter: 'tap',
+    KeyQ: 'msg1', KeyW: 'msg2', KeyE: 'msg3', KeyG: 'test', KeyO: 'overlay', KeyF: 'fullscreen', KeyD: 'hud', KeyH: 'help',
+    KeyM: 'panel', KeyL: 'lock', KeyR: 'resetHint', Escape: 'close',
+  };
+
+  /** 操作を 1 つ行う（パネルのボタンから）。ロック中は暗転だけ（キーと同じ）。行ったら true */
+  function run(app, name, shift) {
+    const fn = ACTIONS[name];
+    if (!fn) return false;
+    if (app.show.state.locked && name !== 'blackout') { app.ui.toast(VJ.t('ロック中（L 長押しで解除 / B は暗転）'), 'warn'); return false; }
+    fn(app, !!shift);
+    if (app.onAction) app.onAction(name);
+    return true;
+  }
+
   /**
    * @param app { show, ui: {toggleHud, toggleHelp, togglePanel, closeOverlays, enterFullscreen, softReset} }
    */
@@ -93,30 +138,7 @@
       const sceneId = sceneForKey(code, shift);
       if (/^(?:Digit|Numpad)\d$/.test(code) && !sceneId) ui.toast(VJ.t('このキーにはシーンがありません'), 'warn');
       else if (sceneId) show.selectScene(sceneId, { immediate: code.endsWith('0') });
-      else if (code === 'ArrowRight') show.nextSong();
-      else if (code === 'ArrowLeft') show.prevSong();
-      else if (code === 'Space') show.flash(0.85, 'key') || ui.toast(VJ.t('フラッシュ制限中（光過敏対策）'), 'warn');
-      else if (code === 'KeyS') show.setStrobe(true);
-      else if (code === 'KeyB') show.toggleBlackout();
-      else if (code === 'KeyC') show.cyclePalette(shift ? -1 : 1);
-      else if (code === 'ArrowUp') (shift ? show.nudgeMaster(1) : show.nudgeSensitivity(1));
-      else if (code === 'ArrowDown') (shift ? show.nudgeMaster(-1) : show.nudgeSensitivity(-1));
-      else if (code === 'KeyA') show.toggleAuto();
-      else if (code === 'KeyT') show.showSongTitle();
-      else if (code === 'KeyN') { if (VJ.bandsUI) VJ.bandsUI.step(shift ? -1 : 1); }
-      else if (code === 'Enter' || code === 'NumpadEnter') show.tap();
-      else if (code === 'KeyQ') show.toggleMessage(0);
-      else if (code === 'KeyW') show.toggleMessage(1);
-      else if (code === 'KeyE') show.toggleMessage(2);
-      else if (code === 'KeyG') show.toggleTestPattern();
-      else if (code === 'KeyO') { if (shift) show.toggleSceneOverlay(); else show.toggleOverlay(); }
-      else if (code === 'KeyF') ui.enterFullscreen();
-      else if (code === 'KeyD') ui.toggleHud();
-      else if (code === 'KeyH') ui.toggleHelp();
-      else if (code === 'KeyM') ui.togglePanel();
-      else if (code === 'KeyL') show.lock();
-      else if (code === 'KeyR') ui.toast(VJ.t('R を 2 秒長押しでソフトリセット'));
-      else if (code === 'Escape') ui.closeOverlays();
+      else if (CODE_ACTION[code]) ACTIONS[CODE_ACTION[code]](app, shift);
       else handled = false;
       if (handled) { e.preventDefault(); if (app.onAction) app.onAction(code); }
     };
@@ -130,5 +152,5 @@
     return { handle, up };
   }
 
-  VJ.keys = { install, sceneForKey, KEY_HELP, forForm };
+  VJ.keys = { install, run, sceneForKey, KEY_HELP, forForm, ACTIONS, CODE_ACTION };
 })(globalThis.VJ = globalThis.VJ || {});

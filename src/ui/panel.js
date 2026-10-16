@@ -221,6 +221,8 @@
 
       // ⑥ 本番・再開
       $('btn-show').addEventListener('click', () => panel.startShow());
+      // 本番の操作：キーと同じ関数（keys.js の run。ロック中は暗転だけ）。2 画面でも、操作ウィンドウのキーと同じ道で届く
+      document.querySelectorAll('.live-ctl button[data-key]').forEach((b) => b.addEventListener('click', () => VJ.keys.run(app, b.dataset.key)));
       $('panel-close').addEventListener('click', () => panel.toggle(false));
       $('btn-resume').addEventListener('click', () => { app.show.restoreSession(panel._resume); $('resume-box').hidden = true; });
       $('btn-resume-no').addEventListener('click', () => { $('resume-box').hidden = true; });
@@ -307,7 +309,13 @@
       const key = (d) => (d.key ? d.key.replace('s', '⇧') + ' ' : '');
       set('ps-scene', (sc ? key(sc) + VJ.sceneName(sc) : '') + (pd ? ' → ' + VJ.sceneName(pd) : ''));
       const song = sh.currentSong ? sh.currentSong() : null;
-      set('ps-song', song ? `M${st.songIdx + 1} ${song.title}` : st.endState ? t('（終演）') : t('（開演前）'));
+      const songText = song ? `M${st.songIdx + 1} ${song.title}` : st.endState ? t('（終演）') : t('（開演前）');
+      set('ps-song', songText);
+      // ⑥ 本番の操作：いまの曲・暗転・オート・メディア
+      set('live-song', songText);
+      cls('live-black', 'on', st.blackout);
+      cls('live-auto', 'on', st.auto);
+      cls('live-media', 'on', app.settings.overlayOn);
     },
 
     applyShow(immediate) {

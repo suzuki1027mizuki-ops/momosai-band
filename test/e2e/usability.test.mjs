@@ -358,3 +358,114 @@ test('英語：新しい部品（ガイド・出演バンド・セットリス�
   assert.deepEqual(errors, []);
   await ctx.close();
 });
+
+test('拡張機能：ふだんは隠れていて、ボタンで出す・隠す（再読み込みしても残る）。使っている設定を読み込むと最初から出る', async () => {
+  const { page, errors } = await openApp(browser, DIST, 'test=1', { width: 1280, height: 900 });
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.waitForFunction(() => window.VJ && VJ.app && VJ.panel.app);
+  await page.click('#psec-open-all');
+  await page.evaluate(() => document.querySelectorAll('#panel details').forEach((d) => { d.open = true; }));
+  const vis = () => page.evaluate(() => ['scene-adjust', 'opt-scale', 'opt-fps', 'opt-latsq', 'opt-desync', 'midi-map-box', 'osc-on', 'dmx-on', 'opt-gate', 'btn-export', 'net-on']
+    .map((id) => { const el = document.getElementById(id); return !!el && !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length); }));
+  // 隠れる：シーンごとの調整・画質・フレームレート・遅延計測の四角・低遅延描画・MIDI の割り当て・OSC・照明。残る：無音の音量・書き出し・ブリッジ
+  assert.deepEqual(await vis(), [false, false, false, false, false, false, false, false, true, true, true]);
+  assert.match(await page.textContent('#psec-adv'), /拡張機能を表示/);
+  await page.click('#psec-adv');
+  assert.deepEqual(await vis(), [true, true, true, true, true, true, true, true, true, true, true]);
+  assert.match(await page.textContent('#psec-adv'), /拡張機能を隠す/);
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('momosai-vj/v1') || '{}').panelAdvanced === true);
+  await page.reload();
+  await page.waitForFunction(() => window.VJ && VJ.app && VJ.panel.app);
+  assert.equal(await page.evaluate(() => document.getElementById('panel').classList.contains('adv')), true, '再読み込みしても出たまま');
+  // 隠しても設定は変わらない
+  await page.click('#psec-adv');
+  const before = await page.evaluate(() => JSON.stringify([VJ.app.settings.osc, VJ.app.settings.dmx, VJ.app.settings.fpsCap]));
+  assert.equal(await page.evaluate(() => VJ.app.settings.panelAdvanced), false);
+  assert.equal(await page.evaluate(() => JSON.stringify([VJ.app.settings.osc, VJ.app.settings.dmx, VJ.app.settings.fpsCap])), before);
+  // 照明を使っている設定を読み込む → 最初から出る
+  await page.evaluate(() => {
+    const s = VJ.storage.fromJSON(JSON.stringify(Object.assign({}, VJ.app.settings, { dmx: Object.assign({}, VJ.app.settings.dmx, { enabled: true }), panelAdvanced: false })));
+    VJ.panel.replaceSettings(s);
+  });
+  assert.equal(await page.evaluate(() => [VJ.app.settings.panelAdvanced, document.getElementById('panel').classList.contains('adv')].join()), 'true,true');
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test('本番だけ表示：⑥ だけを開き、もう一度で元の開き方に戻る。見出しを手で開けたら、その開き方のまま抜ける', async () => {
+  const { page, errors } = await openApp(browser, DIST, 'test=1', { width: 1280, height: 900 });
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.waitForFunction(() => window.VJ && VJ.app && VJ.panel.app);
+  const open = () => page.evaluate(() => [...document.querySelectorAll('#panel .psec')].filter((s) => !s.classList.contains('closed')).map((s) => s.dataset.sec).join(''));
+  await page.click('#panel .psec[data-sec="2"] .psec-btn'); // ② を閉じておく
+  assert.equal(await open(), '134567');
+  await page.click('#psec-live');
+  assert.equal(await open(), '6');
+  assert.equal(await page.getAttribute('#psec-live', 'aria-pressed'), 'true');
+  await page.click('#psec-live');
+  assert.equal(await open(), '134567', '元の開き方に戻る');
+  await page.click('#psec-live');
+  await page.click('#panel .psec[data-sec="1"] .psec-btn'); // 手で ① を開く → 本番だけ表示を抜ける
+  assert.equal(await open(), '16');
+  assert.equal(await page.getAttribute('#psec-live', 'aria-pressed'), 'false');
+  assert.equal(await page.evaluate(() => VJ.app.settings.panelLive), false);
+  await page.click('#psec-live');
+  await page.click('#psec-live');
+  assert.equal(await open(), '16', '抜けたあとの開き方が「元」になる');
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test('本番の操作（⑥）：キーと同じ動き。曲・暗転・オート・メディア・テロップ。ロック中は暗転だけ', async () => {
+  const { page, errors } = await openApp(browser, DIST, 'test=1', { width: 1280, height: 900 });
+  await page.evaluate(() => { localStorage.clear(); });
+  await page.reload();
+  await page.waitForFunction(() => window.VJ && VJ.app && VJ.panel.app);
+  await page.evaluate(() => { const s = VJ.app.settings; s.setlistText = 'Alpha | 1\nBeta | 2'; s.messages[0] = 'Hello'; VJ.panel.replaceSettings(s); });
+  const live = (k) => page.click(`.live-ctl button[data-key="${k}"]`);
+  await live('nextSong');
+  await page.waitForFunction(() => /^M1 Alpha/.test(document.getElementById('live-song').textContent));
+  await live('nextSong');
+  await page.waitForFunction(() => VJ.app.show.state.songIdx === 1);
+  await live('prevSong');
+  await page.waitForFunction(() => VJ.app.show.state.songIdx === 0);
+  await live('blackout');
+  await page.waitForFunction(() => VJ.app.show.state.blackout && document.getElementById('live-black').classList.contains('on'));
+  await live('blackout');
+  const auto0 = await page.evaluate(() => VJ.app.show.state.auto);
+  await live('auto');
+  assert.equal(await page.evaluate(() => VJ.app.show.state.auto), !auto0);
+  const ov0 = await page.evaluate(() => VJ.app.settings.overlayOn);
+  await live('overlay');
+  assert.equal(await page.evaluate(() => VJ.app.settings.overlayOn), !ov0);
+  await live('msg1');
+  assert.equal(await page.evaluate(() => VJ.app.show.state.msg && VJ.app.show.state.msg.text), 'Hello');
+  // ロック中：暗転だけ効く
+  await page.evaluate(() => VJ.app.show.lock());
+  await live('nextSong');
+  assert.equal(await page.evaluate(() => VJ.app.show.state.songIdx), 0, 'ロック中は曲を送らない');
+  await live('blackout');
+  assert.equal(await page.evaluate(() => VJ.app.show.state.blackout), true, 'ロック中も暗転は効く');
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test('本番の操作（⑥）：2 画面のとき、操作ウィンドウのボタンが出力ウィンドウに効く', async () => {
+  const { page: ctrl } = await openApp(browser, DIST, 'test=1', { width: 1280, height: 900 });
+  await ctrl.evaluate(() => { localStorage.clear(); });
+  await ctrl.reload();
+  await ctrl.waitForFunction(() => window.VJ && VJ.app && VJ.panel.app);
+  await ctrl.evaluate(() => { const s = VJ.app.settings; s.setlistText = 'Alpha | 1\nBeta | 2'; VJ.panel.replaceSettings(s); });
+  const [out] = await Promise.all([ctrl.context().waitForEvent('page'), ctrl.click('#btn-output')]);
+  await out.waitForFunction(() => window.VJ && VJ.app && VJ.app.renderer && VJ.link.role === 'output', null, { timeout: 30000 });
+  await ctrl.waitForFunction(() => VJ.link.role === 'control' && VJ.link.lastStatus, null, { timeout: 15000 });
+  await ctrl.click('.live-ctl button[data-key="nextSong"]');
+  await out.waitForFunction(() => VJ.app.show.state.songIdx === 0, null, { timeout: 5000 });
+  await ctrl.click('.live-ctl button[data-key="blackout"]');
+  await out.waitForFunction(() => VJ.app.show.state.blackout === true, null, { timeout: 5000 });
+  await ctrl.waitForFunction(() => document.getElementById('live-black').classList.contains('on'), null, { timeout: 5000 });
+  await out.close();
+  await ctrl.close();
+});

@@ -204,6 +204,9 @@
       else if (s.overlay.mediaKind === 'lib' || st.song) txt = st.song ? t('この曲はメディアを出しません（m:off）') : t('一覧から出すメディアを選んでください');
       // 曲の指定（m:…）・一覧から出しているときは、その名前も
       if (s.overlayOn && st.name) txt = (st.song ? t('曲の指定：{0}', st.name) : t('一覧：{0}', st.name)) + (txt ? ' — ' + txt : '');
+      // 点滅の見張り（動画・取り込み・カメラ）
+      const guard = s.overlayOn ? ({ dim: t('映像の点滅が多いので、濃さを下げています（光過敏対策）'), strong: t('映像に強い点滅があります（フラッシュの上限が「制限なし」なので下げていません）'), off: t('この環境では、映像の点滅を見張れません') })[st.guard] : '';
+      if (guard) txt = (txt ? txt + ' — ' : '') + guard;
       if ($('ov-status').textContent !== txt) $('ov-status').textContent = txt;
       $('ov-play').hidden = kind !== 'video';
       if ($('ov-play').hidden && txt && s.overlayOn) {

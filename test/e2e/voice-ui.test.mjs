@@ -51,7 +51,8 @@ test('シーンの調整：値で描画が変わり、パネルのスライダ�
   assert.ok(hi > lo * 1.3, `low ${lo} high ${hi}`);
   // パネル
   const p2 = await openApp(browser, DIST, '', { width: 1280, height: 900 });
-  await p2.page.evaluate(() => { document.getElementById('scene-adjust').open = true; VJ.app.show.selectScene('eq', { immediate: true }); });
+  // シーンごとの調整・MIDI の割り当ては拡張機能（ふだんは隠れている）
+  await p2.page.evaluate(() => { if (!VJ.app.settings.panelAdvanced) VJ.sections.toggleAdvanced(); document.getElementById('scene-adjust').open = true; VJ.app.show.selectScene('eq', { immediate: true }); });
   await p2.page.waitForFunction(() => document.getElementById('sp-scene').value === 'eq' && document.querySelectorAll('#sp-params input').length === 2);
   await p2.page.evaluate(() => { const i = document.querySelector('#sp-params input[data-i="1"]'); i.value = '0.6'; i.dispatchEvent(new Event('input')); });
   assert.deepEqual(await p2.page.evaluate(() => VJ.app.settings.sceneParams.eq), [1, 0.6]);

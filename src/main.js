@@ -73,6 +73,7 @@
       app.renderer.setLogo(s.logo);
       VJ.media.sync(app); // メディアのオーバーレイ（画像・動画・画面の取り込み・カメラ）
       app.renderer.setMaxScale(s.maxScale);
+      app.renderer.setFlashGuard(s.flashLimit, s.noFlash); // 重ねた映像の点滅の見張り
       if (!app.paused) { VJ.net.apply(app); VJ.dmx.apply(app); }
       if (link.role === 'output' && VJ.i18n.resolve(s.lang) !== VJ.i18n.lang) VJ.i18n.setLang(VJ.i18n.resolve(s.lang));
     };
@@ -383,7 +384,7 @@
         // ヘッドレスのブラウザは 2 フレームに 1 回の間隔（33ms）がふつうに混じるので、それより長いものを数える）
         return {
           n: lat.length, expected: s.onsets.kick.length, median: lat[Math.floor(lat.length / 2)], mean, sd, max: lat[lat.length - 1],
-          frameInterval: iv[Math.floor(iv.length / 2)], frameP90: iv[Math.floor(iv.length * 0.9)], longFrames: iv.filter((x) => x > 50).length,
+          frameInterval: iv[Math.floor(iv.length / 2)], frameP90: iv[Math.floor(iv.length * 0.9)], longFrames: iv.filter((x) => x > 50).length, frames: iv.length,
           diag: engine.diagnostics(),
         };
       },

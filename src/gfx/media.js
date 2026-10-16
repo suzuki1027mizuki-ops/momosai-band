@@ -3,7 +3,7 @@
  *   video   動画ファイル（mediastore.js から読む）→ <video> → 毎フレームテクスチャへ
  *   capture 画面・タブの取り込み（getDisplayMedia。スライド・ほかのアプリなどを取り込む）→ 同上
  *   camera  カメラ（Web カメラ・キャプチャーボード。getUserMedia）→ 同上
- * 動画の中の点滅は、このソフトでは制限できない（パネルと本番前チェックで注意を出す）。
+ * 映像の中の点滅は、多いときに描画（renderer.js の見張り。safety.js の OverlayGuard）が濃さを下げる。
  * YouTube・ニコニコの埋め込みはやめた（埋め込みの規約で、プレーヤーの見た目を変える・ほかの映像と重ねる・
  * リンクを効かなくすることが禁じられていて、VJ の重ね方と両立しないため。2026-10-14）。 */
 (function (VJ) {
@@ -342,6 +342,8 @@
         size: v && v.videoWidth ? [v.videoWidth, v.videoHeight] : null,
         capture: !!media.stream, label: media.stream && media.stream.getVideoTracks()[0] ? media.stream.getVideoTracks()[0].label : '',
         camera: !!media.cam, cameraLabel: media.cam ? media.cam.label : '',
+        // 点滅の見張り（renderer.js）：'dim' 濃さを下げている / 'strong' 制限なしで強い点滅 / 'off' 見張れない
+        guard: v && app && app.renderer && app.renderer.ovGuardState ? app.renderer.ovGuardState() : '',
       };
     },
   };

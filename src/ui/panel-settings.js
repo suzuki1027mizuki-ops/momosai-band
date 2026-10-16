@@ -110,6 +110,7 @@
       panel.renderSceneParams(true);
       panel.syncOverlay();
       if (VJ.cuesUI) VJ.cuesUI.render(true);
+      VJ.sections.adopt(s); // 読み込んだ設定で拡張機能を使っていれば、パネルに出す
       VJ.sections.render();
       if ($('midi-map-box').open) panel.renderMidiMap();
       for (const [id, o, k] of [['net-on', 'net', 'enabled'], ['net-url', 'net', 'url'], ['osc-on', 'osc', 'enabled'], ['osc-host', 'osc', 'host'], ['osc-port', 'osc', 'port'], ['osc-rate', 'osc', 'rate'],

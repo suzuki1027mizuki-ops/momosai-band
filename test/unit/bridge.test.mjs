@@ -103,9 +103,15 @@ test('ブリッジ：スマホは暗証番号でつながり、操作が VJ に�
     assert.equal((await nextMessage(ph, (m) => m.t === 'auth')).ok, false);
     ph.send(JSON.stringify({ t: 'cmd', name: 'flash', args: [] }));
     await assert.rejects(nextMessage(vj, (m) => m.t === 'cmd', 300));
-    // 正しい暗証番号
-    ph.send(JSON.stringify({ t: 'auth', pin: '4321' }));
-    assert.equal((await nextMessage(ph, (m) => m.t === 'auth')).ok, true);
+    // 正しい暗証番号：鍵つきの VJ 本体がつながっているので、VJ 側で許可するまで待つ
+    ph.send(JSON.stringify({ t: 'auth', pin: '4321', name: 'Test Phone' }));
+    assert.deepEqual(await nextMessage(ph, (m) => m.t === 'auth'), { t: 'auth', ok: false, pending: true });
+    const req = (await nextMessage(vj, (m) => m.t === 'info' && m.pending.length)).pending[0];
+    assert.equal(req.name, 'Test Phone');
+    vj.send(JSON.stringify({ t: 'approve', id: req.id, ok: true }));
+    const okMsg = await nextMessage(ph, (m) => m.t === 'auth');
+    assert.equal(okMsg.ok, true);
+    assert.match(okMsg.token, /^[0-9a-f]{32}$/, '端末の鍵を渡す（次からは許可なしで入れる）');
     const got = nextMessage(vj, (m) => m.t === 'cmd');
     ph.send(JSON.stringify({ t: 'cmd', name: 'scene', args: ['orb'] }));
     assert.deepEqual(await got, { t: 'cmd', from: 'phone', name: 'scene', args: ['orb'] });
@@ -296,11 +302,15 @@ test('ブリッジ：VJ 本体に QR コード（暗証番号入り）を渡す�
     // 見本画像：形の正しいものだけ、つながっているスマホとあとからつながるスマホへ
     const ph = await open(`ws://127.0.0.1:${b.port}/phone`);
     ph.send(JSON.stringify({ t: 'auth', pin: '5678' }));
+    // 鍵つきの VJ 本体がいるので、許可してから
+    const approveNext = async () => { const r = (await nextMessage(vj, (m) => m.t === 'info' && m.pending.length)).pending[0]; vj.send(JSON.stringify({ t: 'approve', id: r.id, ok: true })); };
+    await approveNext();
     await nextMessage(ph, (m) => m.t === 'auth' && m.ok);
     vj.send(JSON.stringify({ t: 'thumbs', d: { ripple: 'data:image/webp;base64,AAAA', bad: 'javascript:alert(1)', 'x y': 'data:image/png;base64,AA' } }));
     assert.deepEqual((await nextMessage(ph, (m) => m.t === 'thumbs')).d, { ripple: 'data:image/webp;base64,AAAA' });
     const ph2 = await open(`ws://127.0.0.1:${b.port}/phone`);
     ph2.send(JSON.stringify({ t: 'auth', pin: '5678' }));
+    await approveNext();
     assert.deepEqual((await nextMessage(ph2, (m) => m.t === 'thumbs')).d, { ripple: 'data:image/webp;base64,AAAA' });
     for (const w of [vj, ph, ph2]) w.close();
   } finally {
@@ -390,4 +400,103 @@ test('照明（DMX）：パレットの色・音量・キックのチェイス�
   const big = VJ.dmx.config({ dmx: { type: 'drgbw', count: 128, start: 500 } });
   VJ.dmx.compute(show, f, big, 7, out);
   assert.equal(out.length, 512);
+});
+
+test('ブリッジ：暗証番号は既定で 6 けた。--pin で決めたものはそのまま', async () => {
+  const b = await startBridge({ port: 0, oscPort: false, host: '127.0.0.1' });
+  const b2 = await startBridge({ port: 0, oscPort: false, host: '127.0.0.1', pin: '1234' });
+  try {
+    assert.match(b.pin, /^\d{6}$/);
+    assert.equal(b2.pin, '1234');
+  } finally {
+    b.close(); b2.close();
+  }
+});
+
+test('ブリッジ：新しいスマホは鍵つきの VJ 本体で許可する。断る・外すもできる。鍵の無い VJ からの許可は効かない。鍵つきの VJ がいないときは暗証番号だけ', async () => {
+  const b = await startBridge({ port: 0, oscPort: false, pin: '246810', host: '127.0.0.1' });
+  const phone = async (extra) => {
+    const ws = await open(`ws://127.0.0.1:${b.port}/phone`);
+    ws.send(JSON.stringify(Object.assign({ t: 'auth', pin: '246810' }, extra || {})));
+    return [ws, await nextMessage(ws, (m) => m.t === 'auth')];
+  };
+  try {
+    // 鍵つきの VJ がいない：暗証番号だけで入れる（今までどおり）
+    const [p0, a0] = await phone();
+    assert.deepEqual(a0, { t: 'auth', ok: true });
+    p0.close();
+    // 鍵つきの VJ と、鍵の無い VJ（ほかのサイトの枠からも来られる）
+    const vj = await open(`ws://127.0.0.1:${b.port}/vj?k=${b.vjKey}`);
+    const anon = await open(`ws://127.0.0.1:${b.port}/vj`);
+    assert.equal((await nextMessage(vj, (m) => m.t === 'info')).approval, true);
+    const [p1, a1] = await phone({ name: 'A' });
+    assert.equal(a1.pending, true);
+    // 許可待ちのスマホの操作は届かない
+    p1.send(JSON.stringify({ t: 'cmd', name: 'flash', args: [] }));
+    await assert.rejects(nextMessage(vj, (m) => m.t === 'cmd', 300));
+    const ainfo = await nextMessage(anon, (m) => m.t === 'info');
+    assert.deepEqual([ainfo.pending, ainfo.devices], [[], []], '鍵の無い VJ には許可待ちを見せない');
+    const req = (await nextMessage(vj, (m) => m.t === 'info' && m.pending.length)).pending[0];
+    // 鍵の無い VJ からの許可は効かない
+    anon.send(JSON.stringify({ t: 'approve', id: req.id, ok: true }));
+    await assert.rejects(nextMessage(p1, (m) => m.t === 'auth', 300));
+    // 鍵つきの VJ が許可 → 入れて、操作が届く
+    vj.send(JSON.stringify({ t: 'approve', id: req.id, ok: true }));
+    const ok1 = await nextMessage(p1, (m) => m.t === 'auth');
+    assert.equal(ok1.ok, true);
+    const cmd = nextMessage(vj, (m) => m.t === 'cmd');
+    p1.send(JSON.stringify({ t: 'cmd', name: 'flash', args: [] }));
+    assert.equal((await cmd).name, 'flash');
+    p1.close();
+    // 鍵を持ってつなぎ直すと、許可なしで入れる
+    const [p2, a2] = await phone({ token: ok1.token });
+    assert.deepEqual(a2, { t: 'auth', ok: true });
+    const dev = (await nextMessage(vj, (m) => m.t === 'info' && m.devices.length && m.devices[0].online)).devices[0];
+    assert.equal(dev.name, 'A');
+    // 外す → 切れて、鍵でも入れない
+    vj.send(JSON.stringify({ t: 'forget', id: dev.id }));
+    assert.equal((await nextMessage(p2, (m) => m.t === 'auth')).denied, true);
+    const [p3, a3] = await phone({ token: ok1.token });
+    assert.equal(a3.pending, true, '外した端末の鍵では入れない（もう一度許可がいる）');
+    // 断る → 切れる
+    const req3 = (await nextMessage(vj, (m) => m.t === 'info' && m.pending.length)).pending[0];
+    vj.send(JSON.stringify({ t: 'approve', id: req3.id, ok: false }));
+    assert.equal((await nextMessage(p3, (m) => m.t === 'auth')).denied, true);
+    // 許可待ちのまま、鍵つきの VJ がいなくなった → 暗証番号だけで入れる
+    const [p4, a4] = await phone();
+    assert.equal(a4.pending, true);
+    vj.close();
+    assert.equal((await nextMessage(p4, (m) => m.t === 'auth')).ok, true);
+    for (const w of [anon, p4]) w.close();
+  } finally {
+    b.close();
+  }
+});
+
+test('ブリッジ：壊れた・途中で切れた・でたらめな WebSocket のフレーム（1 万件）でも落ちず、ほかの接続は使える', async () => {
+  const b = await startBridge({ port: 0, oscPort: false, pin: '1357', host: '127.0.0.1' });
+  try {
+    const r = (() => { let a = 99; return () => { a = (a * 1103515245 + 12345) & 0x7fffffff; return a / 0x7fffffff; }; })();
+    for (let round = 0; round < 20; round++) {
+      const { status, s } = await rawUpgrade(b.port, '/phone');
+      assert.match(status, /101/);
+      for (let i = 0; i < 500; i++) {
+        const n = Math.floor(r() * 40);
+        const buf = Buffer.alloc(n);
+        for (let k = 0; k < n; k++) buf[k] = Math.floor(r() * 256);
+        // ときどき、長さだけ大きいフレームの頭・マスクなしのフレームを混ぜる
+        if (i % 50 === 0) buf.set([0x81, 0xff, 0, 0, 0, 0, 0, 0xff, 0xff, 0xff].slice(0, n));
+        if (!s.destroyed) s.write(buf);
+      }
+      s.destroy();
+    }
+    await wait(200);
+    // ブリッジは生きていて、新しいスマホがつながる
+    const ws = await open(`ws://127.0.0.1:${b.port}/phone`);
+    ws.send(JSON.stringify({ t: 'auth', pin: '1357' }));
+    assert.equal((await nextMessage(ws, (m) => m.t === 'auth')).ok, true);
+    ws.close();
+  } finally {
+    b.close();
+  }
 });

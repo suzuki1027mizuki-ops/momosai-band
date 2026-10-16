@@ -17,6 +17,8 @@
   const np = () => (VJ.palettes ? VJ.palettes.length : 1);
   const DATA_IMAGE = /^data:image\//;
   const CORNERS = ['tl', 'tr', 'bl', 'br'];
+  /** 閉じている見出し { '3': true, ... }（①〜⑦） */
+  const cleanFold = (m) => { const o = {}; for (const [k, v] of Object.entries(m)) if (/^[1-9]$/.test(k) && v === true) o[k] = true; return o; };
 
   /** @type {Record<string, SettingSpec>} */
   const schema = {
@@ -136,8 +138,11 @@
     mediaLib: { list: true, clean: (a) => { if (!VJ.mediaLib) return a; const seen = new Set(); return a.map(VJ.mediaLib.clean).filter((x) => x && !seen.has(x.id) && seen.add(x.id)).slice(0, VJ.mediaLib.MAX); } },
     cues: { list: true, clean: (a) => (VJ.cues ? a.map(VJ.cues.clean).filter(Boolean).slice(0, VJ.cues.MAX) : a) },
     guide: {},
-    panelFold: { map: true, clean: (m) => { const o = {}; for (const [k, v] of Object.entries(m)) if (/^[1-9]$/.test(k) && v === true) o[k] = true; return o; } },
+    panelFold: { map: true, clean: (m) => cleanFold(m) },
     panelHelp: {},
+    panelAdvanced: {},
+    panelLive: {},
+    panelFoldPrev: { map: true, clean: (m) => cleanFold(m) },
   };
 
   const typeOk = (d, v) => typeof d === typeof v && (typeof v !== 'number' || isFinite(v));
